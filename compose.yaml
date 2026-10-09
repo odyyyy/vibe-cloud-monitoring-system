@@ -1,0 +1,45 @@
+services:
+  # База данных MySQL
+  mysql:
+    image: mysql:8.0
+    container_name: demo-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: demodb
+      MYSQL_USER: demo
+      MYSQL_PASSWORD: demopassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Твое Spring-приложение
+  app:
+    build:
+      context: .                 # <-- Важно: сборка идет из корня, где родительский pom.xml
+      dockerfile: Dockerfile
+    container_name: monitoring-api
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:h2:mem:monitoring # Пока H2 для теста
+    develop:
+      watch:
+        - path: ./monitoring-api/src
+          action: rebuild
+        - path: ./monitoring-auth/src
+          action: rebuild
+        - path: ./pom.xml
+          action: rebuild
+        - path: ./monitoring-api/pom.xml
+          action: rebuild
+        - path: ./monitoring-auth/pom.xml
+          action: rebuild
+
+volumes:
+  mysql-data:
