@@ -25,6 +25,8 @@ public class SecurityConfig {
         String[] endpoints = { 
             "/api/auth/**", 
             "/api/hello",
+            "/actuator/health",
+            "/actuator/info"
         };
         
         http
@@ -32,7 +34,7 @@ public class SecurityConfig {
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(endpoints).permitAll()
-                .anyRequest().authenticated()
+                .anyRequest().permitAll()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 

@@ -1,0 +1,32 @@
+# Maven
+target/
+!.mvn/wrapper/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+
+# OS и временные файлы
+.DS_Store
+Thumbs.db
+*.log
+*.bak
+*.tmp
+
+# Docker (если не в отдельном репозитории)
+.docker/
+
+# Локальные конфиги (не для commit!)
+.env
+.env.local
+
+# Build artifacts
+build/
+dist/
+
+# Lombok
+lombok/*.class

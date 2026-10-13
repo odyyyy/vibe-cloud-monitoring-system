@@ -5,30 +5,44 @@ spring:
   application:
     name: monitoring-platform-api
   datasource:
-    # Пока используем H2 для быстрого старта. 
-    # Позже заменишь на: jdbc:mysql://localhost:3306/monitoring_db
-    url: jdbc:h2:mem:monitoring
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:monitoring}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.h2.Driver}
   jpa:
     hibernate:
-      ddl-auto: update # Для продакшена сменить на 'validate' или использовать Flyway/Liquibase
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
     show-sql: true
     properties:
       hibernate:
         format_sql: true
   h2:
     console:
-      enabled: true
+      enabled: ${SPRING_H2_CONSOLE_ENABLED:true}
       path: /h2-console
 
-# Настройки JWT (обязательно должны быть здесь, чтобы их видел модуль auth)
-jwt:
-  secret: mySuperSecretKeyForJwtTokenGenerationMustBeLongEnough1234567890!@#
-  expiration: 86400000
+# Профиль для разработки
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:monitoring}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.h2.Driver}
+  h2:
+    console:
+      enabled: ${SPRING_H2_CONSOLE_ENABLED:true}
+      path: /h2-console
 
-# Настройки для Docker HEALTHCHECK (из твоего Dockerfile)
+# Настройки JWT
+jwt:
+  secret: ${JWT_SECRET:mySuperSecretKeyForJwtTokenGenerationMustBeLongEnough1234567890!@#}
+  expiration: ${JWT_EXPIRATION:86400000}
+
+# Настройки для Docker HEALTHCHECK
 management:
   endpoints:
     web:

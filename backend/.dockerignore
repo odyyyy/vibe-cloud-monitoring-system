@@ -1,0 +1,14 @@
+**/target/
+**/build/
+
+.git/
+.gitignore
+.idea/
+*.iml
+*.ipr
+*.iws
+
+*.md
+docker-compose*.yaml
+Dockerfile
+.env

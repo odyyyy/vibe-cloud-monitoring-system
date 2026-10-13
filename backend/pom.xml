@@ -18,6 +18,7 @@
 
     <modules>
         <module>monitoring-auth</module>
+        <module>monitoring-storage</module>
         <module>monitoring-api</module>
     </modules>
 
