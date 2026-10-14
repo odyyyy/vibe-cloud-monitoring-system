@@ -34,18 +34,31 @@ services:
         condition: service_healthy
     develop:
       watch:
-        - path: pom.xml
+        - path: ./backend/pom.xml
           action: rebuild
-        - path: monitoring-api/src
+        - path: ./backend/monitoring-api/src
           action: rebuild
-        - path: monitoring-api/pom.xml
+        - path: ./backend/monitoring-api/pom.xml
           action: rebuild
-        - path: monitoring-auth/src
+        - path: ./backend/monitoring-auth/src
           action: rebuild
-        - path: monitoring-auth/pom.xml
+        - path: ./backend/monitoring-auth/pom.xml
           action: rebuild
-        - path: .env
+        - path: ./backend/.env
           action: restart
+
+  # Frontend application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: monitoring-frontend
+    ports:
+      - "8081:3000"
+    environment:
+      - VITE_BACKEND_URL=http://app:8080/api
+    # depends_on:
+    #   - app
 
 volumes:
   mysql-data:
