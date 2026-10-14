@@ -18,6 +18,7 @@
         <dependency>
             <groupId>com.monitoring</groupId>
             <artifactId>monitoring-storage</artifactId>
+            <version>0.0.1-SNAPSHOT</version> <!-- Убедитесь, что эта строка есть -->
         </dependency>
         
         <!-- Подключаем модуль auth -->

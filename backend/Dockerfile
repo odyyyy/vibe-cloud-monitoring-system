@@ -11,6 +11,7 @@ COPY pom.xml .
 # Копируем pom.xml модулей (относительно context: ./backend)
 COPY monitoring-api/pom.xml ./monitoring-api/pom.xml
 COPY monitoring-auth/pom.xml ./monitoring-auth/pom.xml
+COPY monitoring-storage/pom.xml ./monitoring-storage/pom.xml
 
 # Скачиваем зависимости Maven
 RUN mvn dependency:go-offline -B
