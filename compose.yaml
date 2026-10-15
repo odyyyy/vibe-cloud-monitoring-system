@@ -47,6 +47,19 @@ services:
         - path: ./backend/.env
           action: restart
 
+  test:
+    image: maven:3.9-eclipse-temurin-21
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - maven-cache:/root/.m2
+    env_file:
+      - ./backend/.env
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: ["mvn", "test", "-B"]
+
   # Frontend application
   frontend:
     build:
@@ -54,7 +67,7 @@ services:
       dockerfile: Dockerfile
     container_name: monitoring-frontend
     ports:
-      - "8081:3000"
+      - "3000:3000"
     environment:
       - VITE_BACKEND_URL=http://app:8080/api
     # depends_on:
@@ -62,3 +75,4 @@ services:
 
 volumes:
   mysql-data:
+  maven-cache:
