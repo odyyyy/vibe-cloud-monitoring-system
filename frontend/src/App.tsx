@@ -1,817 +1,798 @@
-import React, { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 type IconProps = { className?: string }
 
-const stroke = {
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 1.6,
-  strokeLinecap: 'round' as const,
-  strokeLinejoin: 'round' as const,
-  viewBox: '0 0 24 24',
-}
+const Logo = ({ className = 'h-7 w-7' }: IconProps) => (
+  <svg viewBox="0 0 32 32" fill="none" className={className} aria-hidden="true">
+    <rect x="1" y="1" width="30" height="30" rx="8" stroke="url(#lg)" strokeWidth="1.6" />
+    <path d="M7 20.5c3.2 0 4.2-8 7.6-8s3 6 5.2 6 1.9-2.4 4.2-2.4" stroke="#67e8f9" strokeWidth="2" strokeLinecap="round" />
+    <circle cx="24.5" cy="22.5" r="2.2" fill="#a78bfa" />
+    <defs>
+      <linearGradient id="lg" x1="0" y1="0" x2="32" y2="32">
+        <stop stopColor="#22d3ee" />
+        <stop offset="1" stopColor="#8b5cf6" />
+      </linearGradient>
+    </defs>
+  </svg>
+)
 
-function IconLayers({ className = 'w-6 h-6' }: IconProps) {
-  return (
-    <svg {...stroke} className={className}>
-      <path d="M12 3 3 7.5 12 12l9-4.5L12 3Z" />
-      <path d="M3 12.5 12 17l9-4.5" />
-      <path d="M3 17 12 21.5 21 17" />
-    </svg>
-  )
-}
+const IconArrow = ({ className = 'h-4 w-4' }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </svg>
+)
 
-function IconTerminal({ className = 'w-6 h-6' }: IconProps) {
-  return (
-    <svg {...stroke} className={className}>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <path d="m7 9 3 3-3 3" />
-      <path d="M13 15h4" />
-    </svg>
-  )
-}
+const IconCopy = ({ className = 'h-4 w-4' }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <rect x="9" y="9" width="11" height="11" rx="2" />
+    <path d="M5 15V6a2 2 0 0 1 2-2h9" />
+  </svg>
+)
 
-function IconActivity({ className = 'w-6 h-6' }: IconProps) {
-  return (
-    <svg {...stroke} className={className}>
-      <path d="M3 12h4l2.5-7 4 14L16 12h5" />
-    </svg>
-  )
-}
+const IconCheck = ({ className = 'h-4 w-4' }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M20 6 9 17l-5-5" />
+  </svg>
+)
 
-function IconDashboard({ className = 'w-6 h-6' }: IconProps) {
-  return (
-    <svg {...stroke} className={className}>
-      <rect x="3" y="3" width="8" height="10" rx="1.5" />
-      <rect x="13" y="3" width="8" height="6" rx="1.5" />
-      <rect x="13" y="11" width="8" height="10" rx="1.5" />
-      <rect x="3" y="15" width="8" height="6" rx="1.5" />
-    </svg>
-  )
-}
+const IconTerminal = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="m4 17 6-6-6-6M12 19h8" />
+  </svg>
+)
 
-function IconPulse({ className = 'w-6 h-6' }: IconProps) {
-  return (
-    <svg {...stroke} className={className}>
-      <path d="M3 12h3l2-4 3 8 2.5-5 1.5 3h6" />
-      <circle cx="19.5" cy="14" r="1.6" />
-    </svg>
-  )
-}
+const IconPulse = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M2 12h4l3-8 4 16 3-10 2 2h4" />
+  </svg>
+)
 
-function IconClock({ className = 'w-6 h-6' }: IconProps) {
-  return (
-    <svg {...stroke} className={className}>
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="M12 7.5V12l3 2" />
-    </svg>
-  )
-}
+const IconLogs = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
+  </svg>
+)
 
-function IconShield({ className = 'w-6 h-6' }: IconProps) {
-  return (
-    <svg {...stroke} className={className}>
-      <path d="M12 3 5 6v5.5c0 4.3 2.9 7.9 7 9.5 4.1-1.6 7-5.2 7-9.5V6l-7-3Z" />
-      <path d="m9 12 2 2 4-4.5" />
-    </svg>
-  )
-}
+const IconChart = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M3 3v18h18" />
+    <path d="M7 14l3-4 3 3 4-6" />
+  </svg>
+)
 
-function IconBlocks({ className = 'w-6 h-6' }: IconProps) {
-  return (
-    <svg {...stroke} className={className}>
-      <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
-      <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
-      <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
-      <path d="M17 14v6M14 17h6" />
-    </svg>
-  )
-}
+const IconShield = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+    <path d="m9 12 2 2 4-4" />
+  </svg>
+)
 
-function Logo({ size = 'md' }: { size?: 'md' | 'sm' }) {
-  const box = size === 'md' ? 'w-9 h-9' : 'w-8 h-8'
-  const svg = size === 'md' ? 'w-5 h-5' : 'w-4 h-4'
-  return (
-    <span
-      className={`${box} grid place-items-center rounded-md bg-[#7cff6b] text-black shadow-[0_0_22px_rgba(124,255,107,0.45)]`}
-    >
-      <svg className={svg} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 13h4l2-6 3 12 2.5-8 1.5 4h5" />
-      </svg>
-    </span>
-  )
-}
+const IconBolt = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" />
+  </svg>
+)
 
-function useScrollReveal() {
+const IconLayers = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <path d="m12 2 9 5-9 5-9-5 9-5Z" />
+    <path d="m3 12 9 5 9-5M3 17l9 5 9-5" />
+  </svg>
+)
+
+const IconGlobe = ({ className = 'h-5 w-5' }: IconProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z" />
+  </svg>
+)
+
+function useCountUp(target: number, duration = 1600, decimals = 0): number {
+  const [value, setValue] = useState(0)
+  const startRef = useRef<number | null>(null)
+
   useEffect(() => {
-    const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-reveal]'))
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (reduce || typeof IntersectionObserver === 'undefined') {
-      nodes.forEach((n) => n.classList.add('is-visible'))
-      return
+    let raf = 0
+    const step = (now: number) => {
+      if (startRef.current === null) startRef.current = now
+      const progress = Math.min((now - startRef.current) / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setValue(parseFloat((target * eased).toFixed(decimals)))
+      if (progress < 1) raf = requestAnimationFrame(step)
     }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('is-visible')
-            observer.unobserve(entry.target)
-          }
-        })
-      },
-      { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }
-    )
-    nodes.forEach((n) => observer.observe(n))
-    return () => observer.disconnect()
-  }, [])
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [target, duration, decimals])
+
+  return value
 }
 
-const features = [
-  {
-    id: '01',
-    icon: IconLayers,
-    title: 'Service & Environment Management',
-    description:
-      'Register and organize monitored services across projects and environments with explicit ownership boundaries.',
-    tag: 'registry',
-  },
-  {
-    id: '02',
-    icon: IconTerminal,
-    title: 'Log Ingestion & Search',
-    description:
-      'Collect, store, filter and search application logs with time-range, severity and structured attribute filters.',
-    tag: 'logs',
-  },
-  {
-    id: '03',
-    icon: IconActivity,
-    title: 'Metrics & Visualization',
-    description:
-      'Counters, gauges and histograms with correct aggregation semantics — no averages of averages, no silent unit changes.',
-    tag: 'metrics',
-  },
-  {
-    id: '04',
-    icon: IconDashboard,
-    title: 'Interactive Dashboards',
-    description:
-      'Configurable widgets: time-series charts, single-value stats, log tables and service status lists with validated configs.',
-    tag: 'dashboards',
-  },
-  {
-    id: '05',
-    icon: IconPulse,
-    title: 'Health Monitoring',
-    description:
-      'Synthetic HTTP/TCP checks with timeouts, TLS verification and execution history. UP / DEGRADED / DOWN / UNKNOWN states.',
-    tag: 'health',
-  },
-  {
-    id: '06',
-    icon: IconClock,
-    title: 'Time-Range Exploration',
-    description:
-      'One consistent time-range control across every view, with historical exploration and predictable refresh behavior.',
-    tag: 'exploration',
-  },
-  {
-    id: '07',
-    icon: IconShield,
-    title: 'Multi-Tenant Security',
-    description:
-      'Tenant isolation by design — every query, dashboard and ingestion path scoped to authorized organization boundaries.',
-    tag: 'security',
-  },
-  {
-    id: '08',
-    icon: IconBlocks,
-    title: 'Production-Ready Architecture',
-    description:
-      'Modular monolith, explicit API contracts, structured logging, Micrometer metrics and bounded resource consumption.',
-    tag: 'architecture',
-  },
+const MARQUEE = [
+  'Metrics',
+  'Logs',
+  'Traces',
+  'Dashboards',
+  'Service health',
+  'Alerts',
+  'Tenant isolation',
+  'OpenTelemetry',
+  'Agent enrollment',
+  'Time-series',
 ]
 
-const tickerLines = [
-  { level: 'INFO', svc: 'ingest-api', msg: 'batch accepted size=512 tenant=acme duration=41ms' },
-  { level: 'WARN', svc: 'query-svc', msg: 'scan rows=184220 above soft limit 150000' },
-  { level: 'ERROR', svc: 'payments', msg: 'upstream timeout after 2000ms attempt=2/3' },
-  { level: 'INFO', svc: 'health-prober', msg: 'check target=https://api.acme.io result=UP rtt=87ms' },
-  { level: 'DEBUG', svc: 'dashboard-api', msg: 'widget config validated type=timeseries' },
-  { level: 'INFO', svc: 'auth', msg: 'session issued subject=usr_19f scope=project:read' },
-  { level: 'WARN', svc: 'metric-agg', msg: 'cardinality guard series=2048 limit=2048' },
-  { level: 'INFO', svc: 'flyway', msg: 'migration V14 applied baseline=true' },
-]
+type SparklineProps = { values: number[]; stroke: string; gradientId: string; height?: number }
 
-const logStream = [
-  { t: '12:04:01', level: 'INFO', text: 'ingest-api  batch accepted size=512 duration=41ms' },
-  { t: '12:04:03', level: 'WARN', text: 'query-svc   scan rows=184220 soft_limit=150000' },
-  { t: '12:04:04', level: 'ERROR', text: 'payments    upstream timeout after 2000ms' },
-  { t: '12:04:07', level: 'INFO', text: 'health      prober result=UP target=api.acme.io' },
-  { t: '12:04:09', level: 'DEBUG', text: 'dashboard   widget validated type=timeseries' },
-]
+function Sparkline({ values, stroke, gradientId, height = 40 }: SparklineProps) {
+  const width = 160
+  const pad = 3
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = max - min || 1
+  const stepX = (width - pad * 2) / (values.length - 1)
 
-const services = [
-  { name: 'ingest-api', state: 'UP' as const, uptime: '99.98%' },
-  { name: 'query-svc', state: 'DEGRADED' as const, uptime: '99.42%' },
-  { name: 'payments', state: 'DOWN' as const, uptime: '97.10%' },
-]
+  const coords = values.map((v, i) => {
+    const x = pad + i * stepX
+    const y = height - pad - ((v - min) / range) * (height - pad * 2)
+    return { x: Number(x.toFixed(2)), y: Number(y.toFixed(2)) }
+  })
 
-const principles = [
-  'Reliability before feature count',
-  'Correctness before visual polish',
-  'Security and tenant isolation by design',
-  'Simple architecture before premature distribution',
-  'Explicit API contracts',
-  'Bounded resource consumption',
-  'Reproducible local development',
-  'Automated tests for critical behavior',
-]
+  const points = coords.map((c) => `${c.x},${c.y}`).join(' ')
+  const area = `M ${pad},${height} L ${points.replace(/ /g, ' L ')} L ${width - pad},${height} Z`
 
-const stateStyles: Record<'UP' | 'DEGRADED' | 'DOWN', { dot: string; text: string }> = {
-  UP: { dot: 'bg-[#7cff6b]', text: 'text-[#7cff6b]' },
-  DEGRADED: { dot: 'bg-[#ffc466]', text: 'text-[#ffc466]' },
-  DOWN: { dot: 'bg-[#ff5f7a]', text: 'text-[#ff5f7a]' },
-}
-
-const levelColor: Record<string, string> = {
-  INFO: 'text-[#56d9ff]',
-  WARN: 'text-[#ffc466]',
-  ERROR: 'text-[#ff5f7a]',
-  DEBUG: 'text-gray-500',
-}
-
-function SectionLabel({ index, text }: { index: string; text: string }) {
   return (
-    <div className="flex items-center gap-3 font-mono text-xs tracking-[0.28em] uppercase text-gray-500">
-      <span className="text-[#7cff6b]">{index}</span>
-      <span className="h-px w-8 bg-white/15" />
-      <span>{text}</span>
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-10 w-full" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.35" />
+          <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${gradientId})`} />
+      <polyline
+        className="spark-path"
+        points={points}
+        fill="none"
+        stroke={stroke}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx={coords[coords.length - 1].x} cy={coords[coords.length - 1].y} r="3" fill={stroke} />
+    </svg>
+  )
+}
+
+const METRICS = [
+  { label: 'CPU utilization', value: '42.8', unit: '%', color: '#22d3ee', gradient: 'g-cpu', series: [18, 24, 21, 30, 27, 38, 34, 44, 41, 52, 47, 42] },
+  { label: 'Latency p99', value: '182', unit: 'ms', color: '#8b5cf6', gradient: 'g-lat', series: [90, 120, 104, 148, 132, 176, 158, 210, 186, 240, 198, 182] },
+  { label: 'Throughput', value: '1.4k', unit: 'req/s', color: '#a3e635', gradient: 'g-thr', series: [620, 780, 700, 940, 880, 1120, 1040, 1380, 1260, 1520, 1420, 1400] },
+]
+
+const LOG_LINES = [
+  { t: '14:02:11', level: 'INFO', service: 'payments', msg: 'charge captured 42.00 USD in 88ms' },
+  { t: '14:02:09', level: 'WARN', service: 'edge-proxy', msg: 'upstream latency above p99 threshold' },
+  { t: '14:02:04', level: 'ERROR', service: 'auth', msg: 'token refresh failed, retrying (2/3)' },
+  { t: '14:01:58', level: 'INFO', service: 'web', msg: 'GET /checkout 200 in 12ms' },
+  { t: '14:01:47', level: 'INFO', service: 'worker', msg: 'batch job reconcile completed: 1,024 rows' },
+  { t: '14:01:31', level: 'DEBUG', service: 'cache', msg: 'hit ratio 0.94 across 3 shards' },
+]
+
+const FEATURES = [
+  {
+    icon: IconPulse,
+    title: 'Metrics that mean something',
+    body: 'Counters, gauges and histograms with explicit aggregation semantics. Never average an average without weighting.',
+    accent: 'text-cyan-300',
+  },
+  {
+    icon: IconLogs,
+    title: 'Logs, treated as data',
+    body: 'Search, filter and paginate safely. Untrusted text is never executed and always rendered as inert data.',
+    accent: 'text-violet-300',
+  },
+  {
+    icon: IconChart,
+    title: 'Dashboards with guardrails',
+    body: 'Configurable widgets validated on both sides. No arbitrary SQL, scripts or JavaScript in your definitions.',
+    accent: 'text-lime-300',
+  },
+  {
+    icon: IconShield,
+    title: 'Tenant isolation by design',
+    body: 'Scoped credentials, explicit authorization and tests that prove one tenant cannot read another tenant.',
+    accent: 'text-amber-300',
+  },
+  {
+    icon: IconBolt,
+    title: 'Bounded by default',
+    body: 'Payload limits, retries with backoff and predictable failure behavior. Backpressure you can reason about.',
+    accent: 'text-cyan-300',
+  },
+  {
+    icon: IconLayers,
+    title: 'Open contracts, open standards',
+    body: 'Explicit versioned APIs and OpenTelemetry-native collection. Integrate without vendor lock-in.',
+    accent: 'text-violet-300',
+  },
+]
+
+const STEPS = [
+  { n: '01', title: 'Enroll', body: 'Create a project and environment, then issue a scoped agent credential.', icon: IconLayers },
+  { n: '02', title: 'Deploy', body: 'Run the Go collector as a Docker container in your own infrastructure.', icon: IconGlobe },
+  { n: '03', title: 'Ingest', body: 'Metrics and logs stream over authenticated HTTPS with bounded batches.', icon: IconPulse },
+  { n: '04', title: 'Explore', body: 'Query, visualize and share dashboards from a single pane of glass.', icon: IconChart },
+]
+
+const STATS = [
+  { value: 99.95, suffix: '%', decimals: 2, label: 'Ingestion uptime' },
+  { value: 1.2, suffix: 'M', decimals: 1, label: 'Series per minute' },
+  { value: 248, suffix: 'ms', decimals: 0, label: 'Query p95' },
+  { value: 34, suffix: 'ms', decimals: 0, label: 'Agent batch size' },
+]
+
+const TABS = [
+  {
+    id: 'docker',
+    label: 'Docker',
+    code: `# one container, scoped to your tenant
+docker run -d \\
+  --name cloudmonitor-agent \\
+  -e CM_AGENT_TOKEN=cmrt_live_9f3...a2 \\
+  -e CM_PROJECT=acme-prod \\
+  -e CM_ENV=production \\
+  ghcr.io/cloudmonitor/agent:latest`,
+  },
+  {
+    id: 'config',
+    label: 'Config',
+    code: `# agent.yaml
+server: https://ingest.cloudmonitor.io
+project: acme-prod
+environment: production
+host: prod-worker-01
+
+metrics:
+  interval: 15s
+  batch: 200
+  buffers: 2048
+
+logs:
+  - path: /var/log/app/*.log
+    service: payments`,
+  },
+]
+
+function SectionHeading({ tag, title, body }: { tag: string; title: React.ReactNode; body?: string }) {
+  return (
+    <div className="max-w-2xl">
+      <span className="section-tag mono">{tag}</span>
+      <h2 className="font-display mt-4 text-3xl font-semibold leading-tight tracking-tight text-slate-100 sm:text-4xl">
+        {title}
+      </h2>
+      {body ? <p className="mt-4 text-base leading-relaxed text-slate-400">{body}</p> : null}
     </div>
   )
 }
 
-function App() {
-  useScrollReveal()
+function Navbar() {
+  return (
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-white/5 bg-[#05070d]/70 backdrop-blur-xl">
+      <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+        <a href="#top" className="flex items-center gap-2.5">
+          <Logo />
+          <span className="font-display text-lg font-semibold tracking-tight text-slate-100">
+            Cloud<span className="text-cyan-300">Monitor</span>
+          </span>
+        </a>
+
+        <div className="hidden items-center gap-8 text-sm text-slate-400 md:flex">
+          <a href="#features" className="transition-colors hover:text-slate-100">
+            Features
+          </a>
+          <a href="#flow" className="transition-colors hover:text-slate-100">
+            How it works
+          </a>
+          <a href="#install" className="transition-colors hover:text-slate-100">
+            Install
+          </a>
+          <a href="#pricing" className="transition-colors hover:text-slate-100">
+            Pricing
+          </a>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <a href="#cta" className="hidden text-sm text-slate-400 transition-colors hover:text-slate-100 sm:block">
+            Sign in
+          </a>
+          <a
+            href="#cta"
+            className="group inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2 text-sm font-semibold text-[#05070d] transition-transform hover:scale-[1.03]"
+          >
+            Start free
+            <IconArrow className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+          </a>
+        </div>
+      </nav>
+    </header>
+  )
+}
+
+function LivePanel() {
+  const cpu = useCountUp(42.8, 1600, 1)
+  const lat = useCountUp(182, 1600, 0)
+  const thr = useCountUp(1400, 1600, 0)
 
   return (
-    <div className="min-h-screen bg-[#06070b] text-gray-200 selection:bg-[#7cff6b]/30">
-      {/* ================= HEADER ================= */}
-      <header className="fixed top-0 inset-x-0 z-50 border-b border-white/10 bg-[#06070b]/80 backdrop-blur-xl">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between gap-6">
-            <a href="#top" className="flex items-center gap-2.5">
-              <Logo />
-              <span className="font-mono text-sm font-semibold tracking-[0.2em] text-white">
-                CLOUD<span className="text-[#7cff6b]">MONITOR</span>
-              </span>
+    <div className="tilt relative">
+      <div className="gradient-border rounded-2xl p-5 shadow-2xl shadow-cyan-500/10">
+        <div className="scanline" />
+        <div className="flex items-center justify-between border-b border-white/5 pb-4">
+          <div className="flex items-center gap-2">
+            <span className="glow-dot h-2 w-2 rounded-full bg-emerald-400 text-emerald-400" />
+            <span className="mono text-xs uppercase tracking-[0.2em] text-slate-400">Live</span>
+          </div>
+          <div className="mono text-xs text-slate-500">tenant / acme-prod</div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {[
+            { label: METRICS[0].label, value: `${cpu.toFixed(1)}%`, color: METRICS[0].color, g: METRICS[0].gradient, s: METRICS[0].series },
+            { label: METRICS[1].label, value: `${Math.round(lat)}ms`, color: METRICS[1].color, g: METRICS[1].gradient, s: METRICS[1].series },
+            { label: METRICS[2].label, value: `${Math.round(thr)}`, color: METRICS[2].color, g: METRICS[2].gradient, s: METRICS[2].series },
+          ].map((m) => (
+            <div key={m.label} className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+              <div className="mono truncate text-[10px] uppercase tracking-wider text-slate-500">{m.label}</div>
+              <div className="font-display mt-1 text-xl font-semibold text-slate-100">{m.value}</div>
+              <div className="mt-2">
+                <Sparkline values={m.s} stroke={m.color} gradientId={m.g} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 rounded-xl border border-white/5 bg-[#05070d]/70 p-3">
+          <div className="mono mb-2 flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500">
+            <span>stream</span>
+            <span>tail -f /var/log/app</span>
+          </div>
+          <div className="relative h-28 overflow-hidden">
+            <div className="absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-[#05070d] to-transparent" />
+            <div className="log-stream space-y-1.5">
+              {[...LOG_LINES, ...LOG_LINES].map((line, i) => (
+                <div key={i} className="mono flex gap-2 text-[10.5px] leading-relaxed">
+                  <span className="text-slate-600">{line.t}</span>
+                  <span
+                    className={
+                      line.level === 'ERROR'
+                        ? 'text-rose-400'
+                        : line.level === 'WARN'
+                          ? 'text-amber-300'
+                          : line.level === 'DEBUG'
+                            ? 'text-slate-500'
+                            : 'text-cyan-300'
+                    }
+                  >
+                    {line.level.padEnd(5, ' ')}
+                  </span>
+                  <span className="text-violet-300">{line.service}</span>
+                  <span className="truncate text-slate-400">{line.msg}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="float-slow absolute -right-6 -top-6 hidden rounded-xl border border-white/10 bg-[#0b101b]/90 px-4 py-3 shadow-xl lg:block">
+        <div className="mono text-[10px] uppercase tracking-wider text-slate-500">p99</div>
+        <div className="font-display text-lg font-semibold text-lime-300">182ms</div>
+      </div>
+      <div className="float-slower absolute -bottom-6 -left-6 hidden rounded-xl border border-white/10 bg-[#0b101b]/90 px-4 py-3 shadow-xl lg:block">
+        <div className="mono text-[10px] uppercase tracking-wider text-slate-500">agents</div>
+        <div className="font-display text-lg font-semibold text-cyan-300">3 connected</div>
+      </div>
+    </div>
+  )
+}
+
+function Hero() {
+  return (
+    <section id="top" className="relative overflow-hidden pt-32 pb-24">
+      <div className="bg-grid mask-radial absolute inset-0" />
+      <div className="orb left-[-10%] top-[-10%] h-[420px] w-[420px] bg-cyan-500/30" />
+      <div className="orb right-[-12%] top-[20%] h-[460px] w-[460px] bg-violet-600/30" />
+      <div className="orb bottom-[-20%] left-[40%] h-[380px] w-[380px] bg-lime-400/10" />
+
+      <div className="pointer-events-none absolute inset-x-0 top-16 select-none text-center">
+        <span className="outlined-text font-display text-[22vw] font-bold leading-none opacity-60">OBSERVE</span>
+      </div>
+
+      <div className="relative mx-auto grid max-w-7xl items-center gap-16 px-6 lg:grid-cols-2">
+        <div>
+          <span className="section-tag mono">// Observability for modern clouds</span>
+          <h1 className="font-display mt-6 text-5xl font-bold leading-[1.04] tracking-tight text-slate-100 sm:text-6xl">
+            See <span className="text-gradient">every signal.</span>
+            <br />
+            Ship with confidence.
+          </h1>
+          <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-400">
+            CloudMonitor brings metrics, logs and service health into one tenant-safe platform — so your team spots
+            problems before your users do.
+          </p>
+
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <a
+              href="#cta"
+              className="group inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 px-6 py-3 text-sm font-semibold text-[#05070d] transition-transform hover:scale-[1.03]"
+            >
+              Start observing free
+              <IconArrow className="h-4 w-4 transition-transform group-hover:translate-x-1" />
             </a>
+            <a
+              href="#flow"
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 px-6 py-3 text-sm font-medium text-slate-200 transition-colors hover:border-cyan-400/40 hover:text-cyan-300"
+            >
+              See how it works
+            </a>
+          </div>
 
-            <nav className="hidden items-center gap-7 font-mono text-[13px] text-gray-400 md:flex">
-              <a href="#features" className="transition-colors hover:text-[#7cff6b]">// features</a>
-              <a href="#architecture" className="transition-colors hover:text-[#7cff6b]">// architecture</a>
-              <a href="#principles" className="transition-colors hover:text-[#7cff6b]">// principles</a>
-              <a href="#getting-started" className="transition-colors hover:text-[#7cff6b]">// quickstart</a>
-            </nav>
-
-            <div className="flex items-center gap-3">
-              <span className="hidden items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-gray-500 sm:flex">
-                <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-[#7cff6b]" />
-                all systems nominal
+          <div className="mt-10 flex flex-wrap gap-2">
+            {['SOC 2 ready', 'Tenant isolation by design', 'OpenTelemetry native'].map((t) => (
+              <span key={t} className="chip mono">
+                <IconCheck className="h-3 w-3 text-cyan-300" />
+                {t}
               </span>
-              <a
-                href="#getting-started"
-                className="rounded-md bg-[#7cff6b] px-4 py-2 font-mono text-[13px] font-semibold text-black transition-all hover:shadow-[0_0_26px_rgba(124,255,107,0.55)]"
-              >
-                deploy_local
-              </a>
-            </div>
+            ))}
           </div>
         </div>
-      </header>
 
-      {/* ================= HERO ================= */}
-      <section id="top" className="relative overflow-hidden pt-32 pb-24 lg:pt-40 lg:pb-32">
-        <div className="pointer-events-none absolute inset-0 bg-gridlines opacity-70" />
-        <div className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[820px] -translate-x-1/2 rounded-full bg-[#7cff6b]/10 blur-[130px]" />
-        <div className="pointer-events-none absolute -left-32 top-1/3 h-[380px] w-[380px] rounded-full bg-[#56d9ff]/10 blur-[120px]" />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#06070b] to-transparent" />
+        <LivePanel />
+      </div>
+    </section>
+  )
+}
 
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_0.95fr]">
-            {/* copy */}
-            <div data-reveal>
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#7cff6b]/30 bg-[#7cff6b]/5 px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.3em] text-[#7cff6b]">
-                <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-[#7cff6b]" />
-                observability platform · mvp
-              </div>
-
-              <h1 className="mt-7 font-mono text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
-                SEE EVERY SIGNAL.
-                <br />
-                <span className="text-glow text-[#7cff6b]">HIDE NO FAILURE.</span>
-              </h1>
-
-              <p className="mt-6 max-w-xl text-lg leading-relaxed text-gray-400">
-                Collect, search, analyze and visualize logs and metrics from every service and
-                environment — in one tenant-safe, locally reproducible observability platform
-                inspired by the workflows of Datadog and Grafana.
-              </p>
-
-              <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <a
-                  href="#getting-started"
-                  className="group inline-flex items-center justify-center gap-2 rounded-md bg-[#7cff6b] px-7 py-3.5 font-mono text-sm font-semibold text-black transition-all hover:shadow-[0_0_36px_rgba(124,255,107,0.6)]"
-                >
-                  $ docker compose up -d
-                  <span className="transition-transform group-hover:translate-x-1">→</span>
-                </a>
-                <a
-                  href="#features"
-                  className="inline-flex items-center justify-center gap-2 rounded-md border border-white/15 px-7 py-3.5 font-mono text-sm text-gray-300 transition-colors hover:border-[#56d9ff]/60 hover:text-[#56d9ff]"
-                >
-                  explore capabilities
-                </a>
-              </div>
-
-              <dl className="mt-12 grid max-w-lg grid-cols-3 gap-6 border-t border-white/10 pt-6 font-mono">
-                <div>
-                  <dt className="text-[11px] uppercase tracking-widest text-gray-500">domains</dt>
-                  <dd className="mt-1 text-2xl font-bold text-white">09</dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] uppercase tracking-widest text-gray-500">widget types</dt>
-                  <dd className="mt-1 text-2xl font-bold text-white">04</dd>
-                </div>
-                <div>
-                  <dt className="text-[11px] uppercase tracking-widest text-gray-500">external services</dt>
-                  <dd className="mt-1 text-2xl font-bold text-[#7cff6b]">00</dd>
-                </div>
-              </dl>
-            </div>
-
-            {/* console */}
-            <div data-reveal className="animate-float">
-              <div className="panel relative rounded-xl shadow-[0_40px_120px_-50px_rgba(86,217,255,0.5)]">
-                <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f7a]/80" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-[#ffc466]/80" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-[#7cff6b]/80" />
-                    <span className="ml-3 font-mono text-[11px] text-gray-500">
-                      cloud-monitor — live tail
-                    </span>
-                  </div>
-                  <span className="font-mono text-[11px] text-[#56d9ff]">● streaming</span>
-                </div>
-
-                {/* sparkline */}
-                <div className="border-b border-white/10 px-4 py-4">
-                  <div className="mb-2 flex items-baseline justify-between font-mono text-[11px] uppercase tracking-widest text-gray-500">
-                    <span>req / min — last 15m</span>
-                    <span className="text-[#7cff6b]">+12.4%</span>
-                  </div>
-                  <svg viewBox="0 0 320 72" className="h-20 w-full" role="img" aria-label="Requests per minute sparkline chart">
-                    <defs>
-                      <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#7cff6b" stopOpacity="0.35" />
-                        <stop offset="100%" stopColor="#7cff6b" stopOpacity="0" />
-                      </linearGradient>
-                    </defs>
-                    <path
-                      d="M0 56 L24 50 L48 54 L72 38 L96 44 L120 30 L144 36 L168 22 L192 30 L216 18 L240 26 L264 12 L288 20 L320 8 L320 72 L0 72 Z"
-                      fill="url(#sparkFill)"
-                    />
-                    <path
-                      className="spark-path animate-hue"
-                      d="M0 56 L24 50 L48 54 L72 38 L96 44 L120 30 L144 36 L168 22 L192 30 L216 18 L240 26 L264 12 L288 20 L320 8"
-                      fill="none"
-                      stroke="#7cff6b"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </div>
-
-                {/* service states */}
-                <div className="border-b border-white/10 px-4 py-3">
-                  <div className="mb-2 font-mono text-[11px] uppercase tracking-widest text-gray-500">
-                    service status
-                  </div>
-                  <ul className="space-y-2">
-                    {services.map((s) => (
-                      <li key={s.name} className="flex items-center justify-between font-mono text-[13px]">
-                        <span className="flex items-center gap-2 text-gray-300">
-                          <span className={`h-1.5 w-1.5 rounded-full ${stateStyles[s.state].dot}`} />
-                          {s.name}
-                        </span>
-                        <span className={`text-[11px] ${stateStyles[s.state].text}`}>
-                          {s.state} · {s.uptime}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* log tail */}
-                <div className="bg-scanlines px-4 py-3">
-                  <div className="mb-2 font-mono text-[11px] uppercase tracking-widest text-gray-500">
-                    log stream
-                  </div>
-                  <ul className="space-y-1.5 font-mono text-[11.5px] leading-relaxed">
-                    {logStream.map((l) => (
-                      <li key={l.t} className="truncate">
-                        <span className="text-gray-600">{l.t}</span>{' '}
-                        <span className={levelColor[l.level]}>{l.level.padEnd(5, ' ')}</span>{' '}
-                        <span className="text-gray-400">{l.text}</span>
-                      </li>
-                    ))}
-                    <li className="text-gray-500 caret">tail -f /var/log/platform</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ================= TICKER ================= */}
-      <div className="relative border-y border-white/10 bg-white/[0.02] py-3">
-        <div className="flex w-max animate-marquee gap-10 font-mono text-xs text-gray-500">
-          {[...tickerLines, ...tickerLines, ...tickerLines, ...tickerLines].map((line, i) => (
-            <span key={i} className="flex items-center gap-2 whitespace-nowrap">
-              <span className={`px-1.5 py-0.5 text-[10px] ${levelColor[line.level]} border border-white/10 rounded`}>
-                {line.level}
-              </span>
-              <span className="text-gray-400">{line.svc}</span>
-              <span>{line.msg}</span>
-              <span className="text-white/10">/</span>
+function Marquee() {
+  return (
+    <section className="relative border-y border-white/5 bg-[#080b14]/60 py-5">
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-[#05070d] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-[#05070d] to-transparent" />
+      <div className="overflow-hidden">
+        <div className="marquee">
+          {[...MARQUEE, ...MARQUEE].map((item, i) => (
+            <span key={i} className="mono flex items-center gap-6 px-6 text-sm uppercase tracking-[0.25em] text-slate-500">
+              <span className="text-cyan-400">/</span>
+              {item}
             </span>
           ))}
         </div>
       </div>
+    </section>
+  )
+}
 
-      {/* ================= FEATURES ================= */}
-      <section id="features" className="relative py-24 lg:py-32">
-        <div className="pointer-events-none absolute right-0 top-40 h-[360px] w-[360px] rounded-full bg-[#56d9ff]/8 blur-[130px]" />
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-14 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between" data-reveal>
-            <div className="max-w-2xl">
-              <SectionLabel index="01" text="core capabilities" />
-              <h2 className="mt-5 font-mono text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                Eight modules. <span className="text-[#56d9ff]">One boundary-respecting core.</span>
-              </h2>
-              <p className="mt-4 text-gray-400">
-                Each capability is a logical module with clear ownership — not a microservice, not a
-                monolithic blob.
-              </p>
-            </div>
-            <div className="font-mono text-xs text-gray-500">
-              <span className="text-[#7cff6b]">●</span> implemented incrementally, each stage ships
-              working software
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {features.map((f, i) => {
-              const Icon = f.icon
-              const accent = i % 4 === 1 || i % 4 === 2 ? 'text-[#56d9ff]' : 'text-[#7cff6b]'
-              return (
-                <article
-                  key={f.id}
-                  data-reveal
-                  className={`panel panel-hover group relative overflow-hidden rounded-xl p-6 ${
-                    i === 0 || i === 5 ? 'lg:col-span-2' : ''
-                  }`}
-                >
-                  <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-white/5 blur-2xl transition-all group-hover:bg-[#7cff6b]/10" />
-                  <div className="flex items-start justify-between">
-                    <span className={`grid h-11 w-11 place-items-center rounded-lg border border-white/10 bg-white/5 ${accent}`}>
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <span className="font-mono text-xs text-gray-600">{f.id}</span>
-                  </div>
-                  <h3 className="mt-5 font-mono text-[15px] font-semibold leading-snug text-white">
-                    {f.title}
-                  </h3>
-                  <p className="mt-2.5 text-sm leading-relaxed text-gray-500">{f.description}</p>
-                  <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-3 font-mono text-[11px]">
-                    <span className="text-gray-600">module/{f.tag}</span>
-                    <span className="text-gray-700 transition-colors group-hover:text-[#7cff6b]">
-                      read_more →
-                    </span>
-                  </div>
-                </article>
-              )
-            })}
-          </div>
+function Features() {
+  return (
+    <section id="features" className="relative py-24">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-end">
+          <SectionHeading
+            tag="Capabilities"
+            title={
+              <>
+                Signal, not <span className="text-gradient">noise.</span>
+              </>
+            }
+            body="Every capability is built to be reliable first — correct semantics, explicit limits and predictable failure behavior."
+          />
+          <p className="mono max-w-xs text-xs leading-relaxed text-slate-500">
+            {'//'} reliability before feature count.
+            <br />
+            {'//'} security and tenant isolation by design.
+          </p>
         </div>
-      </section>
 
-      {/* ================= PIPELINE ================= */}
-      <section className="border-y border-white/10 bg-white/[0.015] py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
-          <div className="grid items-center gap-6 font-mono text-xs sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { step: '01', title: 'INGEST', desc: 'validated payloads, batch limits, scoped credentials' },
-              { step: '02', title: 'STORE', desc: 'MySQL metadata + bounded telemetry retention' },
-              { step: '03', title: 'QUERY', desc: 'server-side filtering, cursor pagination, capped results' },
-              { step: '04', title: 'VISUALIZE', desc: 'typed widgets, honest charts, explicit empty states' },
-            ].map((s, i) => (
-              <div key={s.step} className="relative">
-                <div className="flex items-center gap-3">
-                  <span className="grid h-8 w-8 place-items-center rounded-full border border-[#7cff6b]/40 text-[#7cff6b]">
-                    {s.step}
-                  </span>
-                  <span className="text-sm font-semibold tracking-[0.2em] text-white">{s.title}</span>
-                  {i < 3 && <span className="ml-auto hidden text-gray-600 lg:inline">——→</span>}
+        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((f) => (
+            <article
+              key={f.title}
+              className="card-hover group relative overflow-hidden rounded-2xl border border-white/10 bg-[#0b101b]/60 p-6"
+            >
+              <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-cyan-500/5 blur-2xl transition-opacity group-hover:opacity-100" />
+              <div className={`inline-flex rounded-lg border border-white/10 bg-white/5 p-2.5 ${f.accent}`}>
+                <f.icon />
+              </div>
+              <h3 className="font-display mt-5 text-lg font-semibold text-slate-100">{f.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">{f.body}</p>
+              <div className="mono mt-5 flex items-center gap-2 text-xs text-slate-600">
+                <span className="h-px w-6 bg-gradient-to-r from-cyan-400 to-transparent" />
+                bounded · validated · scoped
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function Flow() {
+  return (
+    <section id="flow" className="relative border-y border-white/5 bg-[#070a12] py-24">
+      <div className="bg-grid-fine absolute inset-0 opacity-60" />
+      <div className="relative mx-auto max-w-7xl px-6">
+        <SectionHeading
+          tag="Data flow"
+          title={
+            <>
+              From agent to dashboard in <span className="text-gradient">one flow.</span>
+            </>
+          }
+          body="The control plane stays separate from the telemetry plane — but for your team, the path is a straight line."
+        />
+
+        <div className="mt-14 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+          {STEPS.map((step, i) => (
+            <div key={step.n} className="relative">
+              <div className="card-hover h-full rounded-2xl border border-white/10 bg-[#0b101b]/70 p-6">
+                <div className="flex items-center justify-between">
+                  <span className="mono text-xs text-cyan-400">{step.n}</span>
+                  <step.icon className="h-5 w-5 text-slate-500" />
                 </div>
-                <p className="mt-3 pl-11 leading-relaxed text-gray-500">{s.desc}</p>
+                <h3 className="font-display mt-6 text-lg font-semibold text-slate-100">{step.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-400">{step.body}</p>
               </div>
-            ))}
-          </div>
+              {i < STEPS.length - 1 ? (
+                <div className="absolute -right-4 top-1/2 hidden h-px w-4 -translate-y-1/2 bg-gradient-to-r from-cyan-400/60 to-transparent lg:block" />
+              ) : null}
+            </div>
+          ))}
         </div>
-      </section>
+      </div>
+    </section>
+  )
+}
 
-      {/* ================= ARCHITECTURE ================= */}
-      <section id="architecture" className="relative py-24 lg:py-32">
-        <div className="pointer-events-none absolute left-1/4 top-20 h-[340px] w-[340px] rounded-full bg-[#7cff6b]/8 blur-[130px]" />
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-14 max-w-2xl" data-reveal>
-            <SectionLabel index="02" text="architecture" />
-            <h2 className="mt-5 font-mono text-3xl font-bold tracking-tight text-white sm:text-4xl">
-              A modular monolith, <span className="text-[#7cff6b]">documented honestly.</span>
-            </h2>
-            <p className="mt-4 text-gray-400">
-              Proven technologies, explicit API contracts, no infrastructure you do not need yet.
-            </p>
-          </div>
+function Install() {
+  const [active, setActive] = useState(TABS[0].id)
+  const [copied, setCopied] = useState(false)
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            {[
-              {
-                title: 'backend',
-                accent: 'text-[#7cff6b]',
-                items: [
-                  'Java 21 · Spring Boot 3.x',
-                  'Spring Security + JWT',
-                  'Spring Data JPA · MySQL 8',
-                  'Flyway migrations',
-                  'Micrometer + Actuator',
-                  'OpenAPI contracts',
-                ],
-              },
-              {
-                title: 'frontend',
-                accent: 'text-[#56d9ff]',
-                items: [
-                  'React 18 · TypeScript strict',
-                  'Vite build system',
-                  'TanStack Query — server state',
-                  'Zustand — client state',
-                  'Tailwind CSS',
-                  'Chart.js time-series',
-                ],
-              },
-              {
-                title: 'infrastructure',
-                accent: 'text-[#ffc466]',
-                items: [
-                  'Docker + Docker Compose',
-                  'MySQL 8.x, local-first',
-                  'No external paid services',
-                  'Reproducible environments',
-                  'Explicit migrations',
-                  'Health via /actuator/health',
-                ],
-              },
-            ].map((col, i) => (
-              <div key={col.title} data-reveal className="panel panel-hover rounded-xl p-6">
-                <div className="mb-5 flex items-center justify-between border-b border-white/10 pb-3">
-                  <span className={`font-mono text-sm font-semibold tracking-[0.2em] ${col.accent}`}>
-                    {col.title}
+  const current = TABS.find((t) => t.id === active) ?? TABS[0]
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(current.code)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <section id="install" className="relative py-24">
+      <div className="orb left-1/2 top-1/3 h-[420px] w-[620px] -translate-x-1/2 bg-violet-600/15" />
+      <div className="relative mx-auto max-w-7xl px-6">
+        <div className="grid items-center gap-12 lg:grid-cols-2">
+          <div>
+            <SectionHeading
+              tag="Quick start"
+              title={
+                <>
+                  Observe your first service in <span className="text-gradient">five minutes.</span>
+                </>
+              }
+              body="One scoped credential, one container, and telemetry starts flowing. Credentials rotate without rebuilding the image."
+            />
+
+            <ol className="mt-8 space-y-4">
+              {[
+                'Create a project and environment in the console.',
+                'Copy the scoped enrollment token — it only grants telemetry write access.',
+                'Run the agent and watch metrics and logs appear in real time.',
+              ].map((text, i) => (
+                <li key={text} className="flex gap-3 text-sm text-slate-300">
+                  <span className="mono flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-cyan-400/40 text-[11px] text-cyan-300">
+                    {i + 1}
                   </span>
-                  <span className="font-mono text-[11px] text-gray-600">0{i + 1}/03</span>
-                </div>
-                <ul className="space-y-3 font-mono text-[13px] text-gray-400">
-                  {col.items.map((item) => (
-                    <li key={item} className="flex gap-3">
-                      <span className="text-gray-700">$</span>
-                      <span className="transition-colors hover:text-white">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+                  <span className="leading-relaxed">{text}</span>
+                </li>
+              ))}
+            </ol>
+
+            <div className="mt-8 flex flex-wrap gap-2">
+              <span className="chip mono">Go 1.22+</span>
+              <span className="chip mono">Docker</span>
+              <span className="chip mono">OpenTelemetry</span>
+              <span className="chip mono">HTTPS only</span>
+            </div>
           </div>
-        </div>
-      </section>
 
-      {/* ================= PRINCIPLES ================= */}
-      <section id="principles" className="border-y border-white/10 bg-[#0a0b11] py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" data-reveal>
-          <SectionLabel index="03" text="product principles" />
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {principles.map((p, i) => (
-              <div
-                key={p}
-                className="flex items-start gap-3 rounded-lg border border-white/10 bg-white/[0.02] px-4 py-4"
-              >
-                <span className="font-mono text-xs text-[#7cff6b]">{String(i + 1).padStart(2, '0')}</span>
-                <span className="text-sm leading-snug text-gray-300">{p}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ================= GETTING STARTED ================= */}
-      <section id="getting-started" className="py-24 lg:py-32">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid items-start gap-12 lg:grid-cols-2">
-            <div data-reveal>
-              <SectionLabel index="04" text="quickstart" />
-              <h2 className="mt-5 font-mono text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                Running in <span className="text-[#56d9ff] text-glow-soft">minutes</span>, not days.
-              </h2>
-              <p className="mt-4 text-gray-400">
-                One command starts backend, frontend and database. No cloud account, no paid
-                dependency, no hidden configuration.
-              </p>
-
-              <div className="mt-8 grid grid-cols-3 gap-3 font-mono">
-                {[
-                  { port: '8080', label: 'Backend API', color: 'text-[#7cff6b]', border: 'hover:border-[#7cff6b]/50' },
-                  { port: '3000', label: 'Frontend UI', color: 'text-[#56d9ff]', border: 'hover:border-[#56d9ff]/50' },
-                  { port: '3306', label: 'MySQL', color: 'text-[#ffc466]', border: 'hover:border-[#ffc466]/50' },
-                ].map((p) => (
-                  <div
-                    key={p.port}
-                    className={`rounded-lg border border-white/10 bg-white/[0.02] px-4 py-4 text-center transition-colors ${p.border}`}
+          <div className="gradient-border shimmer rounded-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+              <div className="flex gap-1">
+                {TABS.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setActive(t.id)}
+                    className={`mono rounded-md px-3 py-1.5 text-xs transition-colors ${
+                      active === t.id ? 'bg-white/10 text-slate-100' : 'text-slate-500 hover:text-slate-300'
+                    }`}
                   >
-                    <div className={`text-2xl font-bold ${p.color}`}>{p.port}</div>
-                    <div className="mt-1 text-[11px] uppercase tracking-widest text-gray-500">{p.label}</div>
-                  </div>
+                    {t.label}
+                  </button>
                 ))}
               </div>
-
-              <div className="mt-8 rounded-lg border border-[#ffc466]/25 bg-[#ffc466]/5 px-4 py-3.5 font-mono text-xs leading-relaxed text-[#ffc466]/90">
-                ! logs are untrusted input — rendered as data, never as markup
-              </div>
-            </div>
-
-            <div data-reveal>
-              <div className="panel overflow-hidden rounded-xl">
-                <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-                  <span className="font-mono text-[11px] text-gray-500">~/projects/cloud-monitoring</span>
-                  <span className="font-mono text-[11px] text-gray-600">bash — 96×24</span>
-                </div>
-                <pre className="overflow-x-auto px-5 py-5 font-mono text-[13px] leading-7 text-gray-300">
-                  <code>
-                    <span className="text-gray-600"># clone and enter the repo</span>{'\n'}
-                    <span className="text-[#7cff6b]">$</span> git clone {'<repository-url>'}{'\n'}
-                    <span className="text-[#7cff6b]">$</span> cd cloud-monitoring{'\n\n'}
-                    <span className="text-gray-600"># start backend · frontend · mysql</span>{'\n'}
-                    <span className="text-[#7cff6b]">$</span> docker compose up -d{'\n\n'}
-                    <span className="text-gray-600"># verify health</span>{'\n'}
-                    <span className="text-[#7cff6b]">$</span> curl localhost:8080/actuator/health{'\n'}
-                    <span className="text-gray-500">{'{ "status": "UP" }'}</span>{'\n'}
-                    <span className="text-[#7cff6b]">$</span> open http://localhost:3000{'\n'}
-                    <span className="text-[#7cff6b]">$</span> <span className="caret" />
-                  </code>
-                </pre>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                {[
-                  { k: 'migrations', v: 'flyway' },
-                  { k: 'tests', v: 'junit 5' },
-                  { k: 'health', v: 'actuator' },
-                ].map((m) => (
-                  <div
-                    key={m.k}
-                    className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-center font-mono"
-                  >
-                    <div className="text-[10px] uppercase tracking-widest text-gray-600">{m.k}</div>
-                    <div className="mt-1 text-xs text-gray-300">{m.v}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ================= CTA ================= */}
-      <section className="px-4 pb-24 sm:px-6 lg:px-8">
-        <div data-reveal className="relative mx-auto max-w-6xl overflow-hidden rounded-2xl border border-[#7cff6b]/25 bg-gradient-to-br from-[#0d1210] via-[#0a0d12] to-[#0b0a12] px-6 py-16 text-center sm:px-12">
-          <div className="pointer-events-none absolute inset-0 bg-dotgrid opacity-[0.07]" />
-          <div className="pointer-events-none absolute -top-24 left-1/2 h-64 w-[560px] -translate-x-1/2 rounded-full bg-[#7cff6b]/15 blur-[90px]" />
-
-          <div className="relative">
-            <div className="font-mono text-xs uppercase tracking-[0.35em] text-[#7cff6b]">
-              stage 1 — project foundation
-            </div>
-            <h2 className="mt-5 font-mono text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
-              Build observability that tells the truth.
-            </h2>
-            <p className="mx-auto mt-5 max-w-2xl text-gray-400">
-              Reliability before feature count. Correctness before visual polish. Fork the repo, run
-              it locally, extend it for your needs.
-            </p>
-            <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <a
-                href="#getting-started"
-                className="w-full rounded-md bg-[#7cff6b] px-8 py-3.5 font-mono text-sm font-semibold text-black transition-all hover:shadow-[0_0_40px_rgba(124,255,107,0.6)] sm:w-auto"
+              <button
+                type="button"
+                onClick={copy}
+                className="inline-flex items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1.5 text-xs text-slate-400 transition-colors hover:border-cyan-400/40 hover:text-cyan-300"
               >
-                get_started →
-              </a>
-              <a
-                href="#architecture"
-                className="w-full rounded-md border border-white/20 px-8 py-3.5 font-mono text-sm text-gray-300 transition-colors hover:border-[#56d9ff]/60 hover:text-[#56d9ff] sm:w-auto"
-              >
-                read_the_architecture
-              </a>
+                {copied ? <IconCheck className="h-3.5 w-3.5 text-lime-300" /> : <IconCopy className="h-3.5 w-3.5" />}
+                {copied ? 'Copied' : 'Copy'}
+              </button>
             </div>
+            <pre className="mono overflow-x-auto p-5 text-[12.5px] leading-relaxed text-slate-300">
+              <code>{current.code}</code>
+            </pre>
           </div>
         </div>
-      </section>
+      </div>
+    </section>
+  )
+}
 
-      {/* ================= FOOTER ================= */}
-      <footer className="border-t border-white/10 bg-[#040508]">
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <div className="grid gap-10 md:grid-cols-4">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <Logo size="sm" />
-                <span className="font-mono text-sm font-semibold tracking-[0.2em] text-white">
-                  CLOUD<span className="text-[#7cff6b]">MONITOR</span>
-                </span>
-              </div>
-              <p className="mt-4 max-w-xs text-sm leading-relaxed text-gray-500">
-                A production-quality observability platform for logs, metrics, dashboards and service
-                health — tenant-safe by design.
-              </p>
-            </div>
+function Stats() {
+  return (
+    <section className="relative border-y border-white/5 bg-[#070a12] py-16">
+      <div className="mx-auto grid max-w-7xl gap-10 px-6 sm:grid-cols-2 lg:grid-cols-4">
+        {STATS.map((s) => (
+          <Stat key={s.label} {...s} />
+        ))}
+      </div>
+    </section>
+  )
+}
 
-            {[
-              {
-                title: 'product',
-                links: [
-                  { label: 'features', href: '#features' },
-                  { label: 'architecture', href: '#architecture' },
-                  { label: 'principles', href: '#principles' },
-                  { label: 'quickstart', href: '#getting-started' },
-                ],
-              },
-              {
-                title: 'resources',
-                links: [
-                  { label: 'documentation', href: '#getting-started' },
-                  { label: 'api reference', href: '#architecture' },
-                  { label: 'security model', href: '#principles' },
-                  { label: 'contributing', href: '#top' },
-                ],
-              },
-              {
-                title: 'legal',
-                links: [
-                  { label: 'privacy policy', href: '#top' },
-                  { label: 'terms of service', href: '#top' },
-                  { label: 'license', href: '#top' },
-                ],
-              },
-            ].map((col) => (
-              <div key={col.title}>
-                <h4 className="font-mono text-xs uppercase tracking-[0.25em] text-gray-400">
-                  {col.title}
-                </h4>
-                <ul className="mt-4 space-y-2.5 text-sm">
-                  {col.links.map((l) => (
-                    <li key={l.label}>
-                      <a href={l.href} className="text-gray-500 transition-colors hover:text-[#7cff6b]">
-                        {l.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-6 font-mono text-xs text-gray-600 sm:flex-row">
-            <span>© {new Date().getFullYear()} CloudMonitor — built for reliability, security and DX.</span>
-            <span className="flex items-center gap-2">
-              <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-[#7cff6b]" />
-              status: all systems nominal
-            </span>
-          </div>
-        </div>
-      </footer>
+function Stat({ value, suffix, decimals, label }: { value: number; suffix: string; decimals: number; label: string }) {
+  const display = useCountUp(value, 1800, decimals)
+  return (
+    <div className="text-center">
+      <div className="font-display text-4xl font-bold tracking-tight text-slate-100 sm:text-5xl">
+        {display.toFixed(decimals)}
+        <span className="text-gradient">{suffix}</span>
+      </div>
+      <div className="mono mt-2 text-xs uppercase tracking-[0.2em] text-slate-500">{label}</div>
     </div>
   )
 }
 
-export default App
+function Cta() {
+  const [email, setEmail] = useState('')
+  const [done, setDone] = useState(false)
+
+  return (
+    <section id="cta" className="relative overflow-hidden py-24">
+      <div className="bg-grid mask-radial absolute inset-0 opacity-70" />
+      <div className="orb left-1/2 top-1/2 h-[420px] w-[720px] -translate-x-1/2 -translate-y-1/2 bg-cyan-500/15" />
+      <div className="relative mx-auto max-w-3xl px-6 text-center">
+        <span className="section-tag mono justify-center">// Get started</span>
+        <h2 className="font-display mt-6 text-4xl font-bold leading-tight tracking-tight text-slate-100 sm:text-5xl">
+          Stop flying <span className="text-gradient">blind.</span>
+        </h2>
+        <p className="mx-auto mt-4 max-w-xl text-lg text-slate-400">
+          Create your first project, deploy the agent, and see real telemetry in minutes. No credit card required.
+        </p>
+
+        {done ? (
+          <div className="mx-auto mt-8 flex max-w-md items-center justify-center gap-2 rounded-full border border-lime-400/30 bg-lime-400/10 px-6 py-3 text-sm text-lime-200">
+            <IconCheck className="h-4 w-4" />
+            You are on the list — check your inbox.
+          </div>
+        ) : (
+          <form
+            className="mx-auto mt-8 flex max-w-md flex-col gap-3 sm:flex-row"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (email.trim()) setDone(true)
+            }}
+          >
+            <label htmlFor="cta-email" className="sr-only">
+              Work email
+            </label>
+            <input
+              id="cta-email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@company.com"
+              className="mono flex-1 rounded-full border border-white/10 bg-[#0b101b]/80 px-5 py-3 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-400/50"
+            />
+            <button
+              type="submit"
+              className="group inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 px-6 py-3 text-sm font-semibold text-[#05070d] transition-transform hover:scale-[1.03]"
+            >
+              Create project
+              <IconArrow className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </button>
+          </form>
+        )}
+
+        <p className="mono mt-5 text-xs text-slate-600">
+          14-day trial · tenant isolation included · cancel anytime
+        </p>
+      </div>
+    </section>
+  )
+}
+
+function Footer() {
+  const columns = [
+    { title: 'Product', links: ['Metrics', 'Logs', 'Dashboards', 'Agents', 'Alerts'] },
+    { title: 'Developers', links: ['Documentation', 'API reference', 'OpenTelemetry', 'Status'] },
+    { title: 'Company', links: ['About', 'Security', 'Careers', 'Contact'] },
+  ]
+
+  return (
+    <footer className="relative border-t border-white/5 bg-[#05070d] py-14">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <Logo />
+              <span className="font-display text-lg font-semibold text-slate-100">
+                Cloud<span className="text-cyan-300">Monitor</span>
+              </span>
+            </div>
+            <p className="mt-4 max-w-xs text-sm leading-relaxed text-slate-500">
+              A dependable cloud observability platform. Reliability and tenant isolation first, polish second.
+            </p>
+          </div>
+
+          {columns.map((col) => (
+            <div key={col.title}>
+              <h4 className="mono text-xs uppercase tracking-[0.2em] text-slate-500">{col.title}</h4>
+              <ul className="mt-4 space-y-2.5">
+                {col.links.map((link) => (
+                  <li key={link}>
+                    <a href="#top" className="text-sm text-slate-400 transition-colors hover:text-cyan-300">
+                      {link}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-white/5 pt-8 sm:flex-row">
+          <p className="mono text-xs text-slate-600">© 2026 CloudMonitor. All signals reserved.</p>
+          <div className="mono flex items-center gap-2 text-xs text-slate-600">
+            <span className="glow-dot h-1.5 w-1.5 rounded-full bg-emerald-400 text-emerald-400" />
+            all systems operational
+          </div>
+        </div>
+      </div>
+    </footer>
+  )
+}
+
+export default function App() {
+  return (
+    <div className="noise min-h-screen bg-[#05070d]">
+      <Navbar />
+      <main>
+        <Hero />
+        <Marquee />
+        <Features />
+        <Flow />
+        <Install />
+        <Stats />
+        <Cta />
+      </main>
+      <Footer />
+    </div>
+  )
+}
