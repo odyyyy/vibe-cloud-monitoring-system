@@ -1,5 +1,4 @@
 services:
-  # База данных MySQL
   mysql:
     image: mysql:8.0
     container_name: monitoring-mysql
@@ -19,10 +18,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # Твое Spring-приложение (основной API модуль)
   app:
     build:
-      context: ./backend               # <-- Сборка из backend/
+      context: ./backend
       dockerfile: Dockerfile
     container_name: monitoring-api
     ports:
@@ -44,8 +42,31 @@ services:
           action: rebuild
         - path: ./backend/monitoring-auth/pom.xml
           action: rebuild
+        - path: ./backend/monitoring-collector/src
+          action: rebuild
+        - path: ./backend/monitoring-collector/pom.xml
+          action: rebuild
         - path: ./backend/.env
           action: restart
+
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    container_name: monitoring-agent
+    profiles:
+      - agent
+    environment:
+      - AGENT_BACKEND_URL=http://app:8080
+      - AGENT_API_KEY=${AGENT_API_KEY:-}
+      - AGENT_INTERVAL_SECONDS=${AGENT_INTERVAL_SECONDS:-15}
+    depends_on:
+      app:
+        condition: service_started
+    develop:
+      watch:
+        - path: ./agent
+          action: rebuild
 
   test:
     image: maven:3.9-eclipse-temurin-21
@@ -60,18 +81,28 @@ services:
         condition: service_healthy
     command: ["mvn", "test", "-B"]
 
-  # Frontend application
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: monitoring-frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - VITE_BACKEND_URL=http://app:8080/api
-    # depends_on:
-    #   - app
+      build:
+        context: ./frontend
+        dockerfile: Dockerfile.dev
+      container_name: monitoring-frontend-dev
+      ports:
+        - "3000:3000"
+        - "24678:24678"  # Vite HMR WebSocket port
+      environment:
+        - VITE_BACKEND_URL=http://app:8080/api
+        - CHOKIDAR_USEPOLLING=true
+      volumes:
+        - ./frontend:/app
+        - /app/node_modules
+      command: npm run dev
+      develop:
+        watch:
+          - path: ./frontend/package.json
+            action: rebuild
+          - path: ./frontend/package-lock.json
+            action: rebuild
+
 
 volumes:
   mysql-data:
