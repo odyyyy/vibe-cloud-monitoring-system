@@ -24,7 +24,7 @@ public class AuthService {
                 .role("USER")
                 .build();
         userRepository.save(user);
-        String token = jwtTokenProvider.generateToken(user.getUsername());
+        String token = jwtTokenProvider.generateToken(user.getId(), user.getUsername());
         return new AuthResponse(token);
     }
 
@@ -36,7 +36,13 @@ public class AuthService {
             throw new RuntimeException("Invalid password");
         }
 
-        String token = jwtTokenProvider.generateToken(user.getUsername());
+        String token = jwtTokenProvider.generateToken(user.getId(), user.getUsername());
         return new AuthResponse(token);
+    }
+
+    public UserProfileResponse getProfile(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return new UserProfileResponse(user.getId(), user.getUsername(), user.getEmail(), user.getAvatarUrl());
     }
 }

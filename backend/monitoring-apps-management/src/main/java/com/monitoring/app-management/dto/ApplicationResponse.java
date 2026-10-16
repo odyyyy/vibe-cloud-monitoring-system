@@ -1,7 +1,6 @@
 package com.monitoring.storage.dto;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+import com.monitoring.storage.entity.Application;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;

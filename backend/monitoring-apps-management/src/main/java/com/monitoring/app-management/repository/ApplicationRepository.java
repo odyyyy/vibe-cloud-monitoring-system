@@ -11,6 +11,8 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 
     Optional<Application> findByApiKey(String apiKey);
 
+    Optional<Application> findByName(String name);
+
     java.util.List<Application> findByOwnerId(Long ownerId);
 
     void deleteByApiKey(String apiKey);

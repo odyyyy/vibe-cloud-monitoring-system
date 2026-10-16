@@ -22,9 +22,10 @@ public class JwtTokenProvider {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateToken(String username) {
+    public String generateToken(Long userId, String username) {
         return Jwts.builder()
                 .subject(username)
+                .claim("uid", userId)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSigningKey())
@@ -38,6 +39,19 @@ public class JwtTokenProvider {
                 .parseSignedClaims(token)
                 .getPayload()
                 .getSubject();
+    }
+
+    public Long getUserIdFromToken(String token) {
+        Object uid = Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .get("uid");
+        if (uid instanceof Number number) {
+            return number.longValue();
+        }
+        return null;
     }
 
     public boolean validateToken(String token) {

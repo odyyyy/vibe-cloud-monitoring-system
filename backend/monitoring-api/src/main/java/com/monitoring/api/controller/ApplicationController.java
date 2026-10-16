@@ -1,13 +1,18 @@
 package com.monitoring.api.controller;
 
+import com.monitoring.storage.dto.ApplicationCreateRequest;
 import com.monitoring.storage.dto.ApplicationResponse;
+import com.monitoring.storage.dto.ApplicationUpdateRequest;
+import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.service.ApplicationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
 import java.util.List;
 
 @RestController
@@ -19,128 +24,58 @@ public class ApplicationController {
 
     @GetMapping
     public ResponseEntity<List<ApplicationResponse>> listApplications() {
-        try {
-            // Получаем ownerId из SecurityContext
-            Long ownerId = getOwnerId();
-            
-            // Возвращаем только приложения текущего пользователя
-            List<Application> applications = applicationService.findByOwnerId(ownerId);
-            
-            return ResponseEntity.ok(
-                applications.stream()
-                    .map(ApplicationResponse::fromEntity)
-                    .toList()
-            );
-        } catch (RuntimeException e) {
-            if (e.getMessage() != null && e.getMessage().contains("Access denied")) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-            }
-            throw e;
-        }
+        List<ApplicationResponse> response = applicationService.findByOwnerId(currentUserId())
+                .stream()
+                .map(ApplicationResponse::fromEntity)
+                .toList();
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping
     public ResponseEntity<ApplicationResponse> createApplication(
             @Valid @RequestBody ApplicationCreateRequest request) {
-        
-        Long ownerId = getOwnerId();
-        
-        Application application = applicationService.createApplication(
-                request.getName(), 
-                ownerId
-        );
-
-        return ResponseEntity.status(HttpStatus.CREATED).build()
-                .header("Location", "/api/applications/" + application.getId())
-                .body(ApplicationResponse.fromEntity(application));
+        Application application = applicationService.createApplication(request, currentUserId());
+        URI location = URI.create("/api/applications/" + application.getId());
+        return ResponseEntity.created(location).body(ApplicationResponse.fromEntity(application));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApplicationResponse> getApplication(@PathVariable Long id) {
-        try {
-            Application application = applicationService.findById(id)
-                .orElseThrow(() -> new RuntimeException("Application not found"));
-            
-            return ResponseEntity.ok(ApplicationResponse.fromEntity(application));
-        } catch (RuntimeException e) {
-            if (e.getMessage() != null && e.getMessage().contains("not found")) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-            }
-            throw e;
-        }
+        Application application = applicationService.getOwnedApplication(id, currentUserId());
+        return ResponseEntity.ok(ApplicationResponse.fromEntity(application));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<ApplicationResponse> updateApplication(
-            @PathVariable Long id, 
+            @PathVariable Long id,
             @Valid @RequestBody ApplicationUpdateRequest request) {
-        
-        try {
-            Application application = applicationService.updateApplication(id, request.getName());
-            
-            return ResponseEntity.ok(ApplicationResponse.fromEntity(application));
-        } catch (RuntimeException e) {
-            if (e.getMessage() != null && e.getMessage().contains("Access denied")) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-            }
-            throw e;
-        }
+        Application application = applicationService.updateApplication(id, request.getName(), currentUserId());
+        return ResponseEntity.ok(ApplicationResponse.fromEntity(application));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteApplication(@PathVariable Long id) {
-        try {
-            applicationService.deleteById(id);
-            
-            return ResponseEntity.noContent().build();
-        } catch (RuntimeException e) {
-            if (e.getMessage() != null && e.getMessage().contains("not found")) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-            }
-            if (e.getMessage() != null && e.getMessage().contains("Access denied")) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-            }
-            throw e;
-        }
+        applicationService.deleteApplication(id, currentUserId());
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/regenerate-api-key")
-    public ResponseEntity<ApplicationResponse> regenerateApiKey(
-            @PathVariable Long id) {
-        
-        try {
-            Application application = applicationService.regenerateApiKey(id);
-            
-            return ResponseEntity.ok(ApplicationResponse.fromEntity(application));
-        } catch (RuntimeException e) {
-            if (e.getMessage() != null && e.getMessage().contains("not found")) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-            }
-            if (e.getMessage() != null && e.getMessage().contains("Access denied")) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-            }
-            throw e;
-        }
+    public ResponseEntity<ApplicationResponse> regenerateApiKey(@PathVariable Long id) {
+        Application application = applicationService.regenerateApiKey(id, currentUserId());
+        return ResponseEntity.ok(ApplicationResponse.fromEntity(application));
     }
 
-    private Long getOwnerId() {
-        var securityContext = org.springframework.security.core.context.SecurityContextHolder.getContext();
-        Object principal = securityContext.getAuthentication().getPrincipal();
-        
-        if (principal instanceof String username) {
-            // Если username - это userId, используем его напрямую
+    private Long currentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Object principal = authentication != null ? authentication.getPrincipal() : null;
+
+        if (principal instanceof String userId) {
             try {
-                return Long.parseLong(username);
+                return Long.parseLong(userId);
             } catch (NumberFormatException e) {
-                throw new RuntimeException("Invalid user ID format. Expected numeric ID.");
+                throw new IllegalStateException("Invalid user ID in authentication token");
             }
-        } else if (principal instanceof org.springframework.security.core.userdetails.User user) {
-            // Если это User, проверяем имя пользователя на совпадение с userId
-            // В реальном приложении лучше хранить userId в JWT токене
-            throw new RuntimeException("User authentication found. Use numeric username or add userId to JWT token.");
-        } else {
-            throw new RuntimeException("Authentication not available: " + 
-                                   principal.getClass().getName());
         }
+        throw new IllegalStateException("No authenticated user available");
     }
 }

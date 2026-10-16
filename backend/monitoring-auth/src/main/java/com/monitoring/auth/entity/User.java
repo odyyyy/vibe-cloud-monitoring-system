@@ -20,6 +20,9 @@ public class User {
 
     @Column(unique = true, nullable = false)
     private String email;
-    
+
+    @Column(name = "avatar_url", length = 512)
+    private String avatarUrl;
+
     private String role; // "USER", "ADMIN"
 }

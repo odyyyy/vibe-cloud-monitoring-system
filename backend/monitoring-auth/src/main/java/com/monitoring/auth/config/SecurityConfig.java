@@ -26,7 +26,15 @@ public class SecurityConfig {
             "/api/auth/**", 
             "/api/hello",
             "/actuator/health",
-            "/actuator/info"
+            "/actuator/info",
+            // Swagger UI / OpenAPI
+            "/v3/api-docs/**",
+            "/swagger-ui/**",
+            "/swagger-ui.html",
+            // Ingestion не требует JWT: агенты аутентифицируются по X-API-Key
+            // в отдельной цепочке (IngestSecurityConfig в monitoring-collector).
+            "/api/v1/ingest/**",
+            "/api/ingest/**"
         };
         
         http
@@ -34,6 +42,10 @@ public class SecurityConfig {
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(endpoints).permitAll()
+                .requestMatchers("/api/applications/**").authenticated()
+                // Metrics queries require an authenticated user; ownership of the
+                // requested application is verified in MetricQueryService.
+                .requestMatchers("/api/v1/metrics/**").authenticated()
                 .anyRequest().permitAll()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
