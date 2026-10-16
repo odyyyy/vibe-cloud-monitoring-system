@@ -15,7 +15,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -54,7 +56,10 @@ public class HealthCheckConfig {
     @Column(name = "target_url", nullable = false, length = 2048)
     private String targetUrl;
 
+    // Store enum names as VARCHAR to stay portable across databases (Hibernate on MySQL
+    // would otherwise expect a native ENUM column).
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 8)
     private HealthCheckMethod method;
 

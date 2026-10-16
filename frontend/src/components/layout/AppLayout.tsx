@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, LogOut, Menu, Settings as SettingsIcon, X } from 'lucide-react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom'
 import { useProfile } from '../../features/auth/useProfile'
 import { cn } from '../../lib/utils'
 import { useAuthStore } from '../../store/authStore'
@@ -99,7 +99,9 @@ export function AppLayout() {
           />
           <aside className="absolute inset-y-0 left-0 flex w-64 flex-col border-r border-white/10 bg-[#080b14] px-4 py-5">
             <div className="flex items-center justify-between">
+              <Link to="/">
               <Brand />
+              </Link>
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}

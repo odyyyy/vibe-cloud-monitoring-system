@@ -18,6 +18,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 
@@ -54,7 +56,10 @@ public class LogEvent {
     @JoinColumn(name = "application_id", nullable = false)
     private Application application;
 
+    // Store enum names as VARCHAR to stay portable across databases (Hibernate on MySQL
+    // would otherwise expect a native ENUM column).
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 16)
     private LogLevel level;
 

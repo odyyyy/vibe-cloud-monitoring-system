@@ -17,6 +17,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * A widget placed on a dashboard.
@@ -48,7 +50,10 @@ public class Widget {
     @JoinColumn(name = "dashboard_id", nullable = false)
     private Dashboard dashboard;
 
+    // Store enum names as VARCHAR to stay portable across databases (Hibernate on MySQL
+    // would otherwise expect a native ENUM column).
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 32)
     private WidgetType type;
 
