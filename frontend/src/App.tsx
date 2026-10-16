@@ -3,9 +3,11 @@ import { GuestOnlyRoute } from './components/auth/GuestOnlyRoute'
 import { RequireAuth } from './components/auth/RequireAuth'
 import { AppLayout } from './components/layout/AppLayout'
 import LandingPage from './pages/LandingPage'
-import LoginPage from './pages/LoginPage'
+import LoginPage from './pages/auth/LoginPage'
+import ApplicationsPage from './pages/app/ApplicationsPage'
+import MetricsExplorerPage from './pages/app/MetricsExplorerPage'
 import OverviewPage from './pages/app/OverviewPage'
-import RegisterPage from './pages/RegisterPage'
+import RegisterPage from './pages/auth/RegisterPage'
 import SettingsPage from './pages/app/SettingsPage'
 import UnderConstructionPage from './pages/app/UnderConstructionPage'
 
@@ -40,21 +42,8 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/app/overview" replace /> },
       { path: 'overview', element: <OverviewPage /> },
-      {
-        path: 'applications',
-        element: (
-          <UnderConstructionPage
-            title="Applications"
-            description="Application management will let you create projects, enroll agents and inspect service health."
-          />
-        ),
-      },
-      {
-        path: 'metrics',
-        element: (
-          <UnderConstructionPage title="Metrics" description="Metric exploration and charts are coming soon." />
-        ),
-      },
+      { path: 'applications', element: <ApplicationsPage /> },
+      { path: 'metrics', element: <MetricsExplorerPage /> },
       {
         path: 'logs',
         element: (
