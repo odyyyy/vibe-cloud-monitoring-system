@@ -6,6 +6,7 @@ import com.monitoring.collector.repository.MetricBucketProjection;
 import com.monitoring.collector.repository.MetricSampleRepository;
 import com.monitoring.storage.service.ApplicationService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +30,9 @@ import java.util.List;
 public class MetricQueryService {
 
     private static final long SECONDS_PER_MINUTE = 60L;
+
+    /** Upper bound on the number of distinct metric names returned per application. */
+    private static final int MAX_METRIC_NAMES = 500;
 
     private final MetricSampleRepository metricSampleRepository;
     private final ApplicationService applicationService;
@@ -59,5 +63,14 @@ public class MetricQueryService {
                         .value(bucket.getAggregatedValue())
                         .build())
                 .toList();
+    }
+
+    /**
+     * Returns the distinct metric names known for an application owned by {@code userId}.
+     * Ownership is verified before reading, so one tenant cannot enumerate another's metrics.
+     */
+    public List<String> listMetricNames(Long userId, Long applicationId) {
+        applicationService.getOwnedApplication(applicationId, userId);
+        return metricSampleRepository.findDistinctNames(applicationId, PageRequest.of(0, MAX_METRIC_NAMES));
     }
 }

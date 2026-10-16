@@ -133,6 +133,51 @@ class MetricQueryControllerTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void names_returnsOkWithDistinctMetricNames() throws Exception {
+        when(metricQueryService.listMetricNames(eq(USER_ID), eq(7L)))
+                .thenReturn(List.of("cpu_usage", "mem_usage"));
+
+        mockMvc.perform(get("/api/v1/metrics/names?applicationId=7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value("cpu_usage"))
+                .andExpect(jsonPath("$[1]").value("mem_usage"));
+    }
+
+    @Test
+    void names_missingApplicationId_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/metrics/names"))
+                .andExpect(status().isBadRequest());
+
+        verify(metricQueryService, Mockito.never()).listMetricNames(any(), any());
+    }
+
+    @Test
+    void names_nonPositiveApplicationId_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/metrics/names?applicationId=0"))
+                .andExpect(status().isBadRequest());
+
+        verify(metricQueryService, Mockito.never()).listMetricNames(any(), any());
+    }
+
+    @Test
+    void names_foreignApplication_returnsForbidden() throws Exception {
+        when(metricQueryService.listMetricNames(eq(USER_ID), eq(7L)))
+                .thenThrow(new ApplicationAccessDeniedException());
+
+        mockMvc.perform(get("/api/v1/metrics/names?applicationId=7"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void names_unknownApplication_returnsNotFound() throws Exception {
+        when(metricQueryService.listMetricNames(eq(USER_ID), eq(7L)))
+                .thenThrow(new ApplicationNotFoundException(7L));
+
+        mockMvc.perform(get("/api/v1/metrics/names?applicationId=7"))
+                .andExpect(status().isNotFound());
+    }
+
     /**
      * Minimal advice for the standalone test: in the running application the same
      * errors are handled by the global ApiExceptionHandler from monitoring-api.

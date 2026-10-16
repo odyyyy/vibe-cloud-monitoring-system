@@ -1,6 +1,7 @@
 package com.monitoring.collector.repository;
 
 import com.monitoring.collector.entity.MetricSample;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,6 +14,15 @@ public interface MetricSampleRepository extends JpaRepository<MetricSample, Long
     List<MetricSample> findByApplication_Id(Long applicationId);
 
     long countByApplication_Id(Long applicationId);
+
+    /**
+     * Distinct metric names recorded for an application, ordered alphabetically.
+     *
+     * <p>Filtered strictly by {@code application_id} (tenant scope) and bounded via
+     * {@link Pageable} so a single call cannot scan an unbounded number of names.
+     */
+    @Query("SELECT DISTINCT m.name FROM MetricSample m WHERE m.application.id = :applicationId ORDER BY m.name")
+    List<String> findDistinctNames(@Param("applicationId") Long applicationId, Pageable pageable);
 
     /**
      * Aggregates metric points into time buckets of {@code intervalSeconds} seconds.

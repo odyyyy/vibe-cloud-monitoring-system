@@ -1,9 +1,9 @@
 import type { Aggregation } from '../../api/metrics'
 import type { MetricFilters } from '../../features/metrics/searchParams'
 import { ApplicationSelect } from '../filters/ApplicationSelect'
+import { MetricNameSelect } from '../filters/MetricNameSelect'
 import { TimeRangePicker } from '../filters/TimeRangePicker'
 import { Button } from '../ui/button'
-import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 
@@ -33,18 +33,17 @@ export function MetricsFilterPanel({ draft, onChange, onApply, error, isApplying
           <ApplicationSelect
             id="metrics-application"
             value={draft.applicationId}
-            onChange={(value) => onChange({ applicationId: value })}
+            onChange={(value) => onChange({ applicationId: value, metricName: '' })}
           />
         </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="metrics-metric-name">Metric name</Label>
-          <Input
+          <MetricNameSelect
             id="metrics-metric-name"
-            placeholder="cpu_usage"
-            autoComplete="off"
+            applicationId={draft.applicationId}
             value={draft.metricName}
-            onChange={(event) => onChange({ metricName: event.target.value })}
+            onChange={(metricName) => onChange({ metricName })}
           />
         </div>
 

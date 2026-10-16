@@ -54,3 +54,20 @@ export function useMetricsQuery(params: MetricsQueryParams | null, enabled: bool
     enabled: enabled && params !== null,
   })
 }
+
+export function getMetricNames(applicationId: number): Promise<string[]> {
+  const search = new URLSearchParams({ applicationId: String(applicationId) })
+  return apiRequest<string[]>(`/v1/metrics/names?${search.toString()}`, { token: authToken() })
+}
+
+export const metricNamesQueryKey = (applicationId: number | null) =>
+  ['metrics', 'names', applicationId ?? null] as const
+
+export function useMetricNamesQuery(applicationId: number | null) {
+  return useQuery({
+    queryKey: metricNamesQueryKey(applicationId),
+    queryFn: () => getMetricNames(applicationId as number),
+    enabled: applicationId !== null,
+    staleTime: 60_000,
+  })
+}

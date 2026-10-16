@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -121,5 +122,31 @@ class MetricsQueryIntegrationTest {
 
         assertEquals(1, buckets.size());
         assertEquals(10.0, buckets.get(0).getAggregatedValue());
+    }
+
+    @Test
+    void findDistinctNames_returnsSortedUniqueNames() {
+        saveSample(application, "cpu_usage", 1.0, Instant.parse("2026-10-09T12:00:00Z"));
+        saveSample(application, "cpu_usage", 2.0, Instant.parse("2026-10-09T12:01:00Z"));
+        saveSample(application, "mem_usage", 3.0, Instant.parse("2026-10-09T12:02:00Z"));
+
+        List<String> names = metricSampleRepository.findDistinctNames(application.getId(), PageRequest.of(0, 500));
+
+        assertEquals(List.of("cpu_usage", "mem_usage"), names);
+    }
+
+    @Test
+    void findDistinctNames_isolatesByApplicationId() {
+        Application other = applicationRepository.save(Application.builder()
+                .name("other-names-app")
+                .apiKey("app_other_names")
+                .ownerId(2L)
+                .build());
+        saveSample(application, "cpu_usage", 1.0, Instant.parse("2026-10-09T12:00:00Z"));
+        saveSample(other, "disk_usage", 1.0, Instant.parse("2026-10-09T12:00:00Z"));
+
+        List<String> names = metricSampleRepository.findDistinctNames(application.getId(), PageRequest.of(0, 500));
+
+        assertEquals(List.of("cpu_usage"), names);
     }
 }

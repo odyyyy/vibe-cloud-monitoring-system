@@ -1,6 +1,7 @@
 package com.monitoring.collector.controller;
 
 import com.monitoring.collector.dto.AggregatedMetricResponse;
+import com.monitoring.collector.dto.MetricNamesRequest;
 import com.monitoring.collector.dto.MetricsQueryRequest;
 import com.monitoring.collector.service.MetricQueryService;
 import jakarta.validation.Valid;
@@ -34,6 +35,11 @@ public class MetricQueryController {
     public ResponseEntity<List<AggregatedMetricResponse>> query(@Valid MetricsQueryRequest request) {
         List<AggregatedMetricResponse> response = metricQueryService.query(currentUserId(), request);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/names")
+    public ResponseEntity<List<String>> names(@Valid MetricNamesRequest request) {
+        return ResponseEntity.ok(metricQueryService.listMetricNames(currentUserId(), request.getApplicationId()));
     }
 
     private Long currentUserId() {

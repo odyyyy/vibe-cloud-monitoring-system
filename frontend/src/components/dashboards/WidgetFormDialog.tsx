@@ -15,6 +15,7 @@ import {
 import type { Aggregation } from '../../api/metrics'
 import type { LogLevel } from '../../api/logs'
 import { ApplicationSelect } from '../filters/ApplicationSelect'
+import { MetricNameSelect } from '../filters/MetricNameSelect'
 import { Button } from '../ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
 import { Input } from '../ui/input'
@@ -173,19 +174,25 @@ export function WidgetFormDialog({ open, onOpenChange, widget, onSubmit }: Widge
 
           <div className="space-y-1.5">
             <Label htmlFor="widget-application">Application</Label>
-            <ApplicationSelect id="widget-application" value={applicationId} onChange={setApplicationId} />
+            <ApplicationSelect
+              id="widget-application"
+              value={applicationId}
+              onChange={(next) => {
+                setApplicationId(next)
+                setMetricName('')
+              }}
+            />
           </div>
 
           {type === 'METRIC_CHART' ? (
             <>
               <div className="space-y-1.5">
                 <Label htmlFor="widget-metric">Metric name</Label>
-                <Input
+                <MetricNameSelect
                   id="widget-metric"
-                  placeholder="cpu_usage"
-                  autoComplete="off"
+                  applicationId={applicationId}
                   value={metricName}
-                  onChange={(event) => setMetricName(event.target.value)}
+                  onChange={setMetricName}
                 />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
