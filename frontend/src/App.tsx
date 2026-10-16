@@ -5,11 +5,13 @@ import { AppLayout } from './components/layout/AppLayout'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/auth/LoginPage'
 import ApplicationsPage from './pages/app/ApplicationsPage'
+import DashboardsPage from './pages/app/DashboardsPage'
+import DashboardViewPage from './pages/app/DashboardViewPage'
+import LogExplorerPage from './pages/app/LogExplorerPage'
 import MetricsExplorerPage from './pages/app/MetricsExplorerPage'
 import OverviewPage from './pages/app/OverviewPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import SettingsPage from './pages/app/SettingsPage'
-import UnderConstructionPage from './pages/app/UnderConstructionPage'
 
 const router = createBrowserRouter([
   {
@@ -44,18 +46,9 @@ const router = createBrowserRouter([
       { path: 'overview', element: <OverviewPage /> },
       { path: 'applications', element: <ApplicationsPage /> },
       { path: 'metrics', element: <MetricsExplorerPage /> },
-      {
-        path: 'logs',
-        element: (
-          <UnderConstructionPage title="Logs" description="Log search and exploration are coming soon." />
-        ),
-      },
-      {
-        path: 'dashboards',
-        element: (
-          <UnderConstructionPage title="Dashboards" description="Configurable dashboards are coming soon." />
-        ),
-      },
+      { path: 'logs', element: <LogExplorerPage /> },
+      { path: 'dashboards', element: <DashboardsPage /> },
+      { path: 'dashboards/:id', element: <DashboardViewPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

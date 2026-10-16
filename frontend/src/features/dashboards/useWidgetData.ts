@@ -1,0 +1,66 @@
+import { useQuery } from '@tanstack/react-query'
+import type { LogLevel, LogsPageResponse } from '../../api/logs'
+import { getLogs } from '../../api/logs'
+import type { AggregatedMetricPoint } from '../../api/metrics'
+import { getMetricsQuery } from '../../api/metrics'
+import { resolvePresetRange } from '../metrics/timeRange'
+import type { LogTableConfig, MetricChartConfig } from './schemas'
+
+const WIDGET_LOGS_PAGE_SIZE = 10
+
+function relativeRange(hours: number) {
+  return resolvePresetRange({ id: 'relative', label: 'relative', hours })
+}
+
+/**
+ * Data hook for a METRIC_CHART widget. The absolute time window is resolved inside
+ * the query function (not in render) so the query key stays stable and polling keeps
+ * requesting the latest window instead of spawning a new request on every render.
+ */
+export function useMetricChartWidget(
+  widgetId: number,
+  config: MetricChartConfig,
+  refetchInterval: number,
+) {
+  const { applicationId, metricName, aggregation, intervalMinutes, timeRangeHours } = config
+
+  return useQuery<AggregatedMetricPoint[]>({
+    queryKey: [
+      'dashboard-widget',
+      'metric',
+      widgetId,
+      applicationId,
+      metricName,
+      aggregation,
+      intervalMinutes,
+      timeRangeHours,
+    ] as const,
+    queryFn: () => {
+      const { from, to } = relativeRange(timeRangeHours)
+      return getMetricsQuery({ applicationId, metricName, from, to, aggregation, intervalMinutes })
+    },
+    refetchInterval,
+  })
+}
+
+/** Data hook for a LOG_TABLE widget, mirroring {@link useMetricChartWidget}. */
+export function useLogTableWidget(widgetId: number, config: LogTableConfig, refetchInterval: number) {
+  const { applicationId, level, searchText, timeRangeHours } = config
+
+  return useQuery<LogsPageResponse>({
+    queryKey: ['dashboard-widget', 'logs', widgetId, applicationId, level ?? null, searchText ?? null, timeRangeHours] as const,
+    queryFn: () => {
+      const { from, to } = relativeRange(timeRangeHours)
+      return getLogs({
+        applicationId,
+        level: level as LogLevel | undefined,
+        from,
+        to,
+        searchText: searchText || undefined,
+        page: 0,
+        size: WIDGET_LOGS_PAGE_SIZE,
+      })
+    },
+    refetchInterval,
+  })
+}

@@ -1,0 +1,25 @@
+import { MetricChart } from '../metrics/MetricChart'
+import type { MetricChartConfig } from '../../features/dashboards/schemas'
+import { useMetricChartWidget } from '../../features/dashboards/useWidgetData'
+
+interface MetricChartWidgetProps {
+  widgetId: number
+  config: MetricChartConfig
+  refetchInterval: number
+}
+
+export function MetricChartWidget({ widgetId, config, refetchInterval }: MetricChartWidgetProps) {
+  const query = useMetricChartWidget(widgetId, config, refetchInterval)
+  const error = query.error instanceof Error ? query.error : null
+
+  return (
+    <MetricChart
+      bare
+      heightClass="h-full"
+      title={config.metricName}
+      data={query.data ?? []}
+      isLoading={query.isLoading}
+      error={error}
+    />
+  )
+}
