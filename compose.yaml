@@ -18,7 +18,7 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
+  backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -42,9 +42,17 @@ services:
           action: rebuild
         - path: ./backend/monitoring-auth/pom.xml
           action: rebuild
+        - path: ./backend/monitoring-apps-management/src
+          action: rebuild
+        - path: ./backend/monitoring-apps-management/pom.xml
+          action: rebuild
         - path: ./backend/monitoring-collector/src
           action: rebuild
         - path: ./backend/monitoring-collector/pom.xml
+          action: rebuild
+        - path: ./backend/monitoring-dashboards/src
+          action: rebuild
+        - path: ./backend/monitoring-dashboards/pom.xml
           action: rebuild
         - path: ./backend/.env
           action: restart
@@ -57,7 +65,7 @@ services:
     profiles:
       - agent
     environment:
-      - AGENT_BACKEND_URL=http://app:8080
+      - AGENT_BACKEND_URL=http://backend:8080
       - AGENT_API_KEY=${AGENT_API_KEY:-}
       - AGENT_INTERVAL_SECONDS=${AGENT_INTERVAL_SECONDS:-15}
     depends_on:
@@ -68,18 +76,18 @@ services:
         - path: ./agent
           action: rebuild
 
-  test:
-    image: maven:3.9-eclipse-temurin-21
-    working_dir: /app
-    volumes:
-      - ./backend:/app
-      - maven-cache:/root/.m2
-    env_file:
-      - ./backend/.env
-    depends_on:
-      mysql:
-        condition: service_healthy
-    command: ["mvn", "test", "-B"]
+  # test:
+  #   image: maven:3.9-eclipse-temurin-21
+  #   working_dir: /app
+  #   volumes:
+  #     - ./backend:/app
+  #     - maven-cache:/root/.m2
+  #   env_file:
+  #     - ./backend/.env
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #   command: ["mvn", "test", "-B"]
 
   frontend:
       build:
@@ -90,7 +98,7 @@ services:
         - "3000:3000"
         - "24678:24678"  # Vite HMR WebSocket port
       environment:
-        - VITE_BACKEND_URL=http://app:8080/api
+        - VITE_BACKEND_URL=http://backend:8080/api
         - CHOKIDAR_USEPOLLING=true
       volumes:
         - ./frontend:/app
