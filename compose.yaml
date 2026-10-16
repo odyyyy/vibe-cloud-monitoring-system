@@ -54,6 +54,10 @@ services:
           action: rebuild
         - path: ./backend/monitoring-dashboards/pom.xml
           action: rebuild
+        - path: ./backend/monitoring-healthcheck/src
+          action: rebuild
+        - path: ./backend/monitoring-healthcheck/pom.xml
+          action: rebuild
         - path: ./backend/.env
           action: restart
 
@@ -69,7 +73,7 @@ services:
       - AGENT_API_KEY=${AGENT_API_KEY:-}
       - AGENT_INTERVAL_SECONDS=${AGENT_INTERVAL_SECONDS:-15}
     depends_on:
-      app:
+      backend:
         condition: service_started
     develop:
       watch:

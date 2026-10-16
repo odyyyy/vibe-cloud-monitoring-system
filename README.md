@@ -6,9 +6,9 @@ SaaS-интерфейсе, подключают свои приложения и
 инфраструктуре клиента **Go-агент** (изначально распространяется как Docker-образ).
 
 > Статус: ранняя стадия. Реализованы аутентификация, управление приложениями (Applications),
-> конвейеры метрик и логов (ingest + query), а также дашборды с виджетами
-> (Metric chart / Log table / Status). Health-checks пока не реализованы — см. раздел
-> [Текущие ограничения](#текущие-ограничения).
+> конвейеры метрик и логов (ingest + query), дашборды с виджетами
+> (Metric chart / Log table / Status), а также синтетические health-checks (HTTP-проверки
+> с историей результатов) — см. раздел [Текущие ограничения](#текущие-ограничения).
 
 ---
 
@@ -52,8 +52,9 @@ Backend собран как Maven multi-module проект:
 | --- | --- |
 | `monitoring-auth` | Пользователи, регистрация/логин, JWT, Spring Security |
 | `monitoring-apps-management` | CRUD приложений и управление API-ключами |
-| `monitoring-collector` | Приём метрик/логов (`/api/v1/ingest`) и запросы метрик/логов (`/api/v1/metrics/query`, `/api/v1/logs`) |
+| `monitoring-collector` | Приём метрик/логов (`/api/v1/ingest`) и запросы метрик/логов (`/api/v1/metrics/query`, `/api/v1/metrics/names`, `/api/v1/logs`) |
 | `monitoring-dashboards` | CRUD дашбордов и виджетов (`/api/v1/dashboards`) |
+| `monitoring-healthcheck` | Синтетические HTTP health-checks: CRUD, scheduler, SSRF-защита, история результатов (`/api/v1/health-checks`) |
 | `monitoring-api` | Точка входа, конфигурация, композиция модулей, Actuator, OpenAPI |
 
 Поток телеметрии:
@@ -120,6 +121,7 @@ cloud-monitoring/
 │   ├── monitoring-apps-management/
 │   ├── monitoring-collector/
 │   ├── monitoring-dashboards/   # дашборды и виджеты
+│   ├── monitoring-healthcheck/  # синтетические health-checks
 │   ├── monitoring-api/          # entry point (порт 8080)
 │   ├── docker/mysql/initdb/     # init-скрипты MySQL
 │   ├── Dockerfile
@@ -212,8 +214,16 @@ java -jar monitoring-api/target/monitoring-api-*.jar
 
 Для работы с MySQL вместо H2 задайте переменные из `backend/.env`
 (`SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`,
-`SPRING_DATASOURCE_DRIVER_CLASS_NAME`). Миграции применяются Flyway-скриптами из
-`src/main/resources/db/migration`.
+`SPRING_DATASOURCE_DRIVER_CLASS_NAME`).
+
+**Схема БД управляется Flyway** — единственный источник истины. Миграции лежат в
+`db/migration` соответствующих модулей (`V1..Vn`), Flyway собирает их с общего classpath
+приложения и применяет по порядку. Hibernate работает в режиме `validate`: он проверяет,
+что сущности соответствуют реальной схеме, но не изменяет её.
+
+> Если вы ранее запускали backend без Flyway, в MySQL volume уже есть таблицы, созданные
+> Hibernate. При первом запуске с Flyway возникнет ошибка «Found non-empty schema without
+> schema history». Пересоздайте локальную БД один раз: `docker compose down -v`.
 
 ### Frontend
 
@@ -267,7 +277,7 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `JWT_EXPIRATION` | TTL access-токена, мс | `86400000` |
 | `JWT_REFRESH_EXPIRATION` | TTL refresh-токена, мс | `604800000` |
 | `SPRING_H2_CONSOLE_ENABLED` | Включить H2 console (только dev) | `true` |
-| `SPRING_JPA_HIBERNATE_DDL_AUTO` | Режим схемы Hibernate | `update` |
+| `SPRING_JPA_HIBERNATE_DDL_AUTO` | Режим схемы Hibernate (схему создаёт Flyway) | `validate` |
 
 ### Frontend
 
@@ -365,10 +375,16 @@ docker run -d \
 | --- | --- | --- | --- |
 | `POST` | `/api/v1/ingest/metrics` | Приём батча метрик (макс. 1000 точек) | `X-API-Key` |
 | `GET` | `/api/v1/metrics/query` | Агрегированный временной ряд | JWT (владелец приложения) |
+| `GET` | `/api/v1/metrics/names` | Уникальные имена метрик приложения | JWT (владелец приложения) |
 
 Параметры `GET /api/v1/metrics/query`:
 `applicationId`, `metricName`, `from`, `to` (ISO-8601 UTC), `aggregation`
 (`AVG|MAX|MIN|SUM`), `intervalMinutes` (>0). Диапазон не более 30 дней.
+
+Параметры `GET /api/v1/metrics/names`: `applicationId` (обязателен). Возвращает
+отсортированный по алфавиту список уникальных имён метрик (до 500), ограниченный
+scope приложения, поэтому один тенант не может перечислить метрики другого.
+Используется фронтендом для выбора имени метрики вместо ручного ввода.
 
 Пример приёма метрик:
 
@@ -412,7 +428,7 @@ X-API-Key: app_xxxxxxxx
 Content-Type: application/json
 
 {
-  "logs": [
+  "events": [
     {
       "timestamp": "2026-01-01T12:00:00Z",
       "level": "ERROR",
@@ -439,6 +455,45 @@ Content-Type: application/json
 Виджет хранит `type` (`METRIC_CHART|LOG_TABLE|STATUS`) и `config` — JSON-строку.
 Раскладка задаётся в 12-колоночной сетке (`positionX`, `positionY`, `width`,
 `height`); размеры/позиции валидируются, максимум 20 виджетов на дашборд.
+Новые виджеты создаются раскрытыми (12×10 ячеек), а слишком маленький сохранённый
+размер поднимается до минимума (4×6) при отображении и сохранении, чтобы графики и
+таблицы не перекрывались.
+
+На странице дашборда (`/app/dashboards/{id}`) виджеты можно перетаскивать за заголовок
+и изменять размер без отдельного режима редактирования: раскладка сохраняется
+автоматически по завершении перетаскивания/ресайза (`PUT .../widgets/{widgetId}`), а
+кнопка **Add widget** доступна постоянно. Имя метрики в форме виджета и в Metrics
+Explorer выбирается из списка (`GET /api/v1/metrics/names`); если метрик ещё нет или
+список не загрузился, остаётся свободный ввод как fallback.
+
+### Health checks — `/api/v1/health-checks`
+
+| Метод | Путь | Описание | Доступ |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/health-checks` | Список проверок пользователя | JWT (владелец) |
+| `POST` | `/api/v1/health-checks` | Создать проверку | JWT |
+| `PUT` | `/api/v1/health-checks/{id}` | Обновить (частично) | JWT (владелец) |
+| `DELETE` | `/api/v1/health-checks/{id}` | Удалить проверку и её историю | JWT (владелец) |
+| `GET` | `/api/v1/health-checks/{id}/results` | Последние результаты (`limit`, по умолчанию 50, максимум 500) | JWT (владелец) |
+
+Конфигурация проверки: `name` (1–100), `targetUrl` (абсолютный http/https),
+`method` (`GET|POST`), `expectedStatusCode` (100–599), `intervalSeconds` (≥10) и
+`isActive`. Результат: `status` (`UP|DOWN|TIMEOUT|UNKNOWN`), `responseTimeMs`,
+`errorMessage`, `checkedAt` (UTC). Проверка без результатов всегда `UNKNOWN`, никогда
+не `UP`.
+
+Backend выполняет проверки по расписанию (по умолчанию каждые 10 секунд, отдельный
+однопоточный планировщик) и сохраняет результат; сетевой вызов выполняется вне
+транзакции. Редиректы отключены. `targetUrl` проверяется на SSRF перед сохранением и
+повторно перед каждым запуском: разрешены только http/https, без credentials в URL, и
+хост должен разрешаться исключительно в публичные адреса (loopback, private,
+link-local, CGNAT, multicast, `169.254.169.254` и т.п. отклоняются). Планировщик можно
+отключить через `monitoring.healthcheck.scheduler.enabled=false`.
+
+Страница **Health** (`/app/health`) показывает сводку (up/down/timeout/unknown), таблицу
+проверок с последним результатом и автообновлением раз в 30 секунд (пауза при скрытой
+вкладке), форму создания/редактирования и модальное окно истории (последние 50
+результатов и uptime за 24 часа, вычисленный только по реальным результатам).
 
 ---
 
@@ -462,8 +517,7 @@ H2, frontend-тесты — jsdom.
 
 ## Текущие ограничения
 
-- **Health checks** — нет API и UI (синтетические проверки не реализованы).
-- Виджет **Status** в дашбордах — плейсхолдер (зависит от health-checks API).
+- Виджет **Status** в дашбордах — плейсхолдер (ещё не связан с health-checks API).
 - Агент пока собирает только хост-метрики; сбор логов и интеграции приложений — в
   планах.
 - Алерты и инциденты — в планах.

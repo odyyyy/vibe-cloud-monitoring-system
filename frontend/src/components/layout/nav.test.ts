@@ -8,6 +8,7 @@ describe('NAV_ITEMS', () => {
       'Applications',
       'Metrics',
       'Logs',
+      'Health',
       'Dashboards',
       'Settings',
     ])

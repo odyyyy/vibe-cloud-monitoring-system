@@ -14,6 +14,7 @@ COPY monitoring-auth/pom.xml ./monitoring-auth/pom.xml
 COPY monitoring-apps-management/pom.xml ./monitoring-apps-management/pom.xml
 COPY monitoring-collector/pom.xml ./monitoring-collector/pom.xml
 COPY monitoring-dashboards/pom.xml ./monitoring-dashboards/pom.xml
+COPY monitoring-healthcheck/pom.xml ./monitoring-healthcheck/pom.xml
 
 # Скачиваем зависимости Maven
 RUN mvn dependency:go-offline -B

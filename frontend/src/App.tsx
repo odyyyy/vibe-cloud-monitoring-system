@@ -7,6 +7,7 @@ import LoginPage from './pages/auth/LoginPage'
 import ApplicationsPage from './pages/app/ApplicationsPage'
 import DashboardsPage from './pages/app/DashboardsPage'
 import DashboardViewPage from './pages/app/DashboardViewPage'
+import HealthChecksPage from './pages/app/HealthChecksPage'
 import LogExplorerPage from './pages/app/LogExplorerPage'
 import MetricsExplorerPage from './pages/app/MetricsExplorerPage'
 import OverviewPage from './pages/app/OverviewPage'
@@ -47,6 +48,7 @@ const router = createBrowserRouter([
       { path: 'applications', element: <ApplicationsPage /> },
       { path: 'metrics', element: <MetricsExplorerPage /> },
       { path: 'logs', element: <LogExplorerPage /> },
+      { path: 'health', element: <HealthChecksPage /> },
       { path: 'dashboards', element: <DashboardsPage /> },
       { path: 'dashboards/:id', element: <DashboardViewPage /> },
       { path: 'settings', element: <SettingsPage /> },

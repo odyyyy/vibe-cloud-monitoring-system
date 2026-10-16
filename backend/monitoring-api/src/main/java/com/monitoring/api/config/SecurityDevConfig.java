@@ -48,6 +48,9 @@ public class SecurityDevConfig {
                 // Dashboards and widgets require an authenticated user; ownership is
                 // verified in DashboardService.
                 .requestMatchers("/api/v1/dashboards/**").authenticated()
+                // Health checks require an authenticated user; ownership is verified
+                // in HealthCheckService.
+                .requestMatchers("/api/v1/health-checks/**").authenticated()
                 .anyRequest().permitAll()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

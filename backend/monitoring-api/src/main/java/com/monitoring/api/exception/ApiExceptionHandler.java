@@ -4,6 +4,9 @@ import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
 import com.monitoring.dashboards.exception.DashboardNotFoundException;
 import com.monitoring.dashboards.exception.InvalidWidgetConfigException;
 import com.monitoring.dashboards.exception.WidgetNotFoundException;
+import com.monitoring.healthcheck.exception.HealthCheckAccessDeniedException;
+import com.monitoring.healthcheck.exception.HealthCheckNotFoundException;
+import com.monitoring.healthcheck.exception.InvalidTargetUrlException;
 import com.monitoring.storage.exception.ApplicationAccessDeniedException;
 import com.monitoring.storage.exception.ApplicationNotFoundException;
 import org.springframework.http.HttpStatus;
@@ -46,6 +49,25 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(InvalidWidgetConfigException.class)
     public ResponseEntity<ApiError> handleInvalidWidgetConfig(InvalidWidgetConfigException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(HealthCheckNotFoundException.class)
+    public ResponseEntity<ApiError> handleHealthCheckNotFound(HealthCheckNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(HealthCheckAccessDeniedException.class)
+    public ResponseEntity<ApiError> handleHealthCheckAccessDenied(HealthCheckAccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiError(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
+    }
+
+    /** Blocked target URLs (wrong scheme, credentials, or non-public address). */
+    @ExceptionHandler(InvalidTargetUrlException.class)
+    public ResponseEntity<ApiError> handleInvalidTargetUrl(InvalidTargetUrlException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
     }
