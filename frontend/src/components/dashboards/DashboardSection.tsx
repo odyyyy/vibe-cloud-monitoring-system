@@ -41,7 +41,7 @@ export function DashboardSection({
     node: (
       <DashboardWidget
         widget={widget}
-        editable={false}
+        showActions={false}
         refetchInterval={pollInterval}
         onEdit={noop}
         onDelete={noop}
@@ -126,7 +126,7 @@ export function DashboardSection({
         <DashboardGrid
           items={items}
           layout={dashboard.widgets.map(widgetToLayout)}
-          editable={false}
+          interactive={false}
           onLayoutChange={noop}
         />
       )}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useBlocker, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Save, X } from 'lucide-react'
+import { ArrowLeft, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Layout } from 'react-grid-layout'
 import { ApiError } from '../../api/client'
@@ -36,7 +36,7 @@ import {
   POLLING_OPTIONS,
   sanitizePollingInterval,
 } from '../../features/dashboards/polling'
-import { layoutsEqual, widgetToLayout } from '../../features/dashboards/layout'
+import { widgetToLayout, resolveGridLayout } from '../../features/dashboards/layout'
 import {
   DEFAULT_WIDGET_HEIGHT,
   DEFAULT_WIDGET_WIDTH,
@@ -55,78 +55,73 @@ export default function DashboardViewPage() {
   const deleteWidget = useDeleteWidgetMutation(dashboardId ?? 0)
 
   const [pollInterval, setPollInterval] = useState(DEFAULT_POLLING_INTERVAL_MS)
-  const [editable, setEditable] = useState(false)
-  const [draftLayout, setDraftLayout] = useState<Layout[]>([])
-  const [isSaving, setIsSaving] = useState(false)
+  const [layout, setLayout] = useState<Layout[] | null>(null)
+  const [isSavingLayout, setIsSavingLayout] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Widget | null>(null)
 
   const serverLayout = useMemo<Layout[]>(() => (dashboard?.widgets ?? []).map(widgetToLayout), [dashboard])
+  const serverSignature = useMemo(() => JSON.stringify(serverLayout), [serverLayout])
 
   useEffect(() => {
-    if (!editable) {
-      setDraftLayout(serverLayout)
-    }
-  }, [editable, serverLayout])
-
-  const dirty = editable && !layoutsEqual(draftLayout, serverLayout)
-
-  const blocker = useBlocker(editable && dirty)
-
-  useEffect(() => {
-    if (!dirty) {
-      return
-    }
-    const handler = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      event.returnValue = ''
-    }
-    window.addEventListener('beforeunload', handler)
-    return () => window.removeEventListener('beforeunload', handler)
-  }, [dirty])
-
-  const handleLayoutChange = useCallback(
-    (layout: Layout[]) => {
-      if (editable) {
-        setDraftLayout(layout)
-      }
-    },
-    [editable],
-  )
-
-  const handleSave = async () => {
     if (!dashboard) {
       return
     }
-    setIsSaving(true)
-    try {
-      const changes = draftLayout.filter((item) => {
+    setLayout(serverLayout)
+    // Reset the local layout only when the persisted layout actually changes
+    // (initial load, add/delete, save round-trip) so an in-flight drag is never clobbered.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverSignature])
+
+  // Never hand a layout missing some widgets to react-grid-layout: for any child
+  // without an entry it would generate a default 1x1 cell and overwrite the
+  // persisted positions. Existing local (possibly just-dragged) positions win;
+  // widgets the local state does not know about yet fall back to the server.
+  const gridLayout = useMemo(() => resolveGridLayout(layout, serverLayout), [layout, serverLayout])
+
+  const handleLayoutChange = useCallback((next: Layout[]) => {
+    setLayout(next)
+  }, [])
+
+  const handleLayoutCommit = useCallback(
+    async (next: Layout[]) => {
+      if (!dashboard) {
+        return
+      }
+      const changes = next.filter((item) => {
         const server = serverLayout.find((candidate) => candidate.i === item.i)
         return (
           server !== undefined &&
           (server.x !== item.x || server.y !== item.y || server.w !== item.w || server.h !== item.h)
         )
       })
-      await Promise.all(
-        changes.map((item) =>
-          updateWidget(dashboard.id, Number(item.i), {
-            positionX: item.x,
-            positionY: item.y,
-            width: item.w,
-            height: item.h,
-          }),
-        ),
-      )
-      await queryClient.invalidateQueries({ queryKey: dashboardQueryKey(dashboard.id) })
-      toast.success('Layout saved.')
-      setEditable(false)
-    } catch (saveError) {
-      toast.error(saveError instanceof ApiError ? saveError.message : 'Could not save the layout.')
-    } finally {
-      setIsSaving(false)
-    }
-  }
+      if (changes.length === 0) {
+        return
+      }
+      setIsSavingLayout(true)
+      try {
+        await Promise.all(
+          changes.map((item) =>
+            updateWidget(dashboard.id, Number(item.i), {
+              positionX: item.x,
+              positionY: item.y,
+              width: item.w,
+              height: item.h,
+            }),
+          ),
+        )
+        await queryClient.invalidateQueries({ queryKey: dashboardQueryKey(dashboard.id) })
+        toast.success('Layout saved.')
+      } catch (saveError) {
+        setLayout(serverLayout)
+        toast.error(saveError instanceof ApiError ? saveError.message : 'Could not save the layout.')
+      } finally {
+        setIsSavingLayout(false)
+      }
+    },
+    [dashboard, queryClient, serverLayout],
+  )
 
   const handleAddClick = () => {
     setEditingWidget(null)
@@ -144,7 +139,7 @@ export default function DashboardViewPage() {
       toast.success('Widget updated.')
       return
     }
-    const nextY = draftLayout.reduce((max, item) => Math.max(max, item.y + item.h), 0)
+    const nextY = (layout ?? serverLayout).reduce((max, item) => Math.max(max, item.y + item.h), 0)
     const created = await addWidget.mutateAsync({
       type: values.type as WidgetType,
       config: values.config,
@@ -153,7 +148,7 @@ export default function DashboardViewPage() {
       width: DEFAULT_WIDGET_WIDTH,
       height: DEFAULT_WIDGET_HEIGHT,
     })
-    setDraftLayout((current) => [...current, widgetToLayout(created)])
+    setLayout((current) => [...(current ?? serverLayout), widgetToLayout(created)])
     toast.success('Widget added.')
   }
 
@@ -164,7 +159,7 @@ export default function DashboardViewPage() {
     const widgetId = deleteTarget.id
     try {
       await deleteWidget.mutateAsync(widgetId)
-      setDraftLayout((current) => current.filter((item) => item.i !== String(widgetId)))
+      setLayout((current) => (current ?? serverLayout).filter((item) => item.i !== String(widgetId)))
       toast.success('Widget deleted.')
       setDeleteTarget(null)
     } catch (deleteError) {
@@ -218,7 +213,7 @@ export default function DashboardViewPage() {
     node: (
       <DashboardWidget
         widget={widget}
-        editable={editable}
+        showActions
         refetchInterval={pollInterval}
         onEdit={handleEditClick}
         onDelete={setDeleteTarget}
@@ -238,11 +233,15 @@ export default function DashboardViewPage() {
             Dashboards
           </Link>
           <h1 className="font-display text-2xl font-semibold text-slate-100">{dashboard.name}</h1>
-          {dirty ? (
+          {isSavingLayout ? (
             <p className="text-xs text-amber-300" role="status">
-              Unsaved changes
+              Saving layout…
             </p>
-          ) : null}
+          ) : (
+            <p className="text-xs text-slate-500" role="status">
+              Drag a widget header to reposition it. Changes are saved automatically.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -267,30 +266,14 @@ export default function DashboardViewPage() {
             </Select>
           </div>
 
-          {editable ? (
-            <>
-              <Button type="button" variant="secondary" onClick={handleAddClick} disabled={atWidgetLimit}>
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                Add widget
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => setEditable(false)} disabled={isSaving}>
-                <X className="h-4 w-4" aria-hidden="true" />
-                Cancel
-              </Button>
-              <Button type="button" onClick={() => void handleSave()} disabled={isSaving || !dirty}>
-                <Save className="h-4 w-4" aria-hidden="true" />
-                {isSaving ? 'Saving…' : 'Save'}
-              </Button>
-            </>
-          ) : (
-            <Button type="button" variant="secondary" onClick={() => setEditable(true)}>
-              Edit
-            </Button>
-          )}
+          <Button type="button" variant="secondary" onClick={handleAddClick} disabled={atWidgetLimit}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add widget
+          </Button>
         </div>
       </header>
 
-      {editable && atWidgetLimit ? (
+      {atWidgetLimit ? (
         <p className="text-xs text-slate-500">
           This dashboard has reached the limit of {MAX_WIDGETS_PER_DASHBOARD} widgets.
         </p>
@@ -299,21 +282,19 @@ export default function DashboardViewPage() {
       {dashboard.widgets.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/10 bg-[#0b101b]/40 p-10 text-center">
           <p className="text-sm text-slate-300">This dashboard has no widgets yet.</p>
-          <Button
-            type="button"
-            variant="secondary"
-            className="mt-4"
-            onClick={() => {
-              setEditable(true)
-              handleAddClick()
-            }}
-          >
+          <Button type="button" variant="secondary" className="mt-4" onClick={handleAddClick}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             Add your first widget
           </Button>
         </div>
       ) : (
-        <DashboardGrid items={items} layout={draftLayout} editable={editable} onLayoutChange={handleLayoutChange} />
+        <DashboardGrid
+          items={items}
+          layout={gridLayout}
+          interactive
+          onLayoutChange={handleLayoutChange}
+          onLayoutCommit={(next) => void handleLayoutCommit(next)}
+        />
       )}
 
       <WidgetFormDialog
@@ -348,21 +329,6 @@ export default function DashboardViewPage() {
             >
               {deleteWidget.isPending ? 'Deleting…' : 'Delete'}
             </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={blocker.state === 'blocked'}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have unsaved layout changes. Leaving this page will discard them.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => blocker.reset?.()}>Stay</AlertDialogCancel>
-            <AlertDialogAction onClick={() => blocker.proceed?.()}>Leave</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

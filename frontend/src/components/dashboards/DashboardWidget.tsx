@@ -17,13 +17,13 @@ const TYPE_LABELS: Record<WidgetType, string> = {
 
 interface DashboardWidgetProps {
   widget: Widget
-  editable: boolean
+  showActions: boolean
   refetchInterval: number
   onEdit: (widget: Widget) => void
   onDelete: (widget: Widget) => void
 }
 
-export function DashboardWidget({ widget, editable, refetchInterval, onEdit, onDelete }: DashboardWidgetProps) {
+export function DashboardWidget({ widget, showActions, refetchInterval, onEdit, onDelete }: DashboardWidgetProps) {
   const parsed = useMemo(() => parseWidgetConfig(widget.type, widget.config), [widget.type, widget.config])
 
   const title = parsed.success
@@ -41,7 +41,7 @@ export function DashboardWidget({ widget, editable, refetchInterval, onEdit, onD
           {TYPE_LABELS[widget.type]}
         </Badge>
         <h3 className="min-w-0 flex-1 truncate text-sm font-medium text-slate-200">{title}</h3>
-        {editable ? (
+        {showActions ? (
           <div className="flex shrink-0 items-center gap-1">
             <Button
               type="button"

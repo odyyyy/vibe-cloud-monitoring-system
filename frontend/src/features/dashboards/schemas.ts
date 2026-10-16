@@ -24,10 +24,10 @@ export const MAX_SEARCH_TEXT_LENGTH = 200
 export const MAX_WIDGETS_PER_DASHBOARD = 20
 export const GRID_COLUMNS = 12
 export const MAX_CONFIG_LENGTH = 8000
-export const DEFAULT_WIDGET_WIDTH = 6
-export const DEFAULT_WIDGET_HEIGHT = 8
-export const MIN_WIDGET_WIDTH = 3
-export const MIN_WIDGET_HEIGHT = 4
+export const DEFAULT_WIDGET_WIDTH = 12
+export const DEFAULT_WIDGET_HEIGHT = 10
+export const MIN_WIDGET_WIDTH = 4
+export const MIN_WIDGET_HEIGHT = 6
 
 export const DASHBOARD_NAME_MAX_LENGTH = 100
 export const dashboardNameSchema = z
