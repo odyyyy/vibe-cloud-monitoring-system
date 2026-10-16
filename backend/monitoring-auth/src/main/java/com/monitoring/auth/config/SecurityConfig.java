@@ -46,6 +46,12 @@ public class SecurityConfig {
                 // Metrics queries require an authenticated user; ownership of the
                 // requested application is verified in MetricQueryService.
                 .requestMatchers("/api/v1/metrics/**").authenticated()
+                // Log queries require an authenticated user; ownership of the requested
+                // application is verified in LogQueryService.
+                .requestMatchers("/api/v1/logs/**").authenticated()
+                // Dashboards and widgets require an authenticated user; ownership is
+                // verified in DashboardService.
+                .requestMatchers("/api/v1/dashboards/**").authenticated()
                 .anyRequest().permitAll()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
