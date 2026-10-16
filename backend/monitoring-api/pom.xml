@@ -26,6 +26,12 @@
             <artifactId>monitoring-collector</artifactId>
         </dependency>
 
+        <!-- Подключаем модуль дашбордов -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-dashboards</artifactId>
+        </dependency>
+
         <!-- Подключаем модуль auth -->
         <dependency>
             <groupId>com.monitoring</groupId>

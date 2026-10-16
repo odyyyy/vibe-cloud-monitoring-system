@@ -20,6 +20,7 @@
         <module>monitoring-auth</module>
         <module>monitoring-apps-management</module>
         <module>monitoring-collector</module>
+        <module>monitoring-dashboards</module>
         <module>monitoring-api</module>
     </modules>
 
@@ -45,6 +46,11 @@
             <dependency>
                 <groupId>com.monitoring</groupId>
                 <artifactId>monitoring-collector</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.monitoring</groupId>
+                <artifactId>monitoring-dashboards</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
