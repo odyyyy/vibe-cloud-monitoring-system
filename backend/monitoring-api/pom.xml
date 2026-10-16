@@ -32,6 +32,12 @@
             <artifactId>monitoring-dashboards</artifactId>
         </dependency>
 
+        <!-- Подключаем модуль health-check'ов -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-healthcheck</artifactId>
+        </dependency>
+
         <!-- Подключаем модуль auth -->
         <dependency>
             <groupId>com.monitoring</groupId>
@@ -80,6 +86,16 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Flyway: единый источник схемы БД (миграции в db/migration модулей) -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
         </dependency>
 
         <!-- OpenAPI / Swagger UI (документация и интерактивный просмотр эндпоинтов) -->
