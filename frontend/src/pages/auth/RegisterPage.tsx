@@ -11,11 +11,9 @@ import { Logo } from '../../components/shared/icons'
 import { Button } from '../../components/ui/button'
 import { getAuthErrorMessage } from '../../features/auth/errors'
 import { registerSchema, type RegisterFormValues } from '../../features/auth/schemas'
-import { useAuthStore } from '../../store/authStore'
 
 export default function RegisterPage() {
   const navigate = useNavigate()
-  const signIn = useAuthStore((state) => state.login)
 
   const {
     register,
@@ -29,11 +27,10 @@ export default function RegisterPage() {
 
   const mutation = useMutation({
     mutationFn: registerAccount,
-    onSuccess: (data) => {
-      signIn(data.token)
+    onSuccess: (_data, variables) => {
       reset()
-      toast.success('Account created. Welcome aboard!')
-      navigate('/app', { replace: true })
+      toast.success('Account created. Check your email to confirm it.')
+      navigate(`/check-email?email=${encodeURIComponent(variables.email)}`, { replace: true })
     },
     onError: (error) => {
       toast.error(getAuthErrorMessage(error, 'register'))

@@ -3,6 +3,8 @@ package com.monitoring.auth.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
+
 @Entity
 @Table(name = "users")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -23,6 +25,12 @@ public class User {
 
     @Column(name = "avatar_url", length = 512)
     private String avatarUrl;
+
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
+    @Column(name = "email_verified_at")
+    private Instant emailVerifiedAt;
 
     private String role; // "USER", "ADMIN"
 }

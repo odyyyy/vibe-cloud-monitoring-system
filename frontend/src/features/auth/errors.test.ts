@@ -11,6 +11,12 @@ describe('getAuthErrorMessage', () => {
     expect(getAuthErrorMessage(new ApiError(404, ''), 'login')).toBe('Invalid username or password.')
   })
 
+  it('maps 403 on login to an unconfirmed-email message', () => {
+    expect(getAuthErrorMessage(new ApiError(403, ''), 'login')).toBe(
+      'Please confirm your email address before signing in.',
+    )
+  })
+
   it('maps 409 to a duplicate-account message on register', () => {
     expect(getAuthErrorMessage(new ApiError(409, ''), 'register')).toBe(
       'This username or email is already in use.',
@@ -35,5 +41,27 @@ describe('getAuthErrorMessage', () => {
 
   it('handles non-ApiError values', () => {
     expect(getAuthErrorMessage(new Error('boom'), 'login')).toBe('Something went wrong. Please try again.')
+  })
+
+  it('keeps specific backend messages on forgot password', () => {
+    expect(getAuthErrorMessage(new ApiError(400, 'Email is invalid'), 'forgot')).toBe('Email is invalid')
+  })
+
+  it('maps server failures on forgot password', () => {
+    expect(getAuthErrorMessage(new ApiError(500, 'boom'), 'forgot')).toBe(
+      'The server is unavailable right now. Please try again later.',
+    )
+  })
+
+  it('maps a generic 400 on reset to an expired-link message', () => {
+    expect(getAuthErrorMessage(new ApiError(400, DEFAULT_ERROR_MESSAGE), 'reset')).toBe(
+      'This reset link is invalid or has expired. Please request a new one.',
+    )
+  })
+
+  it('keeps specific backend messages on reset', () => {
+    expect(getAuthErrorMessage(new ApiError(400, 'Invalid or expired token'), 'reset')).toBe(
+      'Invalid or expired token',
+    )
   })
 })

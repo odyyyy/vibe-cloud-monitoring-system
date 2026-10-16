@@ -3,7 +3,11 @@ import { GuestOnlyRoute } from './components/auth/GuestOnlyRoute'
 import { RequireAuth } from './components/auth/RequireAuth'
 import { AppLayout } from './components/layout/AppLayout'
 import LandingPage from './pages/LandingPage'
+import CheckEmailPage from './pages/auth/CheckEmailPage'
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import LoginPage from './pages/auth/LoginPage'
+import ResetPasswordPage from './pages/auth/ResetPasswordPage'
+import VerifyEmailPage from './pages/auth/VerifyEmailPage'
 import ApplicationsPage from './pages/app/ApplicationsPage'
 import DashboardsPage from './pages/app/DashboardsPage'
 import DashboardViewPage from './pages/app/DashboardViewPage'
@@ -34,6 +38,22 @@ const router = createBrowserRouter([
         <RegisterPage />
       </GuestOnlyRoute>
     ),
+  },
+  {
+    path: '/check-email',
+    element: <CheckEmailPage />,
+  },
+  {
+    path: '/verify-email',
+    element: <VerifyEmailPage />,
+  },
+  {
+    path: '/forgot-password',
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/reset-password',
+    element: <ResetPasswordPage />,
   },
   {
     path: '/app',

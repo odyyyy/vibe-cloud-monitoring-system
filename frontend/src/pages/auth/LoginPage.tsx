@@ -84,6 +84,12 @@ export default function LoginPage() {
               />
             </div>
 
+            <div className="flex justify-end">
+              <Link to="/forgot-password" className="text-xs text-cyan-300 hover:underline">
+                Forgot password?
+              </Link>
+            </div>
+
             <OAuthButtons mode="sign-in" />
 
             <Button type="submit" className="w-full" disabled={mutation.isLoading}>

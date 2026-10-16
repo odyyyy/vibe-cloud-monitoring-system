@@ -2,8 +2,16 @@ package com.monitoring.auth.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.monitoring.auth.dto.AuthResponse;
+import com.monitoring.auth.dto.ForgotPasswordRequest;
 import com.monitoring.auth.dto.LoginRequest;
+import com.monitoring.auth.dto.MessageResponse;
 import com.monitoring.auth.dto.RegisterRequest;
+import com.monitoring.auth.dto.ResendVerificationRequest;
+import com.monitoring.auth.dto.ResetPasswordRequest;
+import com.monitoring.auth.dto.VerifyEmailRequest;
+import com.monitoring.auth.exception.EmailAlreadyUsedException;
+import com.monitoring.auth.exception.EmailNotVerifiedException;
+import com.monitoring.auth.exception.InvalidTokenException;
 import com.monitoring.auth.service.AuthService;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +37,7 @@ class AuthControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
-    
+
     @Autowired
     private ObjectMapper objectMapper;
 
@@ -39,6 +47,7 @@ class AuthControllerTest {
     private RegisterRequest validRegisterRequest;
     private LoginRequest validLoginRequest;
     private AuthResponse mockAuthResponse;
+    private MessageResponse mockMessageResponse;
 
     @BeforeEach
     void setUp() {
@@ -52,89 +61,163 @@ class AuthControllerTest {
         validLoginRequest.setPassword("password123");
 
         mockAuthResponse = new AuthResponse("mock-jwt-token");
+        mockMessageResponse = new MessageResponse("mock-message");
     }
 
     @Test
     void register_success() throws Exception {
-        // Given
         BDDMockito.given(authService.register(ArgumentMatchers.any(RegisterRequest.class)))
-                .willReturn(mockAuthResponse);
+                .willReturn(mockMessageResponse);
 
-        // When & Then
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRegisterRequest)))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.token").value("mock-jwt-token"));
+                .andExpect(jsonPath("$.message").value("mock-message"));
 
-        // Verify
         BDDMockito.then(authService).should().register(ArgumentMatchers.any(RegisterRequest.class));
     }
 
     @Test
-    void register_serviceError() throws Exception {
-        // Given
+    void register_duplicateAccount() throws Exception {
         BDDMockito.given(authService.register(ArgumentMatchers.any(RegisterRequest.class)))
-                .willThrow(new RuntimeException("Username already exists"));
+                .willThrow(new EmailAlreadyUsedException("Email already exists"));
 
-        // When & Then
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRegisterRequest)))
-                .andExpect(status().isInternalServerError());
+                .andExpect(status().isConflict());
+    }
 
-        // Verify
-        BDDMockito.then(authService).should().register(ArgumentMatchers.any(RegisterRequest.class));
+    @Test
+    void register_validationError() throws Exception {
+        RegisterRequest invalid = new RegisterRequest();
+        invalid.setUsername("");
+        invalid.setEmail("not-an-email");
+        invalid.setPassword("short");
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(invalid)))
+                .andExpect(status().isBadRequest());
+
+        BDDMockito.then(authService).shouldHaveNoInteractions();
     }
 
     @Test
     void login_success() throws Exception {
-        // Given
         BDDMockito.given(authService.login(ArgumentMatchers.any(LoginRequest.class)))
                 .willReturn(mockAuthResponse);
 
-        // When & Then
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validLoginRequest)))
                 .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.token").value("mock-jwt-token"));
 
-        // Verify
         BDDMockito.then(authService).should().login(ArgumentMatchers.any(LoginRequest.class));
     }
 
     @Test
     void login_invalidPassword() throws Exception {
-        // Given
         BDDMockito.given(authService.login(ArgumentMatchers.any(LoginRequest.class)))
                 .willThrow(new RuntimeException("Invalid password"));
 
-        // When & Then
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validLoginRequest)))
                 .andExpect(status().isUnauthorized());
-
-        // Verify
-        BDDMockito.then(authService).should().login(ArgumentMatchers.any(LoginRequest.class));
     }
 
     @Test
-    void login_userNotFound() throws Exception {
-        // Given
+    void login_emailNotVerified() throws Exception {
         BDDMockito.given(authService.login(ArgumentMatchers.any(LoginRequest.class)))
-                .willThrow(new RuntimeException("User not found"));
+                .willThrow(new EmailNotVerifiedException("Email not verified"));
 
-        // When & Then
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validLoginRequest)))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isForbidden());
+    }
 
-        // Verify
-        BDDMockito.then(authService).should().login(ArgumentMatchers.any(LoginRequest.class));
+    @Test
+    void verifyEmail_success() throws Exception {
+        VerifyEmailRequest request = new VerifyEmailRequest();
+        request.setToken("raw-token");
+        BDDMockito.given(authService.verifyEmail("raw-token")).willReturn(mockMessageResponse);
+
+        mockMvc.perform(post("/api/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("mock-message"));
+    }
+
+    @Test
+    void verifyEmail_invalidToken() throws Exception {
+        VerifyEmailRequest request = new VerifyEmailRequest();
+        request.setToken("raw-token");
+        BDDMockito.given(authService.verifyEmail(ArgumentMatchers.anyString()))
+                .willThrow(new InvalidTokenException("Invalid or expired token"));
+
+        mockMvc.perform(post("/api/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void resendVerification_success() throws Exception {
+        ResendVerificationRequest request = new ResendVerificationRequest();
+        request.setEmail("test@example.com");
+        BDDMockito.given(authService.resendVerification("test@example.com")).willReturn(mockMessageResponse);
+
+        mockMvc.perform(post("/api/auth/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("mock-message"));
+    }
+
+    @Test
+    void forgotPassword_success() throws Exception {
+        ForgotPasswordRequest request = new ForgotPasswordRequest();
+        request.setEmail("test@example.com");
+        BDDMockito.given(authService.forgotPassword("test@example.com")).willReturn(mockMessageResponse);
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("mock-message"));
+    }
+
+    @Test
+    void resetPassword_success() throws Exception {
+        ResetPasswordRequest request = new ResetPasswordRequest();
+        request.setToken("raw-token");
+        request.setNewPassword("newsecret1");
+        BDDMockito.given(authService.resetPassword("raw-token", "newsecret1")).willReturn(mockMessageResponse);
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("mock-message"));
+    }
+
+    @Test
+    void resetPassword_invalidToken() throws Exception {
+        ResetPasswordRequest request = new ResetPasswordRequest();
+        request.setToken("raw-token");
+        request.setNewPassword("newsecret1");
+        BDDMockito.given(authService.resetPassword(ArgumentMatchers.anyString(), ArgumentMatchers.anyString()))
+                .willThrow(new InvalidTokenException("Invalid or expired token"));
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
     }
 }

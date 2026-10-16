@@ -11,8 +11,17 @@ export interface RegisterRequest {
   password: string
 }
 
+export interface ResetPasswordRequest {
+  token: string
+  newPassword: string
+}
+
 export interface AuthResponse {
   token: string
+}
+
+export interface MessageResponse {
+  message: string
 }
 
 export interface UserProfile {
@@ -26,8 +35,24 @@ export function login(payload: LoginRequest): Promise<AuthResponse> {
   return apiRequest<AuthResponse>('/auth/login', { method: 'POST', body: payload })
 }
 
-export function register(payload: RegisterRequest): Promise<AuthResponse> {
-  return apiRequest<AuthResponse>('/auth/register', { method: 'POST', body: payload })
+export function register(payload: RegisterRequest): Promise<MessageResponse> {
+  return apiRequest<MessageResponse>('/auth/register', { method: 'POST', body: payload })
+}
+
+export function verifyEmail(token: string): Promise<MessageResponse> {
+  return apiRequest<MessageResponse>('/auth/verify-email', { method: 'POST', body: { token } })
+}
+
+export function resendVerification(email: string): Promise<MessageResponse> {
+  return apiRequest<MessageResponse>('/auth/resend-verification', { method: 'POST', body: { email } })
+}
+
+export function forgotPassword(email: string): Promise<MessageResponse> {
+  return apiRequest<MessageResponse>('/auth/forgot-password', { method: 'POST', body: { email } })
+}
+
+export function resetPassword(payload: ResetPasswordRequest): Promise<MessageResponse> {
+  return apiRequest<MessageResponse>('/auth/reset-password', { method: 'POST', body: payload })
 }
 
 export function getProfile(token: string): Promise<UserProfile> {

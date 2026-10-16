@@ -48,6 +48,16 @@ jwt:
   secret: ${JWT_SECRET:mySuperSecretKeyForJwtTokenGenerationMustBeLongEnough1234567890!@#}
   expiration: ${JWT_EXPIRATION:86400000}
 
+# Подтверждение email и сброс пароля.
+# Письма пока не отправляются по SMTP: ссылки пишутся в лог (app.auth.log-emails).
+app:
+  auth:
+    verification-ttl: ${APP_AUTH_VERIFICATION_TTL:PT24H}
+    reset-ttl: ${APP_AUTH_RESET_TTL:PT1H}
+    verification-url: ${APP_AUTH_VERIFICATION_URL:http://localhost:3000/verify-email}
+    reset-url: ${APP_AUTH_RESET_URL:http://localhost:3000/reset-password}
+    log-emails: ${APP_AUTH_LOG_EMAILS:true}
+
 # Настройки для Docker HEALTHCHECK
 management:
   endpoints:

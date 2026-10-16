@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { changePasswordSchema, loginSchema, registerSchema } from './schemas'
+import {
+  changePasswordSchema,
+  forgotPasswordSchema,
+  loginSchema,
+  registerSchema,
+  resetPasswordSchema,
+} from './schemas'
 
 describe('loginSchema', () => {
   it('rejects empty credentials', () => {
@@ -71,5 +77,42 @@ describe('changePasswordSchema', () => {
     expect(changePasswordSchema.safeParse({ ...valid, newPassword: 'short', confirmPassword: 'short' }).success).toBe(
       false,
     )
+  })
+})
+
+describe('forgotPasswordSchema', () => {
+  it('accepts a valid email', () => {
+    expect(forgotPasswordSchema.safeParse({ email: 'ada@example.com' }).success).toBe(true)
+  })
+
+  it('rejects an invalid email', () => {
+    expect(forgotPasswordSchema.safeParse({ email: 'not-an-email' }).success).toBe(false)
+  })
+
+  it('rejects an empty email', () => {
+    expect(forgotPasswordSchema.safeParse({ email: '' }).success).toBe(false)
+  })
+})
+
+describe('resetPasswordSchema', () => {
+  const valid = {
+    newPassword: 'brandnewpass',
+    confirmPassword: 'brandnewpass',
+  }
+
+  it('accepts a valid reset', () => {
+    expect(resetPasswordSchema.safeParse(valid).success).toBe(true)
+  })
+
+  it('rejects mismatched confirmation', () => {
+    const result = resetPasswordSchema.safeParse({ ...valid, confirmPassword: 'different1' })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path.includes('confirmPassword'))).toBe(true)
+    }
+  })
+
+  it('rejects a too-short password', () => {
+    expect(resetPasswordSchema.safeParse({ newPassword: 'short', confirmPassword: 'short' }).success).toBe(false)
   })
 })
