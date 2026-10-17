@@ -22,6 +22,8 @@
         <module>monitoring-collector</module>
         <module>monitoring-dashboards</module>
         <module>monitoring-healthcheck</module>
+        <module>monitoring-alerts</module>
+        <module>monitoring-audit</module>
         <module>monitoring-api</module>
     </modules>
 
@@ -33,7 +35,7 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- Внутренние модули -->
+            <!-- Internal modules -->
             <dependency>
                 <groupId>com.monitoring</groupId>
                 <artifactId>monitoring-auth</artifactId>
@@ -57,6 +59,16 @@
             <dependency>
                 <groupId>com.monitoring</groupId>
                 <artifactId>monitoring-healthcheck</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.monitoring</groupId>
+                <artifactId>monitoring-alerts</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.monitoring</groupId>
+                <artifactId>monitoring-audit</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

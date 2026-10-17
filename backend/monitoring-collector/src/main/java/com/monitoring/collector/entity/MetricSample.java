@@ -25,9 +25,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Сохранённая точка метрики, привязанная к приложению (tenant-скоуп).
- * {@code timestamp} — момент измерения (event time, UTC).
- * {@code receivedAt} — момент приёма на сервере (ingest time, UTC).
+ * A stored metric point scoped to an application (tenant boundary).
+ * {@code timestamp} is the measurement instant (event time, UTC).
+ * {@code receivedAt} is the server ingest instant (ingest time, UTC).
  */
 @Entity
 @Table(

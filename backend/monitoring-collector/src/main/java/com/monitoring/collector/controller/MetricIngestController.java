@@ -14,11 +14,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Ingestion-эндпоинт для агентов.
+ * Ingestion endpoint for agents.
  *
- * <p>Аутентификация — по API-ключу в заголовке {@code X-API-Key}
- * (см. {@code ApiKeyAuthFilter}); JWT для него не требуется.
- * Приложение-владелец ключа извлекается из {@link SecurityContextHolder}.
+ * <p>Authentication is performed with the API key in the {@code X-API-Key} header
+ * (see {@code ApiKeyAuthFilter}); JWT is not required. The owning application is taken from
+ * the {@link SecurityContextHolder}.
  */
 @RestController
 @RequestMapping("/api/v1/ingest")

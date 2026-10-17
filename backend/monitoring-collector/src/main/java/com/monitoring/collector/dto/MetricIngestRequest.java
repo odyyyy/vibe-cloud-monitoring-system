@@ -12,8 +12,8 @@ import lombok.Setter;
 import java.util.List;
 
 /**
- * Тело запроса на приём метрик.
- * Верхняя граница батча зафиксирована на уровне контракта — 1000 точек за запрос.
+ * Request body for metric ingestion.
+ * The batch upper bound is fixed at the contract level: 1000 points per request.
  */
 @Getter
 @Setter

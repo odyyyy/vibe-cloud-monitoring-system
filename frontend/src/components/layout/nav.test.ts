@@ -9,7 +9,10 @@ describe('NAV_ITEMS', () => {
       'Metrics',
       'Logs',
       'Health',
+      'Alerts',
+      'Incidents',
       'Dashboards',
+      'Audit log',
       'Settings',
     ])
   })

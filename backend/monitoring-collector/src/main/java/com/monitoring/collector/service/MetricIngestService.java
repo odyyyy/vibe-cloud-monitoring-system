@@ -17,14 +17,15 @@ import java.util.HashMap;
 import java.util.List;
 
 /**
- * Приём метрик от агента и сохранение их с привязкой к приложению.
+ * Accepts metric batches from agents and stores them scoped to an application.
  *
- * <p>Payload валидируется на границе (контроллер, {@code @Valid}) до вызова сервиса:
- * пустой батч, превышение лимита в 1000 точек и некорректные поля отклоняются с HTTP 400.
+ * <p>The payload is validated at the boundary (controller, {@code @Valid}) before the
+ * service is called: an empty batch, more than 1000 points or invalid fields are rejected
+ * with HTTP 400.
  *
- * <p>Сохранение синхронное: HTTP 202 возвращается после того, как данные записаны,
- * поэтому ответ означает, что батч действительно сохранён, а не только принят в очередь.
- * Асинхронный пайплайн с durable-очередью — отдельный этап.
+ * <p>Persistence is synchronous: HTTP 202 is returned only after the data is written, so
+ * the response means the batch is really stored, not merely queued. An asynchronous
+ * pipeline with a durable queue is a separate stage.
  */
 @Service
 @RequiredArgsConstructor
@@ -52,7 +53,7 @@ public class MetricIngestService {
 
         metricSampleRepository.saveAll(samples);
 
-        // Логируем факт приёма и объём, но не сами метрики и не значения тегов.
+        // Log the fact and size of the batch, but never the metrics themselves or tag values.
         log.info("Accepted {} metric samples for application id={}", samples.size(), application.getId());
 
         return samples.size();

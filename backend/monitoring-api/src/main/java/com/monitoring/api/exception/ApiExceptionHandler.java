@@ -3,11 +3,19 @@ package com.monitoring.api.exception;
 import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
 import com.monitoring.dashboards.exception.DashboardNotFoundException;
 import com.monitoring.dashboards.exception.InvalidWidgetConfigException;
+import com.monitoring.dashboards.exception.WidgetLimitExceededException;
 import com.monitoring.dashboards.exception.WidgetNotFoundException;
+import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
+import com.monitoring.alerts.exception.AlertRuleNotFoundException;
+import com.monitoring.alerts.exception.InvalidAlertRuleException;
+import com.monitoring.alerts.exception.InvalidWebhookUrlException;
+import com.monitoring.alerts.exception.NotificationChannelAccessDeniedException;
+import com.monitoring.alerts.exception.NotificationChannelNotFoundException;
 import com.monitoring.healthcheck.exception.HealthCheckAccessDeniedException;
 import com.monitoring.healthcheck.exception.HealthCheckNotFoundException;
 import com.monitoring.healthcheck.exception.InvalidTargetUrlException;
 import com.monitoring.storage.exception.ApplicationAccessDeniedException;
+import com.monitoring.storage.exception.ApplicationNameConflictException;
 import com.monitoring.storage.exception.ApplicationNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -72,8 +80,32 @@ public class ApiExceptionHandler {
                 .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
     }
 
-    @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<ApiError> handleConflict(IllegalStateException ex) {
+    @ExceptionHandler({AlertRuleNotFoundException.class, NotificationChannelNotFoundException.class})
+    public ResponseEntity<ApiError> handleAlertNotFound(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler({AlertRuleAccessDeniedException.class, NotificationChannelAccessDeniedException.class})
+    public ResponseEntity<ApiError> handleAlertAccessDenied(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiError(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
+    }
+
+    /** Inconsistent alert rule payloads and blocked webhook URLs. */
+    @ExceptionHandler({InvalidAlertRuleException.class, InvalidWebhookUrlException.class})
+    public ResponseEntity<ApiError> handleInvalidAlertRequest(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
+    }
+
+    /**
+     * Name conflicts and quota limits. Only typed exceptions with server-authored messages are
+     * mapped here; unexpected exceptions fall through to the default handler (HTTP 500 without
+     * internal details).
+     */
+    @ExceptionHandler({ApplicationNameConflictException.class, WidgetLimitExceededException.class})
+    public ResponseEntity<ApiError> handleConflict(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ApiError(HttpStatus.CONFLICT.value(), ex.getMessage()));
     }

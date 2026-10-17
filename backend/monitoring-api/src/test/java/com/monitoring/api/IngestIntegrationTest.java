@@ -17,8 +17,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Проверяет склейку цепочек Spring Security в реальном контексте приложения:
- * ingest защищён X-API-Key (без JWT), валидный ключ доводит запрос до сохранения.
+ * Verifies the wiring of the Spring Security chains in the real application context:
+ * ingestion is protected by X-API-Key (no JWT) and a valid key takes the request all the
+ * way to persistence.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

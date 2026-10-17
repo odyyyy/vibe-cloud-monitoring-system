@@ -18,18 +18,18 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Аутентификация агентов по API-ключу из заголовка {@code X-API-Key}.
+ * Authenticates agents by the API key from the {@code X-API-Key} header.
  *
  * <ul>
- *     <li>ключ отсутствует/некорректный — HTTP 401, цепочка прерывается;</li>
- *     <li>ключ валиден — в {@link SecurityContextHolder} кладётся аутентификация
- *     с principal = {@link Application} и ролью {@code ROLE_AGENT}.</li>
+ *     <li>missing/invalid key: HTTP 401 and the chain stops;</li>
+ *     <li>valid key: an authentication with principal = {@link Application} and authority
+ *     {@code ROLE_AGENT} is placed into the {@link SecurityContextHolder}.</li>
  * </ul>
  *
- * <p>Фильтр намеренно не является Spring-бином: он создаётся внутри
- * {@link IngestSecurityConfig} и подключается только к цепочке ingest. Бин-фильтр
- * был бы автоматически зарегистрирован контейнером на все запросы и отклонял бы
- * запросы без заголовка. Сам ключ никогда не логируется.
+ * <p>The filter is intentionally not a Spring bean: it is created inside
+ * {@link IngestSecurityConfig} and attached only to the ingestion chain. A bean filter would be
+ * auto-registered by the container for every request and would reject requests without the
+ * header. The key itself is never logged.
  */
 public class ApiKeyAuthFilter extends OncePerRequestFilter {
 

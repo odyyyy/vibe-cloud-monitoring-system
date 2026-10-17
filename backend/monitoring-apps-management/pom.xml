@@ -13,7 +13,7 @@
     </parent>
 
     <artifactId>monitoring-apps-management</artifactId>
-    <!-- groupId и version наследуются от parent, указывать их явно не нужно -->
+    <!-- groupId and version are inherited from the parent and need not be repeated here -->
 
     <dependencies>
         <!-- Spring Boot Web -->
@@ -44,7 +44,7 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- H2 (для тестов/локальной разработки) -->
+        <!-- H2 (tests / local development) -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
@@ -66,8 +66,8 @@
         </dependency>
     </dependencies>
 
-    <!-- 
-        spring-boot-maven-plugin убран: он нужен только для executable jar
-        (обычно в финальном сервисе вроде monitoring-api), а не в библиотеке.
+    <!--
+        The spring-boot-maven-plugin is intentionally omitted: it is only needed for an
+        executable jar (typically the final service such as monitoring-api), not for a library.
     -->
 </project>

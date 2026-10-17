@@ -14,31 +14,43 @@
     <artifactId>monitoring-api</artifactId>
 
     <dependencies>
-        <!-- Подключаем модуль управления приложениями -->
+        <!-- Application management module -->
         <dependency>
             <groupId>com.monitoring</groupId>
             <artifactId>monitoring-apps-management</artifactId>
         </dependency>
 
-        <!-- Подключаем модуль сбора метрик (ingest) -->
+        <!-- Metrics ingestion module -->
         <dependency>
             <groupId>com.monitoring</groupId>
             <artifactId>monitoring-collector</artifactId>
         </dependency>
 
-        <!-- Подключаем модуль дашбордов -->
+        <!-- Dashboards module -->
         <dependency>
             <groupId>com.monitoring</groupId>
             <artifactId>monitoring-dashboards</artifactId>
         </dependency>
 
-        <!-- Подключаем модуль health-check'ов -->
+        <!-- Health checks module -->
         <dependency>
             <groupId>com.monitoring</groupId>
             <artifactId>monitoring-healthcheck</artifactId>
         </dependency>
 
-        <!-- Подключаем модуль auth -->
+        <!-- Alerts module -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-alerts</artifactId>
+        </dependency>
+
+        <!-- Audit logging module -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-audit</artifactId>
+        </dependency>
+
+        <!-- Auth module -->
         <dependency>
             <groupId>com.monitoring</groupId>
             <artifactId>monitoring-auth</artifactId>
@@ -70,7 +82,7 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- H2 (для тестов/локальной разработки) -->
+        <!-- H2 (tests / local development) -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
@@ -88,7 +100,7 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- Flyway: единый источник схемы БД (миграции в db/migration модулей) -->
+        <!-- Flyway: single source of truth for the DB schema (migrations in module db/migration dirs) -->
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
@@ -98,7 +110,7 @@
             <artifactId>flyway-mysql</artifactId>
         </dependency>
 
-        <!-- OpenAPI / Swagger UI (документация и интерактивный просмотр эндпоинтов) -->
+        <!-- OpenAPI / Swagger UI (documentation and interactive endpoint explorer) -->
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>

@@ -10,17 +10,17 @@ target/
 .project
 .classpath
 
-# OS и временные файлы
+# OS and temporary files
 .DS_Store
 Thumbs.db
 *.log
 *.bak
 *.tmp
 
-# Docker (если не в отдельном репозитории)
+# Docker (when not in a dedicated repository)
 .docker/
 
-# Локальные конфиги (не для commit!)
+# Local configuration (never commit!)
 .env
 .env.local
 

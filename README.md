@@ -7,9 +7,10 @@ SaaS-интерфейсе, подключают свои приложения и
 
 > Статус: ранняя стадия. Реализованы аутентификация (регистрация с подтверждением email и
 > сбросом пароля), управление приложениями (Applications), конвейеры метрик и логов
-> (ingest + query), дашборды с виджетами (Metric chart / Log table / Status), а также
-> синтетические health-checks (HTTP-проверки с историей результатов) — см. раздел
-> [Текущие ограничения](#текущие-ограничения).
+> (ingest + query), дашборды с виджетами (Metric chart / Log table / Status),
+> синтетические health-checks (HTTP-проверки с историей результатов), а также правила
+> алертов (по метрике или health-check) с webhook-уведомлениями и историей инцидентов —
+> см. раздел [Текущие ограничения](#текущие-ограничения).
 
 ---
 
@@ -56,6 +57,8 @@ Backend собран как Maven multi-module проект:
 | `monitoring-collector` | Приём метрик/логов (`/api/v1/ingest`) и запросы метрик/логов (`/api/v1/metrics/query`, `/api/v1/metrics/names`, `/api/v1/logs`) |
 | `monitoring-dashboards` | CRUD дашбордов и виджетов (`/api/v1/dashboards`) |
 | `monitoring-healthcheck` | Синтетические HTTP health-checks: CRUD, scheduler, SSRF-защита, история результатов (`/api/v1/health-checks`) |
+| `monitoring-alerts` | Правила алертов (метрики/health-checks), плановый evaluator, webhook-уведомления (SSRF-защита) и инциденты (`/api/v1/alert-rules`, `/api/v1/notification-channels`, `/api/v1/alert-incidents`) |
+| `monitoring-audit` | Аудит-лог: запись событий через AOP (`@AuditLog`) и read-only API (`/api/v1/audit-events`) |
 | `monitoring-api` | Точка входа, конфигурация, композиция модулей, Actuator, OpenAPI |
 
 Поток телеметрии:
@@ -96,6 +99,7 @@ Frontend запрашивает GET /api/v1/metrics/query и рисует гра
 
 **Agent**
 - Go 1.26, `gopsutil/v4` (CPU/memory/disk), `yaml.v3`
+- Сбор метрик хоста и tail лог-файлов (offset tracking, redaction, ротация)
 - Собственный HTTP-клиент с bounded retries и exponential backoff
 
 ---
@@ -123,6 +127,7 @@ cloud-monitoring/
 │   ├── monitoring-collector/
 │   ├── monitoring-dashboards/   # дашборды и виджеты
 │   ├── monitoring-healthcheck/  # синтетические health-checks
+│   ├── monitoring-audit/        # аудит-лог (immutable, read-only API)
 │   ├── monitoring-api/          # entry point (порт 8080)
 │   ├── docker/mysql/initdb/     # init-скрипты MySQL
 │   ├── Dockerfile
@@ -133,7 +138,8 @@ cloud-monitoring/
 │   ├── Dockerfile.dev
 │   └── package.json
 ├── agent/                       # Go-агент
-│   ├── cmd/agent/
+│   ├── cmd/agent/               # entry point (package main)
+│   ├── internal/                # config, transport, metrics, logs
 │   ├── config.yaml              # пример конфигурации (плейсхолдеры)
 │   └── Dockerfile
 ├── compose.yaml                 # mysql + app + frontend
@@ -282,7 +288,16 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `APP_AUTH_RESET_URL` | Фронтенд-URL страницы сброса пароля | `http://localhost:3000/reset-password` |
 | `APP_AUTH_VERIFICATION_TTL` | TTL токена подтверждения (ISO-8601 Duration) | `PT24H` |
 | `APP_AUTH_RESET_TTL` | TTL токена сброса пароля (ISO-8601 Duration) | `PT1H` |
-| `APP_AUTH_LOG_EMAILS` | Писать письма (со ссылками) в лог вместо SMTP | `true` |
+| `APP_AUTH_LOG_EMAILS` | Писать письма (со ссылками) в лог вместо SMTP | `false` (в профиле `dev` — `true`) |
+| `MONITORING_DOWNSAMPLE_ENABLED` | Включить job сворачивания старых метрик в часовые агрегаты | `true` |
+| `MONITORING_DOWNSAMPLE_CRON` | Расписание downsampling (Spring cron) | `0 5 * * * *` |
+| `MONITORING_DOWNSAMPLE_RAW_RETENTION_HOURS` | Возраст сырых метрик, после которого их сворачивают, часы | `24` |
+| `MONITORING_DOWNSAMPLE_BATCH_SIZE` | Размер батча удаления сырых метрик | `10000` |
+| `MONITORING_RETENTION_ENABLED` | Включить job удаления устаревших логов и агрегатов | `true` |
+| `MONITORING_RETENTION_CRON` | Расписание retention-очистки (Spring cron) | `0 0 2 * * *` |
+| `MONITORING_RETENTION_LOGS_DAYS` | Срок хранения логов, дней | `14` |
+| `MONITORING_RETENTION_METRICS_DAYS` | Срок хранения агрегатов метрик, дней | `90` |
+| `MONITORING_RETENTION_BATCH_SIZE` | Размер батча удаления устаревших записей | `10000` |
 
 ### Frontend
 
@@ -302,6 +317,10 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `config.yaml` / `AGENT_BACKEND_URL` | `backend_url` | Базовый URL backend (http/https) |
 | `config.yaml` / `AGENT_API_KEY` | `api_key` | Scoped API-ключ приложения |
 | `config.yaml` / `AGENT_INTERVAL_SECONDS` | `interval_seconds` | Интервал сбора (по умолчанию 15с) |
+| `config.yaml` | `logs` | Список tail-источников `{ path, service_name, level_pattern }` (только файл) |
+| `config.yaml` / `AGENT_LOG_BATCH_SIZE` | `log_batch_size` | Размер батча логов, 1..1000 (по умолчанию 500) |
+| `config.yaml` / `AGENT_LOG_FLUSH_SECONDS` | `log_flush_seconds` | Интервал принудительной отправки логов (по умолчанию 5с) |
+| `config.yaml` / `AGENT_STATE_FILE` | `state_file` | Файл с offset'ами чтения логов (по умолчанию `.agent_state.json`) |
 
 ---
 
@@ -341,12 +360,57 @@ docker run -d \
 `/proc`, `/sys` или `--pid=host` в зависимости от окружения. Не встраивайте реальные
 ключи в образы и примеры — используйте переменные окружения или secret manager.
 
+### 4. Сбор логов (опционально)
+
+Агент tail-ит указанные файлы и отправляет новые строки в `POST /api/v1/ingest/logs`.
+Источники задаются в `config.yaml` в секции `logs`:
+
+```yaml
+logs:
+  - path: /var/log/my-app/app.log     # точный файл, не директория
+    service_name: my-app              # необязательно; по умолчанию имя файла
+    level_pattern: 'level=(\w+)'      # необязательно; 1-я группа regex = уровень
+log_batch_size: 500
+log_flush_seconds: 5
+state_file: ".agent_state.json"
+```
+
+- При первом запуске существующий файл читается с конца (только новые строки).
+- Offset каждого файла хранится в `state_file`, поэтому после перезапуска агент
+  продолжает с последней позиции.
+- Ротация (`app.log` → `app.log.1`, либо truncate) обрабатывается: новый файл читается
+  с начала без падения агента.
+- Уровень определяется по regex (`level_pattern` или встроенный:
+  TRACE/DEBUG/INFO/WARN/WARNING/ERROR/FATAL/CRITICAL), иначе `INFO`.
+- Время события берётся из начала строки по нескольким форматам, иначе — текущее UTC.
+- Перед отправкой выполняется redaction: `password=...`, `token=...`, `api_key=...`,
+  `Bearer ...`, `app_...` и AWS-ключи маскируются.
+
+Запуск контейнера с монтированием каталога логов и writable volume для state:
+
+```bash
+docker run -d \
+  --name monitoring-agent \
+  -e AGENT_BACKEND_URL="https://your-cloud.example.com" \
+  -e AGENT_API_KEY="app_your_api_key_here" \
+  -v /var/log/my-app:/var/log/my-app:ro \
+  -v /var/lib/vibemonitoring-agent:/app \
+  vibemonitoring/agent:latest
+```
+
+> Каталог логов монтируется только для чтения. Для state-файла нужен writable volume на
+> `/app` (каталог по умолчанию) либо задайте `AGENT_STATE_FILE` в доступный путь.
+
 ### Поведение при сбоях
 
 - HTTP-запросы имеют таймаут (`10s`).
 - При ошибке отправки агент повторяет батч с exponential backoff (1s → 60s, до **20%**
   jitter) и не завершает процесс при недоступности backend.
-- При `SIGINT`/`SIGTERM` агент корректно останавливает in-flight запросы и ожидания.
+- Логи буферизуются и отправляются пачками (по `log_batch_size` или каждые
+  `log_flush_seconds`). Буфер ограничен: при длительной недоступности backend самые
+  старые события отбрасываются, чтобы не исчерпать память.
+- При `SIGINT`/`SIGTERM` агент корректно останавливает in-flight запросы и ожидания,
+  а также выполняет финальное чтение и отправку остатка логов (в пределах `10s`).
 
 ---
 
@@ -375,9 +439,10 @@ docker run -d \
 типа. `forgot-password` и `resend-verification` всегда отвечают успехом и не раскрывают
 существование аккаунта (защита от user enumeration).
 
-Отправка писем пока реализована как запись в лог backend
-(`app.auth.log-emails=true`): ссылка с токеном печатается в лог приложения. SMTP-провайдер
-ещё не подключён (см. [Текущие ограничения](#текущие-ограничения)).
+Отправка писем пока реализована как запись в лог backend: ссылка с токеном печатается в
+лог приложения только когда включён `app.auth.log-emails` (по умолчанию выключено,
+в профиле `dev` — включено). SMTP-провайдер ещё не подключён
+(см. [Текущие ограничения](#текущие-ограничения)).
 
 ### Applications — `/api/applications`
 
@@ -424,7 +489,7 @@ Content-Type: application/json
     {
       "name": "system.cpu.usage",
       "value": 12.5,
-      "timestamp": "2026-01-01T12:00:00Z",
+      "timestamp": "<ISO-8601 UTC>",
       "tags": { "host": "server-1" }
     }
   ]
@@ -456,7 +521,7 @@ Content-Type: application/json
 {
   "events": [
     {
-      "timestamp": "2026-01-01T12:00:00Z",
+      "timestamp": "<ISO-8601 UTC>",
       "level": "ERROR",
       "message": "Connection timed out",
       "context": "{\"service\":\"checkout\"}"
@@ -464,6 +529,24 @@ Content-Type: application/json
   ]
 }
 ```
+
+`timestamp` — момент события в UTC и должен попадать в запрашиваемое окно. Виджет
+**Log table** запрашивает относительный диапазон («последние N часов/дней», поле Time
+range в форме виджета, по умолчанию 1 час) до текущего момента, а `GET /api/v1/logs`
+отдаёт только события внутри `from`..`to`. Событие с фиксированной датой из примера
+(`2026-01-01`) в это окно не попадёт и в виджете не отобразится.
+
+### Overview — `/api/v1/overview`
+
+| Метод | Путь | Описание | Доступ |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/overview` | Счётчики рабочего пространства пользователя | JWT |
+
+Возвращает `{ applicationCount, metricNameCount24h, logEventCount24h }`: количество приложений
+пользователя (всего) и число полученных за последние 24 часа уникальных имён метрик и событий
+логов. Счётчики считаются только по приложениям вызывающего пользователя (tenant scope) тремя
+агрегатными запросами, без отдельного запроса по каждому приложению. Используется карточками на
+странице **Overview** (`/app/overview`).
 
 ### Dashboards — `/api/v1/dashboards`
 
@@ -489,8 +572,15 @@ Content-Type: application/json
 и изменять размер без отдельного режима редактирования: раскладка сохраняется
 автоматически по завершении перетаскивания/ресайза (`PUT .../widgets/{widgetId}`), а
 кнопка **Add widget** доступна постоянно. Имя метрики в форме виджета и в Metrics
-Explorer выбирается из списка (`GET /api/v1/metrics/names`); если метрик ещё нет или
-список не загрузился, остаётся свободный ввод как fallback.
+Explorer выбирается из списка: сначала идут встроенные метрики, которые собирает агент
+(`system.cpu.usage`, `system.memory.usage`, `system.disk.usage`), затем имена, реально
+полученные от выбранного приложения (`GET /api/v1/metrics/names`); вариант **Custom metric
+name…** оставляет свободный ввод произвольного имени.
+
+Каждой метрике соответствует свой цвет линии на графике, выбранный из палитры интерфейса
+(cyan/violet/lime/amber и их светлые варианты): встроенные метрики имеют фиксированный цвет,
+произвольные — детерминированный по имени. Тот же цвет показан маркером рядом с названием
+метрики в списке, в заголовке графика и в заголовке виджета дашборда.
 
 ### Health checks — `/api/v1/health-checks`
 
@@ -521,6 +611,67 @@ link-local, CGNAT, multicast, `169.254.169.254` и т.п. отклоняются
 вкладке), форму создания/редактирования и модальное окно истории (последние 50
 результатов и uptime за 24 часа, вычисленный только по реальным результатам).
 
+### Alerting — `/api/v1/alert-rules`, `/api/v1/notification-channels`, `/api/v1/alert-incidents`
+
+| Метод | Путь | Описание | Доступ |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/alert-rules` | Список правил пользователя | JWT (владелец) |
+| `POST` | `/api/v1/alert-rules` | Создать правило | JWT |
+| `PUT` | `/api/v1/alert-rules/{id}` | Обновить (частично) | JWT (владелец) |
+| `DELETE` | `/api/v1/alert-rules/{id}` | Удалить правило и его инциденты | JWT (владелец) |
+| `GET` | `/api/v1/notification-channels` | Список webhook-каналов | JWT (владелец) |
+| `POST` | `/api/v1/notification-channels` | Добавить webhook | JWT |
+| `PUT` | `/api/v1/notification-channels/{id}` | Обновить канал | JWT (владелец) |
+| `DELETE` | `/api/v1/notification-channels/{id}` | Удалить канал | JWT (владелец) |
+| `GET` | `/api/v1/alert-incidents` | История инцидентов (`limit`, по умолчанию 50, максимум 500) | JWT (владелец) |
+
+Правило: `name` (1–100), `type` (`METRIC_THRESHOLD|HEALTH_CHECK`), `target` (имя метрики
+или id health-check), `condition` (`GREATER_THAN|LESS_THAN|EQUAL`), `threshold` (double),
+`durationMinutes` (1–1440) и `isActive`. Для `METRIC_THRESHOLD` обязателен `applicationId`;
+для `HEALTH_CHECK` правило срабатывает при статусе `DOWN` или `TIMEOUT` (condition и
+threshold игнорируются). Инцидент: `id`, `ruleId`, `ruleName`, `status`
+(`FIRING|RESOLVED`), `triggeredAt`, `resolvedAt`.
+
+Плановый evaluator (отдельный пул с ограниченной очередью и `CallerRunsPolicy`) проверяет
+активные правила каждые `monitoring.alerts.scheduler-interval-ms` (по умолчанию 60 секунд).
+Условие должно непрерывно держаться `durationMinutes` прежде чем откроется инцидент.
+Отсутствие или устаревание данных не трактуется ни как breach, ни как recovery: метрика
+ищется в окне `monitoring.alerts.metric-lookback-minutes` (по умолчанию 5), результат
+health-check — не старше `monitoring.alerts.health-freshness-minutes` (по умолчанию 10).
+Планировщик отключается через `monitoring.alerts.scheduler.enabled=false`.
+
+Webhook-каналы допускают только https-URL и проходят SSRF-проверку (хост должен
+разрешаться исключительно в публичные адреса) при сохранении и повторно перед каждой
+отправкой; отправка выполняется асинхронно после коммита транзакции, без редиректов и с
+таймаутами.
+
+Страница **Alerts** (`/app/alerts`) показывает список правил с переключателями активности,
+диалог создания/редактирования и настройку notification-каналов; страница **Incidents**
+(`/app/incidents`) — таблицу инцидентов (новые первыми) с автообновлением раз в 30 секунд.
+
+### Audit — `/api/v1/audit-events`
+
+| Метод | Путь | Описание | Доступ |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/audit-events` | Постраничный список событий пользователя (новые первыми) | JWT (владелец) |
+| `GET` | `/api/v1/audit-events/{id}` | Одно событие (404, если не принадлежит пользователю) | JWT (владелец) |
+
+Параметры `GET /api/v1/audit-events`: `action`, `from`, `to` (ISO-8601 UTC), `page`
+(≥0, по умолчанию 0), `size` (1–100, по умолчанию 50). Диапазон `from`..`to`
+включающий, должен быть положительным и не длиннее 366 дней.
+
+Событие: `id`, `userId`, `username` (разрешается при чтении), `action`, `resourceId`,
+`ipAddress`, `timestamp` (UTC). События пишутся синхронно аспектом `AuditLogAspect` при
+вызове методов, помеченных `@AuditLog(action=...)`: `API_KEY_REGENERATED` (регенерация
+ключа приложения), `APPLICATION_DELETED`, `DASHBOARD_DELETED`. Лог неизменяемый:
+create/update/delete эндпоинтов нет, а `DELETE` на `/api/v1/audit-events` возвращает 405.
+События всегда ограничены текущим пользователем (tenant scope из JWT), при определении
+IP учитывается `X-Forwarded-For`.
+
+Страница **Audit log** (`/app/audit`) показывает read-only таблицу (Timestamp, User,
+Action, Resource, IP Address) с фильтрами по action и диапазону дат и постраничной
+навигацией, новые события первыми.
+
 ---
 
 ## Тесты
@@ -545,11 +696,13 @@ H2, frontend-тесты — jsdom.
 
 - Виджет **Status** в дашбордах — плейсхолдер (ещё не связан с health-checks API).
 - Письма подтверждения email и сброса пароля не отправляются по SMTP: ссылка пишется в
-  лог backend (`app.auth.log-emails=true`). Для продакшена нужен реальный `EmailSender`
-  (SMTP-провайдер) без записи токенов в лог.
+  лог backend, если включён `app.auth.log-emails` (по умолчанию выключено, в профиле `dev`
+  включено). Для продакшена нужен реальный `EmailSender` (SMTP-провайдер) без записи
+  токенов в лог.
 - Агент пока собирает только хост-метрики; сбор логов и интеграции приложений — в
   планах.
-- Алерты и инциденты — в планах.
+- Каналы уведомлений ограничены webhook (email/Slack — в планах); правила поддерживают
+  одно условие без логики AND/OR.
 - Детали задач и статусы: `TASKS.md`.
 
 ---
@@ -571,6 +724,7 @@ H2, frontend-тесты — jsdom.
   не рендерятся как HTML, ограничиваются по размеру.
 - Не логируйте Authorization-заголовки и API-ключи (агент маскирует ключ в логах).
 - Токены подтверждения email и сброса пароля хранятся в БД только как SHA-256-хеш,
-  одноразовые и с ограниченным TTL. В лог токен (в составе ссылки) попадает только в
-  dev-режиме (`app.auth.log-emails=true`); в продакшене это должно быть отключено.
+  одноразовые и с ограниченным TTL. В лог токен (в составе ссылки) попадает только когда
+  явно включён `app.auth.log-emails` (в профиле `dev` включён, в продакшене выключен по
+  умолчанию — включать не следует).
 - Для продакшена обязателен HTTPS.

@@ -8,10 +8,13 @@ import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import LoginPage from './pages/auth/LoginPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import VerifyEmailPage from './pages/auth/VerifyEmailPage'
+import AlertsPage from './pages/app/AlertsPage'
 import ApplicationsPage from './pages/app/ApplicationsPage'
+import AuditLogPage from './pages/app/AuditLogPage'
 import DashboardsPage from './pages/app/DashboardsPage'
 import DashboardViewPage from './pages/app/DashboardViewPage'
 import HealthChecksPage from './pages/app/HealthChecksPage'
+import IncidentsPage from './pages/app/IncidentsPage'
 import LogExplorerPage from './pages/app/LogExplorerPage'
 import MetricsExplorerPage from './pages/app/MetricsExplorerPage'
 import OverviewPage from './pages/app/OverviewPage'
@@ -69,8 +72,11 @@ const router = createBrowserRouter([
       { path: 'metrics', element: <MetricsExplorerPage /> },
       { path: 'logs', element: <LogExplorerPage /> },
       { path: 'health', element: <HealthChecksPage /> },
+      { path: 'alerts', element: <AlertsPage /> },
+      { path: 'incidents', element: <IncidentsPage /> },
       { path: 'dashboards', element: <DashboardsPage /> },
       { path: 'dashboards/:id', element: <DashboardViewPage /> },
+      { path: 'audit', element: <AuditLogPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

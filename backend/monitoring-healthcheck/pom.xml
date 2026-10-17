@@ -13,7 +13,7 @@
     </parent>
 
     <artifactId>monitoring-healthcheck</artifactId>
-    <!-- groupId и version наследуются от parent -->
+    <!-- groupId and version are inherited from the parent -->
 
     <dependencies>
         <dependency>

@@ -68,7 +68,7 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- H2 (для тестов) -->
+        <!-- H2 (tests) -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>

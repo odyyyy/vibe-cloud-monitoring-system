@@ -13,12 +13,12 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * Отдельная security-цепочка для ingestion-эндпоинтов.
+ * Dedicated security chain for the ingestion endpoints.
  *
- * <p>Матчится только по {@code /api/v1/ingest/**} (и алиасу {@code /api/ingest/**})
- * и имеет {@link Order @Order(0)}, поэтому проверяется раньше catch-all цепочек
- * в auth/dev-конфигурациях. Внутри цепочки запрос аутентифицируется
- * {@link ApiKeyAuthFilter} (HTTP 401 при отсутствующем/невалидном ключе), JWT не применяется.
+ * <p>It matches only {@code /api/v1/ingest/**} (and the {@code /api/ingest/**} alias) and has
+ * {@link Order @Order(0)}, so it is evaluated before the catch-all chains. Inside the chain the
+ * request is authenticated by {@link ApiKeyAuthFilter} (HTTP 401 for a missing or invalid key);
+ * JWT is not used here.
  */
 @Configuration
 @EnableWebSecurity

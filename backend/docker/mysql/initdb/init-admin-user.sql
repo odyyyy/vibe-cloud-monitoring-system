@@ -1,12 +1,11 @@
--- Инициализация пользователя для доступа с любого хота (необходимо для Docker сети)
--- Выполняется только при первом инициализировании базы данных
+-- Initialize the application user with access from any host (needed on the Docker network).
+-- Runs only when the database is initialized for the first time.
 
--- Создаем пользователя 'admin' с правом подключения с любого хоста ('%')
--- если он еще не существует
+-- Create the 'admin' user allowed to connect from any host ('%') if it does not exist yet.
 CREATE USER IF NOT EXISTS 'admin'@'%' IDENTIFIED BY 'admin_password';
 
--- Предоставляем все права на базу данных monitoring_db
+-- Grant all privileges on the monitoring_db database.
 GRANT ALL PRIVILEGES ON monitoring_db.* TO 'admin'@'%';
 
--- Обновляем привилегии, чтобы изменения вступили в силу немедленно
+-- Reload privileges so the changes take effect immediately.
 FLUSH PRIVILEGES;
