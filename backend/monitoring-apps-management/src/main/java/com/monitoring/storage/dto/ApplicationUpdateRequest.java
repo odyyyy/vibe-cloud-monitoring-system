@@ -5,8 +5,8 @@ import jakarta.validation.constraints.Size;
 
 public class ApplicationUpdateRequest {
 
-    @NotBlank(message = "Название приложения обязательно")
-    @Size(max = 100, message = "Максимальная длина названия: 100 символов")
+    @NotBlank(message = "Application name is required")
+    @Size(max = 100, message = "Application name must be at most 100 characters")
     private String name;
 
     public String getName() {

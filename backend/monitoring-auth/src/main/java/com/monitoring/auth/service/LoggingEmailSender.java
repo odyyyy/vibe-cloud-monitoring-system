@@ -9,10 +9,10 @@ import org.springframework.stereotype.Component;
  * Development {@link EmailSender} that writes the outgoing email to the application log
  * instead of contacting an SMTP server.
  *
- * <p>This is the only implementation until a real mail provider is integrated. That means
- * the one-time link (and therefore the token) is written to the log, which is acceptable only
- * for local development. Set {@code app.auth.log-emails=false} to suppress it once a real
- * sender is wired in.
+ * <p>This is the only implementation until a real mail provider is integrated. It is disabled
+ * by default ({@code app.auth.log-emails=false}) because the one-time link contains the token:
+ * the {@code dev} profile enables it for local development, and any other environment should
+ * keep it off or replace this sender with a real implementation.
  */
 @Slf4j
 @Component

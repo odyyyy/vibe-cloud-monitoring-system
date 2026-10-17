@@ -4,6 +4,7 @@ import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -36,6 +37,7 @@ public class MetricsQueryRequest {
     public static final long MAX_RANGE_DAYS = 30;
 
     @NotNull(message = "applicationId is required")
+    @Positive(message = "applicationId must be positive")
     private Long applicationId;
 
     @NotBlank(message = "metricName is required")

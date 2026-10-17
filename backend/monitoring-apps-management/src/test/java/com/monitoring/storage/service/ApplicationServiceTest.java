@@ -4,6 +4,7 @@ import com.monitoring.storage.dto.ApplicationCreateRequest;
 import com.monitoring.storage.dto.ApplicationWithKeyResponse;
 import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.exception.ApplicationAccessDeniedException;
+import com.monitoring.storage.exception.ApplicationNameConflictException;
 import com.monitoring.storage.exception.ApplicationNotFoundException;
 import com.monitoring.storage.repository.ApplicationRepository;
 import com.monitoring.storage.security.ApiKeyHasher;
@@ -71,7 +72,7 @@ class ApplicationServiceTest {
     void createApplication_duplicateName_throwsConflict() {
         when(applicationRepository.existsByNameAndOwnerId("my-app", OWNER_ID)).thenReturn(true);
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(ApplicationNameConflictException.class,
                 () -> applicationService.createApplication(createRequest("my-app"), OWNER_ID));
         verify(applicationRepository, never()).save(any());
     }

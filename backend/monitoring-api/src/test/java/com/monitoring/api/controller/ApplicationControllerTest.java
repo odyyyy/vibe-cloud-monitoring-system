@@ -5,6 +5,7 @@ import com.monitoring.storage.dto.ApplicationCreateRequest;
 import com.monitoring.storage.dto.ApplicationWithKeyResponse;
 import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.exception.ApplicationAccessDeniedException;
+import com.monitoring.storage.exception.ApplicationNameConflictException;
 import com.monitoring.storage.exception.ApplicationNotFoundException;
 import com.monitoring.storage.service.ApplicationService;
 import org.junit.jupiter.api.AfterEach;
@@ -95,6 +96,18 @@ class ApplicationControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors.name").exists());
         verify(applicationService, Mockito.never()).createApplication(any(), any());
+    }
+
+    @Test
+    void createApplication_duplicateName_returnsConflict() throws Exception {
+        when(applicationService.createApplication(any(ApplicationCreateRequest.class), eq(USER_ID)))
+                .thenThrow(new ApplicationNameConflictException("my-app"));
+
+        mockMvc.perform(post("/api/applications")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"my-app\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409));
     }
 
     @Test

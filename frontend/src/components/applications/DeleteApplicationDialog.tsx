@@ -4,7 +4,6 @@ import type { Application } from '../../api/applications'
 import { useDeleteApplicationMutation } from '../../api/useApplications'
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -12,6 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../ui/alert-dialog'
+import { HoldToConfirmButton } from '../ui/hold-to-confirm-button'
 
 interface DeleteApplicationDialogProps {
   open: boolean
@@ -49,17 +49,21 @@ export function DeleteApplicationDialog({ open, onOpenChange, application }: Del
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
+          <HoldToConfirmButton
+            aria-describedby="delete-hold-hint"
+            variant="outline"
             disabled={deleteMutation.isPending}
-            onClick={(event) => {
-              event.preventDefault()
+            className="border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-red-100"
+            onConfirm={() => {
               void handleConfirm()
             }}
           >
             {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
-          </AlertDialogAction>
+          </HoldToConfirmButton>
         </AlertDialogFooter>
+        <p id="delete-hold-hint" className="mt-3 text-center text-xs text-slate-500">
+          Press and hold <span className="text-slate-400">Delete</span> to confirm — this cannot be undone.
+        </p>
       </AlertDialogContent>
     </AlertDialog>
   )

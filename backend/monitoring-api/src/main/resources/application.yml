@@ -11,37 +11,74 @@ spring:
     driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.h2.Driver}
   jpa:
     hibernate:
-      # Схема управляется только Flyway. Hibernate проверяет соответствие сущностей
-      # реальной схеме и не изменяет её.
+      # The schema is owned by Flyway. Hibernate only validates that the entities match
+      # the real schema and never mutates it.
       ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:validate}
     show-sql: false
   flyway:
     enabled: true
-    # Миграции лежат в classpath:db/migration каждого модуля (V1..Vn на общем classpath).
+    # Migrations live in classpath:db/migration of each module (V1..Vn on the shared classpath).
     locations: classpath:db/migration
   h2:
     console:
-      # По умолчанию выключено: веб-консоль БД не должна быть доступна в рабочем окружении.
+      # Disabled by default: the database web console must not be reachable in production.
       enabled: ${SPRING_H2_CONSOLE_ENABLED:false}
       path: /h2-console
 
-# Настройки JWT. Секрет обязателен (минимум 32 символа) и задаётся через окружение;
-# приложение не стартует без него, чтобы не подписывать токены публично известным ключом.
+# JWT settings. The secret is mandatory (at least 32 characters) and is provided through
+# the environment; the application refuses to start without it, so tokens are never signed
+# with a publicly known key.
 jwt:
   secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:86400000}
 
-# Подтверждение email и сброс пароля.
-# Письма пока не отправляются по SMTP: ссылки пишутся в лог (app.auth.log-emails).
+# Email confirmation and password reset.
+# Emails are not sent over SMTP yet: one-time links are written to the log only when
+# app.auth.log-emails is enabled (never in production by default).
 app:
   auth:
     verification-ttl: ${APP_AUTH_VERIFICATION_TTL:PT24H}
     reset-ttl: ${APP_AUTH_RESET_TTL:PT1H}
     verification-url: ${APP_AUTH_VERIFICATION_URL:http://localhost:3000/verify-email}
     reset-url: ${APP_AUTH_RESET_URL:http://localhost:3000/reset-password}
-    log-emails: ${APP_AUTH_LOG_EMAILS:true}
+    log-emails: ${APP_AUTH_LOG_EMAILS:false}
 
-# Actuator. Детали health скрыты от анонимных клиентов; показываются только в dev-профиле.
+# Background telemetry maintenance (downsampling of raw metrics and retention).
+# Each job can be disabled independently; retention windows are in days.
+monitoring:
+  downsample:
+    enabled: ${MONITORING_DOWNSAMPLE_ENABLED:true}
+    # Hourly, at minute 5.
+    cron: ${MONITORING_DOWNSAMPLE_CRON:0 5 * * * *}
+    # Raw samples older than this window are aggregated into hourly buckets, then deleted.
+    raw-retention-hours: ${MONITORING_DOWNSAMPLE_RAW_RETENTION_HOURS:24}
+    # Upper bound on rows deleted per statement (short transactions, no table-wide lock).
+    batch-size: ${MONITORING_DOWNSAMPLE_BATCH_SIZE:10000}
+  retention:
+    enabled: ${MONITORING_RETENTION_ENABLED:true}
+    # Daily at 02:00.
+    cron: ${MONITORING_RETENTION_CRON:0 0 2 * * *}
+    logs-days: ${MONITORING_RETENTION_LOGS_DAYS:14}
+    metrics-days: ${MONITORING_RETENTION_METRICS_DAYS:90}
+    batch-size: ${MONITORING_RETENTION_BATCH_SIZE:10000}
+  # Alert evaluation. The scheduler is enabled by default and can be disabled with
+  # monitoring.alerts.scheduler.enabled=false (for example in tests or single-shot environments).
+  alerts:
+    scheduler:
+      enabled: ${MONITORING_ALERTS_SCHEDULER_ENABLED:true}
+    scheduler-interval-ms: ${MONITORING_ALERTS_SCHEDULER_INTERVAL_MS:60000}
+    metric-lookback-minutes: ${MONITORING_ALERTS_METRIC_LOOKBACK_MINUTES:5}
+    health-freshness-minutes: ${MONITORING_ALERTS_HEALTH_FRESHNESS_MINUTES:10}
+    evaluation-pool-size: ${MONITORING_ALERTS_EVALUATION_POOL_SIZE:4}
+    evaluation-queue-capacity: ${MONITORING_ALERTS_EVALUATION_QUEUE_CAPACITY:100}
+    evaluation-timeout-ms: ${MONITORING_ALERTS_EVALUATION_TIMEOUT_MS:120000}
+    webhook:
+      pool-size: ${MONITORING_ALERTS_WEBHOOK_POOL_SIZE:2}
+      queue-capacity: ${MONITORING_ALERTS_WEBHOOK_QUEUE_CAPACITY:100}
+      connect-timeout-ms: ${MONITORING_ALERTS_WEBHOOK_CONNECT_TIMEOUT_MS:5000}
+      request-timeout-ms: ${MONITORING_ALERTS_WEBHOOK_REQUEST_TIMEOUT_MS:10000}
+
+# Actuator. Health details are hidden from anonymous clients; the dev profile shows them.
 management:
   endpoints:
     web:
@@ -51,7 +88,7 @@ management:
     health:
       show-details: never
 
-# Профиль для локальной разработки.
+# Local development profile.
 ---
 spring:
   config:
@@ -71,6 +108,11 @@ spring:
     console:
       enabled: ${SPRING_H2_CONSOLE_ENABLED:true}
       path: /h2-console
+
+app:
+  auth:
+    # Local development: log one-time links instead of sending real email.
+    log-emails: ${APP_AUTH_LOG_EMAILS:true}
 
 management:
   endpoint:

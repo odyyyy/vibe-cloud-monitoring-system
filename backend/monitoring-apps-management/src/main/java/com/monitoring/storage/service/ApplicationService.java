@@ -4,6 +4,7 @@ import com.monitoring.storage.dto.ApplicationCreateRequest;
 import com.monitoring.storage.dto.ApplicationWithKeyResponse;
 import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.exception.ApplicationAccessDeniedException;
+import com.monitoring.storage.exception.ApplicationNameConflictException;
 import com.monitoring.storage.exception.ApplicationNotFoundException;
 import com.monitoring.storage.repository.ApplicationRepository;
 import com.monitoring.storage.security.ApiKeyHasher;
@@ -27,7 +28,7 @@ public class ApplicationService {
     public ApplicationWithKeyResponse createApplication(ApplicationCreateRequest request, Long ownerId) {
         String name = request.getName().trim();
         if (applicationRepository.existsByNameAndOwnerId(name, ownerId)) {
-            throw new IllegalStateException("An application with this name already exists");
+            throw new ApplicationNameConflictException(name);
         }
 
         String rawApiKey = generateUniqueApiKey();
@@ -57,7 +58,7 @@ public class ApplicationService {
 
         if (!application.getName().equals(newName)
                 && applicationRepository.existsByNameAndOwnerId(newName, ownerId)) {
-            throw new IllegalStateException("Application name is already taken by another application");
+            throw new ApplicationNameConflictException(newName);
         }
 
         application.setName(newName);

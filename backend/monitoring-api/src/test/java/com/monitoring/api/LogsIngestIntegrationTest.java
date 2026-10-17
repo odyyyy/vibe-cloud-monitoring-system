@@ -1,5 +1,6 @@
 package com.monitoring.api;
 
+import com.monitoring.collector.dto.LogEventPayload;
 import com.monitoring.collector.repository.LogEventRepository;
 import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.repository.ApplicationRepository;
@@ -101,6 +102,19 @@ class LogsIngestIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"events\":[{\"level\":\"INFO\",\"message\":\"\","
                                 + "\"timestamp\":\"2026-10-09T10:00:00Z\"}]}"))
+                .andExpect(status().isBadRequest());
+
+        assertEquals(0, logEventRepository.count());
+    }
+
+    @Test
+    void ingest_oversizedContext_returns400() throws Exception {
+        String context = "c".repeat(LogEventPayload.MAX_CONTEXT_LENGTH + 1);
+        mockMvc.perform(post("/api/v1/ingest/logs")
+                        .header("X-API-Key", "app_logs_ingest")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"events\":[{\"level\":\"INFO\",\"message\":\"ok\","
+                                + "\"timestamp\":\"2026-10-09T10:00:00Z\",\"context\":\"" + context + "\"}]}"))
                 .andExpect(status().isBadRequest());
 
         assertEquals(0, logEventRepository.count());

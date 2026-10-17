@@ -126,9 +126,44 @@ class MetricIngestControllerTest {
         verify(metricIngestService, Mockito.never()).ingest(any(), any());
     }
 
+    @Test
+    void oversizedTagKey_returnsBadRequest() throws Exception {
+        String tagKey = "k".repeat(101);
+        mockMvc.perform(post("/api/v1/ingest/metrics")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"metrics\":[{\"name\":\"cpu_usage\",\"value\":1.0,"
+                                + "\"timestamp\":\"2026-10-09T10:00:00Z\",\"tags\":{\"" + tagKey + "\":\"v\"}}]}"))
+                .andExpect(status().isBadRequest());
+
+        verify(metricIngestService, Mockito.never()).ingest(any(), any());
+    }
+
+    @Test
+    void oversizedTagValue_returnsBadRequest() throws Exception {
+        String tagValue = "v".repeat(501);
+        mockMvc.perform(post("/api/v1/ingest/metrics")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"metrics\":[{\"name\":\"cpu_usage\",\"value\":1.0,"
+                                + "\"timestamp\":\"2026-10-09T10:00:00Z\",\"tags\":{\"host\":\"" + tagValue + "\"}}]}"))
+                .andExpect(status().isBadRequest());
+
+        verify(metricIngestService, Mockito.never()).ingest(any(), any());
+    }
+
+    @Test
+    void nonFiniteValue_returnsBadRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/ingest/metrics")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"metrics\":[{\"name\":\"cpu_usage\",\"value\":NaN,"
+                                + "\"timestamp\":\"2026-10-09T10:00:00Z\"}]}"))
+                .andExpect(status().isBadRequest());
+
+        verify(metricIngestService, Mockito.never()).ingest(any(), any());
+    }
+
     /**
-     * Минимальный advice для standalone-теста: в рантайме те же ошибки обрабатывает
-     * глобальный ApiExceptionHandler из monitoring-api.
+     * Minimal advice for the standalone test: in runtime the same errors are handled by the
+     * global ApiExceptionHandler from monitoring-api.
      */
     @RestControllerAdvice
     static class TestValidationAdvice {

@@ -2,22 +2,29 @@ package com.monitoring.auth.config;
 
 import com.monitoring.auth.jwt.JwtAuthFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Единственная catch-all цепочка Spring Security для всего приложения (deny-by-default).
+ * The single catch-all Spring Security chain for the whole application (deny by default).
  *
- * <p>Отдельные цепочки существуют только там, где нужен другой механизм аутентификации:
- * {@code IngestSecurityConfig} (@Order(0)) для ingestion по {@code X-API-Key}. Все остальные
- * публичные пути перечислены явно в {@code endpoints}; незаявленный путь по умолчанию запрещён.
+ * <p>Separate chains exist only where a different authentication mechanism is required:
+ * {@code IngestSecurityConfig} (@Order(0)) authenticates ingestion traffic via {@code X-API-Key}.
+ * All other public paths are listed explicitly in {@code endpoints}; any path that is not
+ * listed there is denied by default.
  */
 @Configuration
 @EnableWebSecurity
@@ -25,11 +32,14 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
-    
+
+    /** The H2 console servlet is only registered when this property is true (dev-only). */
+    @Value("${spring.h2.console.enabled:false}")
+    private boolean h2ConsoleEnabled;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        String[] endpoints = {
+        List<String> endpoints = new ArrayList<>(List.of(
             "/api/auth/**",
             "/api/hello",
             "/actuator/health",
@@ -38,22 +48,23 @@ public class SecurityConfig {
             "/v3/api-docs/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
-            // Внутренняя обработка ошибок Spring (иначе необработанная ошибка станет 403).
+            // Spring's internal error dispatch (otherwise an unhandled error becomes 403).
             "/error",
-            // Веб-консоль H2 доступна только когда она включена (spring.h2.console.enabled),
-            // иначе сервлет не зарегистрирован и путь возвращает 404.
-            "/h2-console/**",
-            // Ingestion не требует JWT: агенты аутентифицируются по X-API-Key
-            // в отдельной цепочке (IngestSecurityConfig в monitoring-collector).
+            // Ingestion does not require JWT: agents authenticate with X-API-Key in a
+            // dedicated chain (IngestSecurityConfig in monitoring-collector).
             "/api/v1/ingest/**",
             "/api/ingest/**"
-        };
-        
+        ));
+        if (h2ConsoleEnabled) {
+            // The H2 web console is reachable only when explicitly enabled (dev-only).
+            endpoints.add("/h2-console/**");
+        }
+
         http
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(endpoints).permitAll()
+                .requestMatchers(endpoints.toArray(String[]::new)).permitAll()
                 .requestMatchers("/api/applications/**").authenticated()
                 // Metrics queries require an authenticated user; ownership of the
                 // requested application is verified in MetricQueryService.
@@ -67,10 +78,24 @@ public class SecurityConfig {
                 // Health checks require an authenticated user; ownership is verified
                 // in HealthCheckService.
                 .requestMatchers("/api/v1/health-checks/**").authenticated()
+                // Alert rules, notification channels and incident history require an
+                // authenticated user; ownership is verified in AlertService.
+                .requestMatchers("/api/v1/alert-rules/**", "/api/v1/notification-channels/**",
+                        "/api/v1/alert-incidents/**").authenticated()
+                // The audit trail is read-only and scoped to the authenticated user in
+                // AuditEventService; there is no write/delete endpoint.
+                .requestMatchers("/api/v1/audit-events/**").authenticated()
+                // Workspace summary (Overview page) requires an authenticated user; the
+                // counters are computed only across the user's own applications.
+                .requestMatchers("/api/v1/overview", "/api/v1/overview/**").authenticated()
                 // Deny by default: any endpoint not explicitly listed above is not reachable.
                 // Public endpoints must be added to `endpoints` deliberately.
                 .anyRequest().denyAll()
             )
+            // Requests without a valid bearer token receive 401 instead of 403, so clients can
+            // distinguish "not authenticated" from "authenticated but forbidden".
+            .exceptionHandling(ex -> ex.authenticationEntryPoint(
+                    new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

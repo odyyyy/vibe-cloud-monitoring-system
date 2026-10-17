@@ -9,6 +9,7 @@ import com.monitoring.dashboards.dto.WidgetResponse;
 import com.monitoring.dashboards.entity.WidgetType;
 import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
 import com.monitoring.dashboards.exception.InvalidWidgetConfigException;
+import com.monitoring.dashboards.exception.WidgetLimitExceededException;
 import com.monitoring.dashboards.repository.DashboardRepository;
 import com.monitoring.dashboards.repository.WidgetRepository;
 import com.monitoring.dashboards.service.DashboardService;
@@ -157,7 +158,7 @@ class DashboardsIntegrationTest {
             dashboardService.addWidget(OWNER_ID, dashboard.getId(), widgetAt.apply(i));
         }
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(WidgetLimitExceededException.class,
                 () -> dashboardService.addWidget(OWNER_ID, dashboard.getId(), widgetAt.apply(99)));
     }
 

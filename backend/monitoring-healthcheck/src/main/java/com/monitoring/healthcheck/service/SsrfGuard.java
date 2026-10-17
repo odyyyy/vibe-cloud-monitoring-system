@@ -15,9 +15,9 @@ import java.util.Set;
  *
  * <p>Only absolute {@code http}/{@code https} URLs without embedded credentials are accepted,
  * and the host must resolve exclusively to public addresses. Loopback, private, link-local,
- * site-local, multicast, CGNAT, benchmarking, unspecified and IPv6 unique-local ranges are
- * rejected so a customer cannot make the platform probe internal networks or cloud metadata
- * endpoints (for example {@code 169.254.169.254}).
+ * site-local, multicast, CGNAT, benchmarking, documentation, tunneling (6to4, NAT64, Teredo),
+ * unspecified and IPv6 unique-local ranges are rejected so a customer cannot make the platform
+ * probe internal networks or cloud metadata endpoints (for example {@code 169.254.169.254}).
  *
  * <p>Redirects are disabled by the executor, so a check only ever talks to the validated host.
  * The URL is validated again immediately before each execution to catch hosts that start
@@ -127,9 +127,45 @@ public class SsrfGuard {
             if ((bytes[0] & 0xfe) == 0xfc) {
                 return false;
             }
+            // 6to4 2002::/16 embeds an IPv4 address and can tunnel to private destinations.
+            if ((bytes[0] & 0xff) == 0x20 && (bytes[1] & 0xff) == 0x02) {
+                return false;
+            }
+            // NAT64 64:ff9b::/96 and 64:ff9b:1::/48 translate to IPv4 and can embed private ones.
+            if (isNat64(bytes)) {
+                return false;
+            }
+            // Teredo 2001::/32 tunnels IPv4 traffic.
+            if ((bytes[0] & 0xff) == 0x20 && (bytes[1] & 0xff) == 0x01
+                    && bytes[2] == 0 && bytes[3] == 0) {
+                return false;
+            }
+            // 2001:db8::/32 documentation range.
+            if ((bytes[0] & 0xff) == 0x20 && (bytes[1] & 0xff) == 0x01
+                    && (bytes[2] & 0xff) == 0x0d && (bytes[3] & 0xff) == 0xb8) {
+                return false;
+            }
             return true;
         }
         return isPublicIpv4(bytes[0], bytes[1], bytes[2], bytes[3]);
+    }
+
+    private boolean isNat64(byte[] bytes) {
+        if ((bytes[0] & 0xff) != 0x00 || (bytes[1] & 0xff) != 0x64
+                || (bytes[2] & 0xff) != 0xff || (bytes[3] & 0xff) != 0x9b) {
+            return false;
+        }
+        // 64:ff9b::/96
+        boolean middleZero = true;
+        for (int i = 4; i < 12; i++) {
+            if (bytes[i] != 0) {
+                middleZero = false;
+                break;
+            }
+        }
+        // 64:ff9b:1::/48
+        boolean hasLocalPrefix = (bytes[4] & 0xff) == 0x00 && (bytes[5] & 0xff) == 0x01;
+        return middleZero || hasLocalPrefix;
     }
 
     private boolean isIpv4Mapped(byte[] bytes) {
@@ -169,6 +205,20 @@ public class SsrfGuard {
         }
         // 192.0.0.0/24 IETF protocol assignments
         if (a == 192 && second == 0 && third == 0) {
+            return false;
+        }
+        // 192.0.2.0/24 TEST-NET-1, 198.51.100.0/24 TEST-NET-2, 203.0.113.0/24 TEST-NET-3
+        if (a == 192 && second == 0 && third == 2) {
+            return false;
+        }
+        if (a == 198 && second == 51 && third == 100) {
+            return false;
+        }
+        if (a == 203 && second == 0 && third == 113) {
+            return false;
+        }
+        // 192.88.99.0/24 6to4 relay anycast
+        if (a == 192 && second == 88 && third == 99) {
             return false;
         }
         // 198.18.0.0/15 benchmarking

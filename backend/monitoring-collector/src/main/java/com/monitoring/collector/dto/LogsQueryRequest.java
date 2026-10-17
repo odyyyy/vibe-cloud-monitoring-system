@@ -5,6 +5,7 @@ import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -38,6 +39,7 @@ public class LogsQueryRequest {
     public static final int MAX_SEARCH_TEXT_LENGTH = 200;
 
     @NotNull(message = "applicationId is required")
+    @Positive(message = "applicationId must be positive")
     private Long applicationId;
 
     /** Optional severity filter; {@code null} means "all levels". */

@@ -26,7 +26,10 @@ import java.time.Instant;
 public class LogEventPayload {
 
     public static final int MAX_MESSAGE_LENGTH = 8192;
-    public static final int MAX_CONTEXT_LENGTH = 16384;
+
+    // MySQL TEXT stores at most 65535 bytes; 8192 characters fit even when every character
+    // is 4 bytes in UTF-8, so a validated payload can never overflow the column.
+    public static final int MAX_CONTEXT_LENGTH = 8192;
 
     @NotNull(message = "level is required")
     private LogLevel level;

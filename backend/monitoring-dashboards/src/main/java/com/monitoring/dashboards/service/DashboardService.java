@@ -14,6 +14,7 @@ import com.monitoring.dashboards.entity.Widget;
 import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
 import com.monitoring.dashboards.exception.DashboardNotFoundException;
 import com.monitoring.dashboards.exception.InvalidWidgetConfigException;
+import com.monitoring.dashboards.exception.WidgetLimitExceededException;
 import com.monitoring.dashboards.exception.WidgetNotFoundException;
 import com.monitoring.dashboards.repository.DashboardRepository;
 import com.monitoring.dashboards.repository.WidgetRepository;
@@ -81,8 +82,7 @@ public class DashboardService {
         Dashboard dashboard = getOwnedDashboard(ownerId, dashboardId);
 
         if (widgetRepository.countByDashboard_Id(dashboardId) >= MAX_WIDGETS_PER_DASHBOARD) {
-            throw new IllegalStateException(
-                    "A dashboard cannot have more than " + MAX_WIDGETS_PER_DASHBOARD + " widgets");
+            throw new WidgetLimitExceededException(MAX_WIDGETS_PER_DASHBOARD);
         }
 
         Widget widget = Widget.builder()

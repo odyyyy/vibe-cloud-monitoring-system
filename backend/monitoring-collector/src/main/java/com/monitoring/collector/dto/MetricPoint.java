@@ -1,5 +1,7 @@
 package com.monitoring.collector.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -13,9 +15,10 @@ import java.time.Instant;
 import java.util.Map;
 
 /**
- * Одна точка метрики в батче приёма.
- * {@code timestamp} — момент измерения в UTC.
- * {@code tags} — опциональные метки, например {"host": "server-1", "env": "prod"}.
+ * A single metric point inside an ingestion batch.
+ * {@code timestamp} is the measurement instant in UTC.
+ * {@code tags} are optional labels, for example {"host": "server-1", "env": "prod"};
+ * tag names and values are bounded to the widths of their storage columns.
  */
 @Getter
 @Setter
@@ -24,8 +27,13 @@ import java.util.Map;
 @Builder
 public class MetricPoint {
 
+    public static final int MAX_NAME_LENGTH = 200;
+    public static final int MAX_TAGS = 50;
+    public static final int MAX_TAG_KEY_LENGTH = 100;
+    public static final int MAX_TAG_VALUE_LENGTH = 500;
+
     @NotBlank(message = "metric name is required")
-    @Size(max = 200, message = "metric name must be at most 200 characters")
+    @Size(max = MAX_NAME_LENGTH, message = "metric name must be at most " + MAX_NAME_LENGTH + " characters")
     private String name;
 
     @NotNull(message = "metric value is required")
@@ -34,6 +42,17 @@ public class MetricPoint {
     @NotNull(message = "metric timestamp is required")
     private Instant timestamp;
 
-    @Size(max = 50, message = "at most 50 tags are allowed per metric")
-    private Map<String, String> tags;
+    @Size(max = MAX_TAGS, message = "at most " + MAX_TAGS + " tags are allowed per metric")
+    private Map<
+            @NotBlank(message = "tag keys must not be blank")
+            @Size(max = MAX_TAG_KEY_LENGTH, message = "tag keys must be at most " + MAX_TAG_KEY_LENGTH + " characters") String,
+            @NotNull(message = "tag values must not be null")
+            @Size(max = MAX_TAG_VALUE_LENGTH, message = "tag values must be at most " + MAX_TAG_VALUE_LENGTH + " characters") String> tags;
+
+    /** Rejects NaN and infinities, which JSON parsers accept but databases cannot store. */
+    @JsonIgnore
+    @AssertTrue(message = "value must be a finite number")
+    public boolean isValueFinite() {
+        return value == null || Double.isFinite(value);
+    }
 }
