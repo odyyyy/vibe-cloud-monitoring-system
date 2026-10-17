@@ -1,21 +1,16 @@
 import { useMemo, useState, type DragEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Activity, LayoutGrid, Layers, ScrollText } from 'lucide-react'
+import { LayoutGrid } from 'lucide-react'
 import { ApiError } from '../../api/client'
 import type { Dashboard } from '../../api/dashboards'
 import { useDashboardsQuery } from '../../api/dashboards'
 import { DashboardSection } from '../../components/dashboards/DashboardSection'
+import { WorkspaceSummaryCards } from '../../components/overview/WorkspaceSummaryCards'
 import { Button } from '../../components/ui/button'
 import { Skeleton } from '../../components/ui/skeleton'
 import { DEFAULT_POLLING_INTERVAL_MS } from '../../features/dashboards/polling'
 import { useDashboardOrder } from '../../features/dashboards/useDashboardOrder'
 import { useAuthStore } from '../../store/authStore'
-
-const PLACEHOLDER_CARDS = [
-  { title: 'Agents', description: 'No agents connected yet.', icon: Layers },
-  { title: 'Metrics', description: 'No metrics received yet.', icon: Activity },
-  { title: 'Logs', description: 'No log events received yet.', icon: ScrollText },
-]
 
 export default function OverviewPage() {
   const user = useAuthStore((state) => state.user)
@@ -60,21 +55,7 @@ export default function OverviewPage() {
         </p>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {PLACEHOLDER_CARDS.map((card) => {
-          const Icon = card.icon
-          return (
-            <article key={card.title} className="rounded-2xl border border-white/10 bg-[#0b101b]/60 p-5">
-              <div className="flex items-center gap-2 text-slate-400">
-                <Icon className="h-4 w-4" aria-hidden="true" />
-                <h2 className="text-sm font-medium text-slate-200">{card.title}</h2>
-              </div>
-              <p className="mt-4 text-2xl font-semibold text-slate-500">—</p>
-              <p className="mt-1 text-xs text-slate-500">{card.description}</p>
-            </article>
-          )
-        })}
-      </div>
+      <WorkspaceSummaryCards />
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
