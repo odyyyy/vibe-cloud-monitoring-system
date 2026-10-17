@@ -36,7 +36,7 @@ export function ApplicationsTable({ applications, onEdit, onRegenerate, onDelete
               {formatDateTime(application.createdAt)}
             </TableCell>
             <TableCell className="text-right">
-              <DropdownMenu>
+              <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <Button
                     type="button"
