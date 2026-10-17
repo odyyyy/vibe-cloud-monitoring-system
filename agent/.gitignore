@@ -1,0 +1,7 @@
+# Compiled agent binary (see README: go build -o agent ./cmd/agent)
+/agent
+/agent.exe
+
+# Local log read offsets written by the agent
+/.agent_state.json
+/.agent_state.json.tmp

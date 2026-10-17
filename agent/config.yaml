@@ -4,3 +4,19 @@
 backend_url: "http://localhost:8080"
 api_key: "REPLACE_WITH_YOUR_API_KEY"
 interval_seconds: 15
+
+# Log collection. Each item tails exactly one file and forwards new lines to
+# POST /api/v1/ingest/logs. Leave the list empty to disable log collection.
+#
+#   logs:
+#     - path: /var/log/my-app/app.log     # exact file, never a directory
+#       service_name: my-app              # optional; defaults to the file name
+#       level_pattern: 'level=(\w+)'      # optional; first capture group is the level
+#
+# Batching: a batch is flushed every log_flush_seconds, or immediately once
+# log_batch_size events are buffered (backend allows at most 1000 per request).
+# state_file stores read offsets so collection resumes after a restart.
+logs: []
+log_batch_size: 500
+log_flush_seconds: 5
+state_file: ".agent_state.json"

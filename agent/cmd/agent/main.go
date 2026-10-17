@@ -3,12 +3,18 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
+
+	"github.com/vibemonitoring/agent/internal/config"
+	"github.com/vibemonitoring/agent/internal/logs"
+	"github.com/vibemonitoring/agent/internal/metrics"
+	"github.com/vibemonitoring/agent/internal/transport"
 )
 
 const defaultConfigPath = "config.yaml"
@@ -19,7 +25,7 @@ func main() {
 
 	logger := log.New(os.Stdout, "agent: ", log.LstdFlags|log.LUTC)
 
-	cfg, err := LoadConfig(*configPath)
+	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
 		logger.Fatalf("configuration error: %v", err)
 	}
@@ -28,22 +34,38 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	collector := NewMetricsCollector()
-	client := NewHTTPMetricsClient(cfg)
+	httpClient := transport.NewClient(cfg.BackendURL, cfg.APIKey)
+	collector := metrics.NewCollector()
+	metricsClient := metrics.NewClient(httpClient)
 
 	logger.Printf("starting: backend=%s interval=%s api_key=%s",
-		cfg.BackendURL, cfg.interval(), maskKey(cfg.APIKey))
+		cfg.BackendURL, cfg.Interval(), config.MaskKey(cfg.APIKey))
 
-	run(ctx, logger, cfg, collector, client)
+	var wg sync.WaitGroup
+	if len(cfg.Logs) > 0 {
+		logsClient := logs.NewClient(httpClient)
+		pipeline, err := logs.NewPipeline(cfg, logsClient, logger)
+		if err != nil {
+			logger.Fatalf("log pipeline error: %v", err)
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			pipeline.Run(ctx)
+		}()
+	}
+
+	run(ctx, logger, cfg, collector, metricsClient)
+	wg.Wait()
 	logger.Print("stopped")
 }
 
 // run collects and sends metrics immediately and then on every configured
 // interval until the context is cancelled.
-func run(ctx context.Context, logger *log.Logger, cfg *Config, collector *MetricsCollector, client *HTTPMetricsClient) {
+func run(ctx context.Context, logger *log.Logger, cfg *config.Config, collector *metrics.Collector, client *metrics.Client) {
 	collectAndSend(ctx, logger, collector, client)
 
-	ticker := time.NewTicker(cfg.interval())
+	ticker := time.NewTicker(cfg.Interval())
 	defer ticker.Stop()
 
 	for {
@@ -56,58 +78,20 @@ func run(ctx context.Context, logger *log.Logger, cfg *Config, collector *Metric
 	}
 }
 
-func collectAndSend(ctx context.Context, logger *log.Logger, collector *MetricsCollector, client *HTTPMetricsClient) {
-	metrics, err := collector.Collect(ctx)
+func collectAndSend(ctx context.Context, logger *log.Logger, collector *metrics.Collector, client *metrics.Client) {
+	points, err := collector.Collect(ctx)
 	if err != nil {
 		logger.Printf("metric collection failed: %v", err)
 		return
 	}
-	sendWithBackoff(ctx, logger, client, metrics)
+	sendWithBackoff(ctx, logger, client, points)
 }
 
-const (
-	initialBackoff = 1 * time.Second
-	maxBackoff     = 60 * time.Second
-)
-
-// sendWithBackoff retries the same batch with exponential backoff until it is
-// accepted or the context is cancelled. It never panics and never exits the
-// process, so a temporarily unavailable backend does not crash the agent.
-func sendWithBackoff(ctx context.Context, logger *log.Logger, client *HTTPMetricsClient, metrics []MetricPoint) {
-	backoff := initialBackoff
-
-	for attempt := 1; ; attempt++ {
-		err := client.Send(ctx, metrics)
-		if err == nil {
-			logger.Printf("sent %d metrics", len(metrics))
-			return
-		}
-		if ctx.Err() != nil {
-			logger.Printf("ingest cancelled after %d attempt(s): %v", attempt, err)
-			return
-		}
-
-		wait := jitter(backoff)
-		logger.Printf("ingest attempt %d failed: %v; retrying in %s", attempt, err, wait)
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(wait):
-		}
-
-		if backoff < maxBackoff {
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
-			}
-		}
-	}
-}
-
-// jitter adds up to 20% random spread to avoid synchronized retries across
-// multiple agents.
-func jitter(d time.Duration) time.Duration {
-	spread := float64(d) * 0.2
-	return d + time.Duration(rand.Float64()*spread)
+// sendWithBackoff retries the metric batch with exponential backoff until it is
+// accepted or the context is cancelled. Log batches use the same helper through
+// the log pipeline.
+func sendWithBackoff(ctx context.Context, logger *log.Logger, client *metrics.Client, points []metrics.Point) {
+	transport.Retry(ctx, logger, fmt.Sprintf("%d metrics", len(points)), func(sendCtx context.Context) error {
+		return client.Send(sendCtx, points)
+	})
 }
