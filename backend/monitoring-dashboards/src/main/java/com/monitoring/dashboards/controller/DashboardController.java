@@ -7,6 +7,7 @@ import com.monitoring.dashboards.dto.UpdateDashboardRequest;
 import com.monitoring.dashboards.dto.UpdateWidgetRequest;
 import com.monitoring.dashboards.dto.WidgetResponse;
 import com.monitoring.dashboards.service.DashboardService;
+import com.monitoring.audit.annotation.AuditLog;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -60,6 +61,7 @@ public class DashboardController {
     }
 
     @DeleteMapping("/{id}")
+    @AuditLog(action = "DASHBOARD_DELETED", resourceId = "#id")
     public ResponseEntity<Void> deleteDashboard(@PathVariable Long id) {
         dashboardService.deleteDashboard(currentUserId(), id);
         return ResponseEntity.noContent().build();

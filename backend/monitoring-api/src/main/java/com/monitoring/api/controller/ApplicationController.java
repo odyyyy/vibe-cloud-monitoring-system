@@ -6,6 +6,7 @@ import com.monitoring.storage.dto.ApplicationUpdateRequest;
 import com.monitoring.storage.dto.ApplicationWithKeyResponse;
 import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.service.ApplicationService;
+import com.monitoring.audit.annotation.AuditLog;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -55,6 +56,7 @@ public class ApplicationController {
     }
 
     @DeleteMapping("/{id}")
+    @AuditLog(action = "APPLICATION_DELETED", resourceId = "#id")
     public ResponseEntity<Void> deleteApplication(@PathVariable Long id) {
         applicationService.deleteApplication(id, currentUserId());
         return ResponseEntity.noContent().build();
@@ -65,6 +67,7 @@ public class ApplicationController {
      * so it cannot be retrieved again.
      */
     @PostMapping("/{id}/regenerate-api-key")
+    @AuditLog(action = "API_KEY_REGENERATED", resourceId = "#id")
     public ResponseEntity<ApplicationWithKeyResponse> regenerateApiKey(@PathVariable Long id) {
         return ResponseEntity.ok(applicationService.regenerateApiKey(id, currentUserId()));
     }
