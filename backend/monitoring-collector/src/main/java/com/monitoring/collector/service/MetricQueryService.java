@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.OptionalDouble;
 
 /**
  * Reads and aggregates stored metrics.
@@ -72,5 +73,20 @@ public class MetricQueryService {
     public List<String> listMetricNames(Long userId, Long applicationId) {
         applicationService.getOwnedApplication(applicationId, userId);
         return metricSampleRepository.findDistinctNames(applicationId, PageRequest.of(0, MAX_METRIC_NAMES));
+    }
+
+    /**
+     * Most recent raw value for a metric within {@code [since, now]}, or empty when the
+     * application has not reported that metric recently.
+     *
+     * <p>Ownership is verified before reading, so alert evaluation cannot observe another
+     * tenant's series. Missing data returns empty rather than a sentinel value so callers can
+     * distinguish "no data" from a real zero.
+     */
+    public OptionalDouble latestValue(Long userId, Long applicationId, String metricName, Instant since) {
+        applicationService.getOwnedApplication(applicationId, userId);
+        List<Double> values = metricSampleRepository.findRecentValues(
+                applicationId, metricName, since, PageRequest.of(0, 1));
+        return values.isEmpty() ? OptionalDouble.empty() : OptionalDouble.of(values.get(0));
     }
 }

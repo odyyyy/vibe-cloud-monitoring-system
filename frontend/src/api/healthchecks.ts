@@ -63,8 +63,14 @@ export function getHealthCheckResults(configId: number, limit?: number): Promise
 }
 
 export const healthChecksQueryKey = ['health-checks'] as const
+export const healthChecksListQueryKey = ['health-checks', 'list'] as const
 export const healthCheckResultsQueryKey = (configId: number | null, limit: number) =>
   ['health-checks', configId ?? null, 'results', limit] as const
+
+/** Loads the bare list of checks (no per-check result lookups) for selection inputs. */
+export function useHealthChecksListQuery() {
+  return useQuery({ queryKey: healthChecksListQueryKey, queryFn: getHealthChecks })
+}
 
 /**
  * Loads every check together with its latest result. The list endpoint does not include
