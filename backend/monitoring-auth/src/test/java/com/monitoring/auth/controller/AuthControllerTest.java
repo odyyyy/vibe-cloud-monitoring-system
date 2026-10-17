@@ -11,6 +11,7 @@ import com.monitoring.auth.dto.ResetPasswordRequest;
 import com.monitoring.auth.dto.VerifyEmailRequest;
 import com.monitoring.auth.exception.EmailAlreadyUsedException;
 import com.monitoring.auth.exception.EmailNotVerifiedException;
+import com.monitoring.auth.exception.InvalidCredentialsException;
 import com.monitoring.auth.exception.InvalidTokenException;
 import com.monitoring.auth.service.AuthService;
 
@@ -122,7 +123,7 @@ class AuthControllerTest {
     @Test
     void login_invalidPassword() throws Exception {
         BDDMockito.given(authService.login(ArgumentMatchers.any(LoginRequest.class)))
-                .willThrow(new RuntimeException("Invalid password"));
+                .willThrow(new InvalidCredentialsException());
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

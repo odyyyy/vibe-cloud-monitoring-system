@@ -22,6 +22,18 @@ import java.util.Set;
  * <p>Redirects are disabled by the executor, so a check only ever talks to the validated host.
  * The URL is validated again immediately before each execution to catch hosts that start
  * resolving to a private address after configuration.
+ *
+ * <h2>DNS rebinding / TOCTOU</h2>
+ * The hard guarantee is that <em>every</em> address the host resolves to must be public. There
+ * is still an inherent time-of-check/time-of-use gap: {@link #assertPublicHost} resolves the
+ * host and the underlying client resolves it again when it opens the connection, so a host that
+ * changes its answer between the two lookups could theoretically reach an internal address.
+ * The window is bounded in practice by validating as late as possible (immediately before the
+ * request), rejecting hosts that resolve to any non-public address, disabling redirects, and
+ * relying on the JVM's positive DNS cache ({@code networkaddress.cache.ttl}) so the address used
+ * for the connection is the one that was just validated. Fully eliminating the gap requires an
+ * HTTP client with a pluggable resolver (which {@code java.net.http.HttpClient} does not offer);
+ * the {@link HealthCheckExecutor} documents that residual risk.
  */
 @Component
 public class SsrfGuard {

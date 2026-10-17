@@ -274,10 +274,9 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `MYSQL_USER` / `MYSQL_PASSWORD` | Пользователь приложения | `admin` / `admin_password` |
 | `SPRING_DATASOURCE_URL` | JDBC URL | `jdbc:mysql://mysql:3306/...` |
 | `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` | Учётные данные БД | |
-| `JWT_SECRET` | Секрет подписи JWT (мин. 32 символа) | `change-me-...` |
+| `JWT_SECRET` | Секрет подписи JWT (обязателен, мин. 32 символа) | `change-me-...` |
 | `JWT_EXPIRATION` | TTL access-токена, мс | `86400000` |
-| `JWT_REFRESH_EXPIRATION` | TTL refresh-токена, мс | `604800000` |
-| `SPRING_H2_CONSOLE_ENABLED` | Включить H2 console (только dev) | `true` |
+| `SPRING_H2_CONSOLE_ENABLED` | Включить H2 console (по умолчанию выключено; включайте только в dev) | `false` |
 | `SPRING_JPA_HIBERNATE_DDL_AUTO` | Режим схемы Hibernate (схему создаёт Flyway) | `validate` |
 | `APP_AUTH_VERIFICATION_URL` | Фронтенд-URL страницы подтверждения email | `http://localhost:3000/verify-email` |
 | `APP_AUTH_RESET_URL` | Фронтенд-URL страницы сброса пароля | `http://localhost:3000/reset-password` |
@@ -390,6 +389,11 @@ docker run -d \
 | `PUT` | `/api/applications/{id}` | Переименовать | JWT (владелец) |
 | `DELETE` | `/api/applications/{id}` | Удалить | JWT (владелец) |
 | `POST` | `/api/applications/{id}/regenerate-api-key` | Перевыпустить API-ключ | JWT (владелец) |
+
+API-ключи хранятся только как SHA-256-хэш. Открытый ключ возвращается один раз — в ответе на
+создание (`POST /api/applications`) или перевыпуск (`POST .../regenerate-api-key`); в списке и
+в ответе `GET` ключ не возвращается. Старый plaintext-ключ после миграции недействителен и
+требует перевыпуска.
 
 ### Metrics — `/api/v1`
 
@@ -554,8 +558,11 @@ H2, frontend-тесты — jsdom.
 
 - **Не коммитьте** реальные ключи, токены, пароли и приватные сертификаты. В `.env` и
   `config.yaml` — только плейсхолдеры.
-- `JWT_SECRET` обязателен, минимальная длина — 32 символа; меняйте значение по умолчанию
-  перед публичным запуском.
+- `JWT_SECRET` обязателен: без него приложение не стартует (нет небезопасного значения по
+  умолчанию), минимальная длина — 32 символа. Задавайте его через окружение.
+- Небезопасные для продакшена вещи выключены по умолчанию и включаются только в профиле `dev`:
+  H2 console (`SPRING_H2_CONSOLE_ENABLED=false`), вывод SQL (`spring.jpa.show-sql=false`) и
+  детали Actuator health (`management.endpoint.health.show-details=never`).
 - Разделяйте credentials: человеческие сессии (JWT) и агенты (`X-API-Key`). API-ключ
   приложения не даёт доступа к административным операциям или дашбордам.
 - Изоляция tenant'ов: backend выводит владельца из аутентификации/ключа и проверяет

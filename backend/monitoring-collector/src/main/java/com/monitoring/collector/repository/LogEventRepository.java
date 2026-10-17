@@ -10,6 +10,4 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
  * parameters in JPQL, and so paging/sorting stays server-side.
  */
 public interface LogEventRepository extends JpaRepository<LogEvent, Long>, JpaSpecificationExecutor<LogEvent> {
-
-    long countByApplication_Id(Long applicationId);
 }

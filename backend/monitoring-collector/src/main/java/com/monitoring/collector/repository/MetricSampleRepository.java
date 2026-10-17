@@ -11,10 +11,6 @@ import java.util.List;
 
 public interface MetricSampleRepository extends JpaRepository<MetricSample, Long> {
 
-    List<MetricSample> findByApplication_Id(Long applicationId);
-
-    long countByApplication_Id(Long applicationId);
-
     /**
      * Distinct metric names recorded for an application, ordered alphabetically.
      *

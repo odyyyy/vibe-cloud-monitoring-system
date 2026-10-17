@@ -7,7 +7,9 @@ import com.monitoring.auth.entity.AuthTokenType;
 import com.monitoring.auth.entity.User;
 import com.monitoring.auth.exception.EmailAlreadyUsedException;
 import com.monitoring.auth.exception.EmailNotVerifiedException;
+import com.monitoring.auth.exception.InvalidCredentialsException;
 import com.monitoring.auth.exception.InvalidTokenException;
+import com.monitoring.auth.exception.UserNotFoundException;
 import com.monitoring.auth.jwt.JwtTokenProvider;
 import com.monitoring.auth.repository.AuthTokenRepository;
 import com.monitoring.auth.repository.UserRepository;
@@ -62,11 +64,14 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
+        // An unknown username and a wrong password produce the same error so the response does
+        // not reveal whether an account exists. The verified check runs only after the password
+        // is confirmed, so verification status is not leaked to an unauthenticated caller.
         User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(InvalidCredentialsException::new);
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new RuntimeException("Invalid password");
+            throw new InvalidCredentialsException();
         }
 
         if (!user.isEmailVerified()) {
@@ -115,7 +120,7 @@ public class AuthService {
 
     public UserProfileResponse getProfile(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(UserNotFoundException::new);
         return new UserProfileResponse(user.getId(), user.getUsername(), user.getEmail(), user.getAvatarUrl());
     }
 

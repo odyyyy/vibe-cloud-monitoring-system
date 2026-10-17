@@ -11,6 +11,7 @@ import com.monitoring.auth.entity.AuthTokenType;
 import com.monitoring.auth.entity.User;
 import com.monitoring.auth.exception.EmailAlreadyUsedException;
 import com.monitoring.auth.exception.EmailNotVerifiedException;
+import com.monitoring.auth.exception.InvalidCredentialsException;
 import com.monitoring.auth.exception.InvalidTokenException;
 import com.monitoring.auth.jwt.JwtTokenProvider;
 import com.monitoring.auth.repository.AuthTokenRepository;
@@ -192,8 +193,15 @@ class AuthServiceTest {
         given(passwordEncoder.matches("supersecret", "hashed")).willReturn(false);
 
         assertThatThrownBy(() -> authService.login(loginRequest()))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessage("Invalid password");
+                .isInstanceOf(InvalidCredentialsException.class);
+    }
+
+    @Test
+    void login_rejectsUnknownUserWithSameErrorAsWrongPassword() {
+        given(userRepository.findByUsername("ada")).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.login(loginRequest()))
+                .isInstanceOf(InvalidCredentialsException.class);
     }
 
     // --- verify email ---

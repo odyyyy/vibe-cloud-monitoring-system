@@ -21,6 +21,12 @@ import java.time.Duration;
  * <p>Redirects are disabled (a redirect to an internal address would defeat the SSRF guard),
  * connect and request timeouts are bounded, and request/response bodies are discarded. The
  * target URL is re-validated against {@link SsrfGuard} right before the request.
+ *
+ * <p>Residual DNS-rebinding risk: {@code java.net.http.HttpClient} resolves the host itself and
+ * offers no hook to pin the validated address, so a host could in theory answer with a public
+ * address during validation and a private one at connect time. Validating immediately before
+ * the request (which primes the JVM DNS cache with the validated answer) and never following
+ * redirects keeps this window as small as the JDK allows; see {@link SsrfGuard} for the details.
  */
 @Component
 public class HealthCheckExecutor {

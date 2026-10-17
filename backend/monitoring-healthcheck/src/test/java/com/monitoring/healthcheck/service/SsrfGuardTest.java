@@ -82,4 +82,11 @@ class SsrfGuardTest {
         URI uri = guard.validate("http://8.8.8.8/health");
         assertEquals("http://8.8.8.8/health", uri.toString());
     }
+
+    @Test
+    void assertPublicHost_rejectsHostThatResolvesToLoopback() {
+        // "localhost" resolves locally (to 127.0.0.1 / ::1), so no external DNS is needed.
+        URI uri = guard.parse("http://localhost/health");
+        assertThrows(InvalidTargetUrlException.class, () -> guard.assertPublicHost(uri));
+    }
 }

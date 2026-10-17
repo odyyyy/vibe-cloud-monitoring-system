@@ -12,6 +12,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+/**
+ * Единственная catch-all цепочка Spring Security для всего приложения (deny-by-default).
+ *
+ * <p>Отдельные цепочки существуют только там, где нужен другой механизм аутентификации:
+ * {@code IngestSecurityConfig} (@Order(0)) для ingestion по {@code X-API-Key}. Все остальные
+ * публичные пути перечислены явно в {@code endpoints}; незаявленный путь по умолчанию запрещён.
+ */
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -22,8 +29,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        String[] endpoints = { 
-            "/api/auth/**", 
+        String[] endpoints = {
+            "/api/auth/**",
             "/api/hello",
             "/actuator/health",
             "/actuator/info",
@@ -31,6 +38,11 @@ public class SecurityConfig {
             "/v3/api-docs/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
+            // Внутренняя обработка ошибок Spring (иначе необработанная ошибка станет 403).
+            "/error",
+            // Веб-консоль H2 доступна только когда она включена (spring.h2.console.enabled),
+            // иначе сервлет не зарегистрирован и путь возвращает 404.
+            "/h2-console/**",
             // Ingestion не требует JWT: агенты аутентифицируются по X-API-Key
             // в отдельной цепочке (IngestSecurityConfig в monitoring-collector).
             "/api/v1/ingest/**",
@@ -55,7 +67,9 @@ public class SecurityConfig {
                 // Health checks require an authenticated user; ownership is verified
                 // in HealthCheckService.
                 .requestMatchers("/api/v1/health-checks/**").authenticated()
-                .anyRequest().permitAll()
+                // Deny by default: any endpoint not explicitly listed above is not reachable.
+                // Public endpoints must be added to `endpoints` deliberately.
+                .anyRequest().denyAll()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 

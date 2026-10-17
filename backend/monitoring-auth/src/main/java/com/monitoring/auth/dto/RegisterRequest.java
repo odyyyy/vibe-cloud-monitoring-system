@@ -4,9 +4,13 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
+// @Getter/@Setter instead of @Data: Lombok's generated toString() on @Data would include the
+// password, which could leak into logs.
+@Getter
+@Setter
 public class RegisterRequest {
 
     @NotBlank(message = "Username is required")

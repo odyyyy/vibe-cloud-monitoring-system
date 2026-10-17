@@ -2,9 +2,13 @@ package com.monitoring.auth.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
+// @Getter/@Setter instead of @Data: Lombok's generated toString() on @Data would include the
+// token and the new password, which could leak into logs.
+@Getter
+@Setter
 public class ResetPasswordRequest {
 
     @NotBlank(message = "Token is required")

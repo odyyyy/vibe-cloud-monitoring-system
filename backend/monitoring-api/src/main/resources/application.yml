@@ -14,38 +14,21 @@ spring:
       # Схема управляется только Flyway. Hibernate проверяет соответствие сущностей
       # реальной схеме и не изменяет её.
       ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:validate}
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
+    show-sql: false
   flyway:
     enabled: true
     # Миграции лежат в classpath:db/migration каждого модуля (V1..Vn на общем classpath).
     locations: classpath:db/migration
   h2:
     console:
-      enabled: ${SPRING_H2_CONSOLE_ENABLED:true}
+      # По умолчанию выключено: веб-консоль БД не должна быть доступна в рабочем окружении.
+      enabled: ${SPRING_H2_CONSOLE_ENABLED:false}
       path: /h2-console
 
-# Профиль для разработки
----
-spring:
-  config:
-    activate:
-      on-profile: dev
-  datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:monitoring;MODE=MySQL}
-    username: ${SPRING_DATASOURCE_USERNAME:sa}
-    password: ${SPRING_DATASOURCE_PASSWORD:}
-    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.h2.Driver}
-  h2:
-    console:
-      enabled: ${SPRING_H2_CONSOLE_ENABLED:true}
-      path: /h2-console
-
-# Настройки JWT
+# Настройки JWT. Секрет обязателен (минимум 32 символа) и задаётся через окружение;
+# приложение не стартует без него, чтобы не подписывать токены публично известным ключом.
 jwt:
-  secret: ${JWT_SECRET:mySuperSecretKeyForJwtTokenGenerationMustBeLongEnough1234567890!@#}
+  secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:86400000}
 
 # Подтверждение email и сброс пароля.
@@ -58,12 +41,38 @@ app:
     reset-url: ${APP_AUTH_RESET_URL:http://localhost:3000/reset-password}
     log-emails: ${APP_AUTH_LOG_EMAILS:true}
 
-# Настройки для Docker HEALTHCHECK
+# Actuator. Детали health скрыты от анонимных клиентов; показываются только в dev-профиле.
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+# Профиль для локальной разработки.
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:monitoring;MODE=MySQL}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.h2.Driver}
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  h2:
+    console:
+      enabled: ${SPRING_H2_CONSOLE_ENABLED:true}
+      path: /h2-console
+
+management:
   endpoint:
     health:
       show-details: always
