@@ -18,7 +18,9 @@ export function ApplicationSelect({ value, onChange, id, disabled }: Application
 
   return (
     <Select
-      value={value === null ? undefined : String(value)}
+      // Keep the Select controlled with an empty string instead of `undefined`, which
+      // would make Radix treat it as uncontrolled and retain a stale selection.
+      value={value === null ? '' : String(value)}
       onValueChange={handleChange}
       disabled={disabled || isLoading || isError || applications.length === 0}
     >

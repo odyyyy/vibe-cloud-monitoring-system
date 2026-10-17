@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import type { Widget, WidgetType } from '../../api/dashboards'
 import { parseWidgetConfig } from '../../features/dashboards/schemas'
+import { metricColor } from '../../features/metrics/catalog'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { LogTableWidget } from './LogTableWidget'
@@ -34,15 +35,27 @@ export function DashboardWidget({ widget, showActions, refetchInterval, onEdit, 
         : 'Status'
     : TYPE_LABELS[widget.type]
 
+  const accent =
+    parsed.success && parsed.data.type === 'METRIC_CHART' ? metricColor(parsed.data.config.metricName) : null
+
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0b101b]/60">
-      <header className="widget-drag-handle flex items-center gap-2 border-b border-white/5 px-3 py-2">
-        <Badge variant="muted" className="shrink-0">
-          {TYPE_LABELS[widget.type]}
-        </Badge>
-        <h3 className="min-w-0 flex-1 truncate text-sm font-medium text-slate-200">{title}</h3>
+      <header className="flex items-center gap-2 border-b border-white/5 px-3 py-2">
+        <span className="widget-drag-handle flex min-w-0 flex-1 cursor-grab items-center gap-2 active:cursor-grabbing">
+          <Badge variant="muted" className="shrink-0">
+            {TYPE_LABELS[widget.type]}
+          </Badge>
+          {accent ? (
+            <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: accent }} />
+          ) : null}
+          <h3 className="min-w-0 flex-1 truncate text-sm font-medium text-slate-200">{title}</h3>
+        </span>
         {showActions ? (
-          <div className="flex shrink-0 items-center gap-1">
+          <div
+            className="flex shrink-0 items-center gap-1"
+            onMouseDown={(event) => event.stopPropagation()}
+            onTouchStart={(event) => event.stopPropagation()}
+          >
             <Button
               type="button"
               variant="ghost"

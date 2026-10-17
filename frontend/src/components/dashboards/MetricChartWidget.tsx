@@ -1,6 +1,7 @@
 import { MetricChart } from '../metrics/MetricChart'
 import type { MetricChartConfig } from '../../features/dashboards/schemas'
 import { useMetricChartWidget } from '../../features/dashboards/useWidgetData'
+import { metricColor } from '../../features/metrics/catalog'
 
 interface MetricChartWidgetProps {
   widgetId: number
@@ -17,6 +18,7 @@ export function MetricChartWidget({ widgetId, config, refetchInterval }: MetricC
       bare
       heightClass="h-full"
       title={config.metricName}
+      accentColor={metricColor(config.metricName)}
       data={query.data ?? []}
       isLoading={query.isLoading}
       error={error}

@@ -6,6 +6,7 @@ import { useMetricsQuery } from '../../api/metrics'
 import { MetricChart } from '../../components/metrics/MetricChart'
 import { MetricsFilterPanel } from '../../components/metrics/MetricsFilterPanel'
 import { metricsQuerySchema } from '../../features/metrics/schemas'
+import { metricColor, metricLabel } from '../../features/metrics/catalog'
 import {
   DEFAULT_METRIC_FILTERS,
   filtersFromSearchParams,
@@ -92,7 +93,8 @@ export default function MetricsExplorerPage() {
 
       {params ? (
         <MetricChart
-          title={`${params.metricName} · ${params.aggregation}`}
+          title={`${metricLabel(params.metricName)} · ${params.aggregation}`}
+          accentColor={metricColor(params.metricName)}
           data={query.data ?? []}
           isLoading={query.isLoading}
           error={query.error instanceof ApiError ? query.error : null}
