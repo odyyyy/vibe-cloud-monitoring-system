@@ -54,7 +54,7 @@ class LogsQueryIntegrationTest {
         applicationRepository.deleteAll();
         application = applicationRepository.save(Application.builder()
                 .name("logs-it-app")
-                .apiKey("app_logs_it")
+                .apiKeyHash("app_logs_it")
                 .ownerId(OWNER_ID)
                 .build());
     }
@@ -138,7 +138,7 @@ class LogsQueryIntegrationTest {
     void isolatesByApplication() {
         Application other = applicationRepository.save(Application.builder()
                 .name("other-logs-app")
-                .apiKey("app_other_logs")
+                .apiKeyHash("app_other_logs")
                 .ownerId(2L)
                 .build());
         saveLog(application, LogLevel.INFO, "mine", Instant.parse("2026-10-09T10:00:00Z"));
@@ -154,7 +154,7 @@ class LogsQueryIntegrationTest {
     void queryingForeignApplication_throwsAccessDenied() {
         Application other = applicationRepository.save(Application.builder()
                 .name("foreign-app")
-                .apiKey("app_foreign")
+                .apiKeyHash("app_foreign")
                 .ownerId(2L)
                 .build());
 

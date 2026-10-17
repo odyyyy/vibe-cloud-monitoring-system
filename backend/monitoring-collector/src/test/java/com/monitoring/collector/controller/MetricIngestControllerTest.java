@@ -50,7 +50,7 @@ class MetricIngestControllerTest {
         application = Application.builder()
                 .id(APP_ID)
                 .name("my-app")
-                .apiKey("app_key")
+                .apiKeyHash("app_key_hash")
                 .ownerId(1L)
                 .build();
         SecurityContextHolder.getContext().setAuthentication(

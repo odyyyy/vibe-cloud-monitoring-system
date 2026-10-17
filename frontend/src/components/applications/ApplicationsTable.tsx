@@ -10,7 +10,6 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table'
-import { ApiKeyCell } from './ApiKeyCell'
 
 interface ApplicationsTableProps {
   applications: Application[]
@@ -25,7 +24,6 @@ export function ApplicationsTable({ applications, onEdit, onRegenerate, onDelete
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
-          <TableHead>API Key</TableHead>
           <TableHead>Created At</TableHead>
           <TableHead className="w-16 text-right">Actions</TableHead>
         </TableRow>
@@ -34,9 +32,6 @@ export function ApplicationsTable({ applications, onEdit, onRegenerate, onDelete
         {applications.map((application) => (
           <TableRow key={application.id}>
             <TableCell className="font-medium text-slate-100">{application.name}</TableCell>
-            <TableCell>
-              <ApiKeyCell apiKey={application.apiKey} />
-            </TableCell>
             <TableCell className="whitespace-nowrap text-slate-400">
               {formatDateTime(application.createdAt)}
             </TableCell>

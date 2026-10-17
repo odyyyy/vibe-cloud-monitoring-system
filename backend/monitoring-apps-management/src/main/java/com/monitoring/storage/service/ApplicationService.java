@@ -1,10 +1,12 @@
 package com.monitoring.storage.service;
 
 import com.monitoring.storage.dto.ApplicationCreateRequest;
+import com.monitoring.storage.dto.ApplicationWithKeyResponse;
 import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.exception.ApplicationAccessDeniedException;
 import com.monitoring.storage.exception.ApplicationNotFoundException;
 import com.monitoring.storage.repository.ApplicationRepository;
+import com.monitoring.storage.security.ApiKeyHasher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,18 +24,20 @@ public class ApplicationService {
     private final ApplicationRepository applicationRepository;
 
     @Transactional
-    public Application createApplication(ApplicationCreateRequest request, Long ownerId) {
-        if (applicationRepository.findByName(request.getName()).isPresent()) {
+    public ApplicationWithKeyResponse createApplication(ApplicationCreateRequest request, Long ownerId) {
+        String name = request.getName().trim();
+        if (applicationRepository.existsByNameAndOwnerId(name, ownerId)) {
             throw new IllegalStateException("An application with this name already exists");
         }
 
+        String rawApiKey = generateUniqueApiKey();
         Application application = Application.builder()
-                .name(request.getName())
-                .apiKey(generateUniqueApiKey())
+                .name(name)
+                .apiKeyHash(ApiKeyHasher.hash(rawApiKey))
                 .ownerId(ownerId)
                 .build();
 
-        return applicationRepository.save(application);
+        return toWithKeyResponse(applicationRepository.save(application), rawApiKey);
     }
 
     public List<Application> findByOwnerId(Long ownerId) {
@@ -49,26 +53,34 @@ public class ApplicationService {
     @Transactional
     public Application updateApplication(Long id, String name, Long ownerId) {
         Application application = getOwnedApplication(id, ownerId);
+        String newName = name.trim();
 
-        if (!application.getName().equals(name) && applicationRepository.findByName(name).isPresent()) {
+        if (!application.getName().equals(newName)
+                && applicationRepository.existsByNameAndOwnerId(newName, ownerId)) {
             throw new IllegalStateException("Application name is already taken by another application");
         }
 
-        application.setName(name);
+        application.setName(newName);
         return applicationRepository.save(application);
     }
 
     @Transactional
-    public Application regenerateApiKey(Long id, Long ownerId) {
+    public ApplicationWithKeyResponse regenerateApiKey(Long id, Long ownerId) {
         Application application = getOwnedApplication(id, ownerId);
-        application.setApiKey(generateUniqueApiKey());
-        return applicationRepository.save(application);
+        String rawApiKey = generateUniqueApiKey();
+        application.setApiKeyHash(ApiKeyHasher.hash(rawApiKey));
+        return toWithKeyResponse(applicationRepository.save(application), rawApiKey);
     }
 
     @Transactional
     public void deleteApplication(Long id, Long ownerId) {
         Application application = getOwnedApplication(id, ownerId);
         applicationRepository.delete(application);
+    }
+
+    private ApplicationWithKeyResponse toWithKeyResponse(Application application, String rawApiKey) {
+        return new ApplicationWithKeyResponse(
+                application.getId(), application.getName(), rawApiKey, application.getCreatedAt());
     }
 
     private Application findOrThrow(Long id) {
@@ -86,7 +98,7 @@ public class ApplicationService {
         String apiKey;
         do {
             apiKey = API_KEY_PREFIX + UUID.randomUUID();
-        } while (applicationRepository.existsByApiKey(apiKey));
+        } while (applicationRepository.existsByApiKeyHash(ApiKeyHasher.hash(apiKey)));
         return apiKey;
     }
 }

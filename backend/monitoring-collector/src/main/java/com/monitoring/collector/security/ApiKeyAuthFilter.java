@@ -2,6 +2,7 @@ package com.monitoring.collector.security;
 
 import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.repository.ApplicationRepository;
+import com.monitoring.storage.security.ApiKeyHasher;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -51,7 +52,8 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
             return;
         }
 
-        Optional<Application> application = applicationRepository.findByApiKey(apiKey);
+        // Only the hash of the key is stored, so hash the presented value before lookup.
+        Optional<Application> application = applicationRepository.findByApiKeyHash(ApiKeyHasher.hash(apiKey));
         if (application.isEmpty()) {
             reject(response, "Invalid API key");
             return;

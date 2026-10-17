@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import { ApiError } from '../../api/client'
-import type { Application } from '../../api/applications'
+import type { Application, CreatedApplication } from '../../api/applications'
 import { useCreateApplicationMutation, useUpdateApplicationMutation } from '../../api/useApplications'
 import { FormField } from '../auth/FormField'
 import { Button } from '../ui/button'
@@ -22,7 +22,7 @@ interface ApplicationFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   application?: Application | null
-  onCreated?: (application: Application) => void
+  onCreated?: (application: CreatedApplication) => void
 }
 
 export function ApplicationFormDialog({

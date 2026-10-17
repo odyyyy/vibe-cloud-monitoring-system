@@ -32,7 +32,7 @@ class MetricIngestServiceTest {
         application = Application.builder()
                 .id(7L)
                 .name("my-app")
-                .apiKey("app_key")
+                .apiKeyHash("app_key_hash")
                 .ownerId(1L)
                 .build();
     }

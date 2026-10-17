@@ -3,6 +3,7 @@ package com.monitoring.api.controller;
 import com.monitoring.storage.dto.ApplicationCreateRequest;
 import com.monitoring.storage.dto.ApplicationResponse;
 import com.monitoring.storage.dto.ApplicationUpdateRequest;
+import com.monitoring.storage.dto.ApplicationWithKeyResponse;
 import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.service.ApplicationService;
 import jakarta.validation.Valid;
@@ -32,11 +33,11 @@ public class ApplicationController {
     }
 
     @PostMapping
-    public ResponseEntity<ApplicationResponse> createApplication(
+    public ResponseEntity<ApplicationWithKeyResponse> createApplication(
             @Valid @RequestBody ApplicationCreateRequest request) {
-        Application application = applicationService.createApplication(request, currentUserId());
-        URI location = URI.create("/api/applications/" + application.getId());
-        return ResponseEntity.created(location).body(ApplicationResponse.fromEntity(application));
+        ApplicationWithKeyResponse application = applicationService.createApplication(request, currentUserId());
+        URI location = URI.create("/api/applications/" + application.id());
+        return ResponseEntity.created(location).body(application);
     }
 
     @GetMapping("/{id}")
@@ -59,10 +60,13 @@ public class ApplicationController {
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * Rotates the agent API key. The new plaintext key is returned once and is not stored,
+     * so it cannot be retrieved again.
+     */
     @PostMapping("/{id}/regenerate-api-key")
-    public ResponseEntity<ApplicationResponse> regenerateApiKey(@PathVariable Long id) {
-        Application application = applicationService.regenerateApiKey(id, currentUserId());
-        return ResponseEntity.ok(ApplicationResponse.fromEntity(application));
+    public ResponseEntity<ApplicationWithKeyResponse> regenerateApiKey(@PathVariable Long id) {
+        return ResponseEntity.ok(applicationService.regenerateApiKey(id, currentUserId()));
     }
 
     private Long currentUserId() {

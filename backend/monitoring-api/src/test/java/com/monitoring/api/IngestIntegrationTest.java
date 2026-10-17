@@ -3,6 +3,7 @@ package com.monitoring.api;
 import com.monitoring.collector.repository.MetricSampleRepository;
 import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.repository.ApplicationRepository;
+import com.monitoring.storage.security.ApiKeyHasher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +42,7 @@ class IngestIntegrationTest {
         applicationRepository.deleteAll();
         applicationRepository.save(Application.builder()
                 .name("integration-app")
-                .apiKey("app_integration_test")
+                .apiKeyHash(ApiKeyHasher.hash("app_integration_test"))
                 .ownerId(1L)
                 .build());
     }

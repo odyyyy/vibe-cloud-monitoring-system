@@ -2,6 +2,7 @@ package com.monitoring.api.controller;
 
 import com.monitoring.api.exception.ApiExceptionHandler;
 import com.monitoring.storage.dto.ApplicationCreateRequest;
+import com.monitoring.storage.dto.ApplicationWithKeyResponse;
 import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.exception.ApplicationAccessDeniedException;
 import com.monitoring.storage.exception.ApplicationNotFoundException;
@@ -53,26 +54,30 @@ class ApplicationControllerTest {
         return Application.builder()
                 .id(10L)
                 .name("my-app")
-                .apiKey("app_abc")
+                .apiKeyHash("hashed-key")
                 .ownerId(USER_ID)
                 .build();
     }
 
+    private ApplicationWithKeyResponse sampleAppWithKey() {
+        return new ApplicationWithKeyResponse(10L, "my-app", "app_abc", null);
+    }
+
     @Test
-    void listApplications_returnsOwnApps() throws Exception {
+    void listApplications_returnsOwnAppsWithoutApiKey() throws Exception {
         when(applicationService.findByOwnerId(USER_ID)).thenReturn(List.of(sampleApp()));
 
         mockMvc.perform(get("/api/applications"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(10))
                 .andExpect(jsonPath("$[0].name").value("my-app"))
-                .andExpect(jsonPath("$[0].apiKey").value("app_abc"));
+                .andExpect(jsonPath("$[0].apiKey").doesNotExist());
     }
 
     @Test
-    void createApplication_valid_returnsCreatedWithLocation() throws Exception {
+    void createApplication_valid_returnsCreatedWithLocationAndKey() throws Exception {
         when(applicationService.createApplication(any(ApplicationCreateRequest.class), eq(USER_ID)))
-                .thenReturn(sampleApp());
+                .thenReturn(sampleAppWithKey());
 
         mockMvc.perform(post("/api/applications")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -130,7 +135,7 @@ class ApplicationControllerTest {
 
     @Test
     void regenerateApiKey_success_returnsNewKey() throws Exception {
-        when(applicationService.regenerateApiKey(10L, USER_ID)).thenReturn(sampleApp());
+        when(applicationService.regenerateApiKey(10L, USER_ID)).thenReturn(sampleAppWithKey());
 
         mockMvc.perform(post("/api/applications/10/regenerate-api-key"))
                 .andExpect(status().isOk())

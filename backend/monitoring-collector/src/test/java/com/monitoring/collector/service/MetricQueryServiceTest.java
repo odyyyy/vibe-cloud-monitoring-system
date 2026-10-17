@@ -113,7 +113,7 @@ class MetricQueryServiceTest {
         return Application.builder()
                 .id(APP_ID)
                 .name("my-app")
-                .apiKey("app_key")
+                .apiKeyHash("app_key_hash")
                 .ownerId(USER_ID)
                 .build();
     }

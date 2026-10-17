@@ -1,12 +1,15 @@
 package com.monitoring.storage.service;
 
 import com.monitoring.storage.dto.ApplicationCreateRequest;
+import com.monitoring.storage.dto.ApplicationWithKeyResponse;
 import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.exception.ApplicationAccessDeniedException;
 import com.monitoring.storage.exception.ApplicationNotFoundException;
 import com.monitoring.storage.repository.ApplicationRepository;
+import com.monitoring.storage.security.ApiKeyHasher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 import java.util.Optional;
@@ -39,33 +42,53 @@ class ApplicationServiceTest {
         return Application.builder()
                 .id(10L)
                 .name("my-app")
-                .apiKey("app_old")
+                .apiKeyHash(ApiKeyHasher.hash("app_old"))
                 .ownerId(ownerId)
                 .build();
     }
 
     @Test
-    void createApplication_generatesApiKeyWithPrefix() {
-        when(applicationRepository.findByName("my-app")).thenReturn(Optional.empty());
-        when(applicationRepository.existsByApiKey(any())).thenReturn(false);
+    void createApplication_generatesApiKeyAndPersistsOnlyItsHash() {
+        when(applicationRepository.existsByNameAndOwnerId("my-app", OWNER_ID)).thenReturn(false);
+        when(applicationRepository.existsByApiKeyHash(any())).thenReturn(false);
         when(applicationRepository.save(any(Application.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        Application created = applicationService.createApplication(createRequest("my-app"), OWNER_ID);
+        ApplicationWithKeyResponse created = applicationService.createApplication(createRequest("my-app"), OWNER_ID);
 
-        assertNotNull(created.getApiKey());
-        assertTrue(created.getApiKey().startsWith("app_"), "API key must start with app_ prefix");
-        assertEquals(OWNER_ID, created.getOwnerId());
-        verify(applicationRepository).save(any(Application.class));
+        assertNotNull(created.apiKey());
+        assertTrue(created.apiKey().startsWith("app_"), "API key must start with app_ prefix");
+
+        ArgumentCaptor<Application> captor = ArgumentCaptor.forClass(Application.class);
+        verify(applicationRepository).save(captor.capture());
+        Application saved = captor.getValue();
+        assertEquals(OWNER_ID, saved.getOwnerId());
+        assertEquals(ApiKeyHasher.hash(created.apiKey()), saved.getApiKeyHash());
+        assertNotEquals(created.apiKey(), saved.getApiKeyHash(), "raw key must never be persisted");
     }
 
     @Test
     void createApplication_duplicateName_throwsConflict() {
-        when(applicationRepository.findByName("my-app")).thenReturn(Optional.of(appOwnedBy(OWNER_ID)));
+        when(applicationRepository.existsByNameAndOwnerId("my-app", OWNER_ID)).thenReturn(true);
 
         assertThrows(IllegalStateException.class,
                 () -> applicationService.createApplication(createRequest("my-app"), OWNER_ID));
         verify(applicationRepository, never()).save(any());
+    }
+
+    @Test
+    void createApplication_sameNameAllowedForDifferentOwner() {
+        when(applicationRepository.existsByNameAndOwnerId("my-app", OTHER_USER_ID)).thenReturn(false);
+        when(applicationRepository.existsByApiKeyHash(any())).thenReturn(false);
+        when(applicationRepository.save(any(Application.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        applicationService.createApplication(createRequest("my-app"), OTHER_USER_ID);
+
+        ArgumentCaptor<Application> captor = ArgumentCaptor.forClass(Application.class);
+        verify(applicationRepository).save(captor.capture());
+        assertEquals(OTHER_USER_ID, captor.getValue().getOwnerId());
+        verify(applicationRepository).existsByNameAndOwnerId("my-app", OTHER_USER_ID);
     }
 
     @Test
@@ -120,16 +143,17 @@ class ApplicationServiceTest {
     }
 
     @Test
-    void regenerateApiKey_owner_returnsNewPrefixedKey() {
+    void regenerateApiKey_owner_returnsNewPrefixedKeyAndStoresItsHash() {
         Application owned = appOwnedBy(OWNER_ID);
         when(applicationRepository.findById(10L)).thenReturn(Optional.of(owned));
-        when(applicationRepository.existsByApiKey(any())).thenReturn(false);
+        when(applicationRepository.existsByApiKeyHash(any())).thenReturn(false);
         when(applicationRepository.save(any(Application.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        Application updated = applicationService.regenerateApiKey(10L, OWNER_ID);
+        ApplicationWithKeyResponse updated = applicationService.regenerateApiKey(10L, OWNER_ID);
 
-        assertNotEquals("app_old", updated.getApiKey());
-        assertTrue(updated.getApiKey().startsWith("app_"));
+        assertTrue(updated.apiKey().startsWith("app_"));
+        assertEquals(ApiKeyHasher.hash(updated.apiKey()), owned.getApiKeyHash());
+        assertNotEquals(ApiKeyHasher.hash("app_old"), owned.getApiKeyHash());
     }
 }

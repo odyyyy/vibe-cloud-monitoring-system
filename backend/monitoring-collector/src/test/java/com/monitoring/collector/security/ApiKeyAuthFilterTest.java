@@ -2,6 +2,7 @@ package com.monitoring.collector.security;
 
 import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.repository.ApplicationRepository;
+import com.monitoring.storage.security.ApiKeyHasher;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,13 +36,15 @@ class ApiKeyAuthFilterTest {
     }
 
     private Application app() {
-        return Application.builder().id(7L).name("my-app").apiKey("app_valid").ownerId(1L).build();
+        return Application.builder().id(7L).name("my-app")
+                .apiKeyHash(ApiKeyHasher.hash("app_valid")).ownerId(1L).build();
     }
 
     @Test
     void validKey_authenticatesAndContinuesChain() throws Exception {
         Application application = app();
-        when(applicationRepository.findByApiKey("app_valid")).thenReturn(Optional.of(application));
+        when(applicationRepository.findByApiKeyHash(ApiKeyHasher.hash("app_valid")))
+                .thenReturn(Optional.of(application));
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader(ApiKeyAuthFilter.API_KEY_HEADER, "app_valid");
@@ -72,7 +75,7 @@ class ApiKeyAuthFilterTest {
 
     @Test
     void invalidKey_returns401AndStopsChain() throws Exception {
-        when(applicationRepository.findByApiKey("app_bad")).thenReturn(Optional.empty());
+        when(applicationRepository.findByApiKeyHash(ApiKeyHasher.hash("app_bad"))).thenReturn(Optional.empty());
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader(ApiKeyAuthFilter.API_KEY_HEADER, "app_bad");

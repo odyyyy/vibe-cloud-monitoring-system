@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import type { Application } from '../../api/applications'
+import type { Application, CreatedApplication } from '../../api/applications'
 import { useApplicationsQuery } from '../../api/useApplications'
+import { ApiKeyRevealDialog } from '../../components/applications/ApiKeyRevealDialog'
 import { ApplicationFormDialog } from '../../components/applications/ApplicationFormDialog'
 import { ApplicationsTable } from '../../components/applications/ApplicationsTable'
 import { DeleteApplicationDialog } from '../../components/applications/DeleteApplicationDialog'
@@ -17,6 +18,7 @@ export default function ApplicationsPage() {
   const [editing, setEditing] = useState<Application | null>(null)
   const [regenerateTarget, setRegenerateTarget] = useState<Application | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Application | null>(null)
+  const [createdKey, setCreatedKey] = useState<{ apiKey: string; name: string } | null>(null)
 
   const openCreate = () => {
     setEditing(null)
@@ -26,6 +28,10 @@ export default function ApplicationsPage() {
   const openEdit = (application: Application) => {
     setEditing(application)
     setFormOpen(true)
+  }
+
+  const handleCreated = (application: CreatedApplication) => {
+    setCreatedKey({ apiKey: application.apiKey, name: application.name })
   }
 
   const applications = data ?? []
@@ -67,7 +73,17 @@ export default function ApplicationsPage() {
         open={formOpen}
         onOpenChange={setFormOpen}
         application={editing}
-        onCreated={() => setFormOpen(false)}
+        onCreated={handleCreated}
+      />
+      <ApiKeyRevealDialog
+        open={createdKey !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCreatedKey(null)
+          }
+        }}
+        apiKey={createdKey?.apiKey ?? null}
+        applicationName={createdKey?.name}
       />
       <RegenerateKeyDialog
         open={regenerateTarget !== null}
@@ -137,7 +153,6 @@ function ApplicationsTableSkeleton() {
         {[0, 1, 2, 3, 4].map((row) => (
           <div key={row} className="flex items-center gap-4">
             <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-4 w-56" />
             <Skeleton className="h-4 w-36" />
             <Skeleton className="ml-auto h-8 w-8 rounded-md" />
           </div>

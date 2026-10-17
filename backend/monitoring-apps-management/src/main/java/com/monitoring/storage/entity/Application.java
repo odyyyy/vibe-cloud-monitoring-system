@@ -9,8 +9,7 @@ import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import java.time.LocalDateTime;
-import java.util.UUID;
+import java.time.Instant;
 
 @Entity
 @Table(name = "applications")
@@ -28,15 +27,19 @@ public class Application {
     @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(nullable = false, unique = true, length = 64)
-    private String apiKey;
+    /**
+     * SHA-256 hash of the agent API key, never the plaintext value.
+     * The raw key is generated and shown to the owner exactly once.
+     */
+    @Column(name = "api_key_hash", nullable = false, unique = true, length = 64)
+    private String apiKeyHash;
 
     @Column(nullable = false)
     private Long ownerId;
 
     @CreationTimestamp
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     @UpdateTimestamp
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 }

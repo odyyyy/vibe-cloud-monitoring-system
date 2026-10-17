@@ -50,7 +50,7 @@ class MetricsQueryIntegrationTest {
         applicationRepository.deleteAll();
         application = applicationRepository.save(Application.builder()
                 .name("query-it-app")
-                .apiKey("app_query_it")
+                .apiKeyHash("app_query_it")
                 .ownerId(1L)
                 .build());
     }
@@ -111,7 +111,7 @@ class MetricsQueryIntegrationTest {
     void aggregateAverage_isolatesByApplicationId() {
         Application other = applicationRepository.save(Application.builder()
                 .name("other-app")
-                .apiKey("app_other")
+                .apiKeyHash("app_other")
                 .ownerId(2L)
                 .build());
         saveSample(application, "cpu_usage", 10.0, Instant.parse("2026-10-09T12:00:00Z"));
@@ -139,7 +139,7 @@ class MetricsQueryIntegrationTest {
     void findDistinctNames_isolatesByApplicationId() {
         Application other = applicationRepository.save(Application.builder()
                 .name("other-names-app")
-                .apiKey("app_other_names")
+                .apiKeyHash("app_other_names")
                 .ownerId(2L)
                 .build());
         saveSample(application, "cpu_usage", 1.0, Instant.parse("2026-10-09T12:00:00Z"));
