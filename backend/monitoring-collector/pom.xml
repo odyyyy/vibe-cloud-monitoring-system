@@ -15,7 +15,7 @@
     <artifactId>monitoring-collector</artifactId>
 
     <dependencies>
-        <!-- Приложения/API-ключи: фильтр аутентификации агента ищет Application по ключу -->
+        <!-- Applications/API keys: the agent auth filter looks up an Application by key -->
         <dependency>
             <groupId>com.monitoring</groupId>
             <artifactId>monitoring-apps-management</artifactId>
@@ -27,7 +27,7 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- Spring Security (фильтр X-API-Key, SecurityFilterChain) -->
+        <!-- Spring Security (X-API-Key filter, SecurityFilterChain) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
@@ -59,10 +59,21 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- H2 для тестов -->
+        <!-- H2 for tests -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            Flyway (test only): the integration test boots the module against the real
+            migrations (classpath:db/migration) instead of a Hibernate-generated schema, so
+            schema changes are exercised on H2 in MySQL mode.
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

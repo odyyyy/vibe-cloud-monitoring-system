@@ -3,13 +3,49 @@ package com.monitoring.collector.repository;
 import com.monitoring.collector.entity.MetricSample;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 public interface MetricSampleRepository extends JpaRepository<MetricSample, Long> {
+
+    /**
+     * Ids of raw samples whose event time is strictly before {@code cutoffEpoch}
+     * (epoch seconds), bounded by {@code limit}.
+     *
+     * <p>Used to delete expired raw data in bounded batches so a single statement never
+     * locks a large part of the table.
+     */
+    @Query(value = "SELECT id FROM metric_samples"
+            + " WHERE UNIX_TIMESTAMP(event_time) < :cutoffEpoch"
+            + " ORDER BY id"
+            + " LIMIT :limit", nativeQuery = true)
+    List<Long> findIdsBefore(@Param("cutoffEpoch") long cutoffEpoch, @Param("limit") int limit);
+
+    /**
+     * Deletes the samples with the given ids. Tag rows are removed by the database via the
+     * {@code ON DELETE CASCADE} foreign key.
+     */
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM MetricSample m WHERE m.id IN :ids")
+    int deleteByIds(@Param("ids") Collection<Long> ids);
+
+    /**
+     * Number of distinct metric names recorded for the given applications since {@code since}.
+     *
+     * <p>Scoped by application ids so a tenant can only count its own series; an empty id
+     * collection must be handled by the caller (an empty {@code IN} clause is not valid SQL).
+     */
+    @Query("SELECT COUNT(DISTINCT m.name) FROM MetricSample m"
+            + " WHERE m.application.id IN :applicationIds AND m.timestamp >= :since")
+    long countDistinctNamesSince(@Param("applicationIds") Collection<Long> applicationIds,
+                                 @Param("since") Instant since);
 
     /**
      * Distinct metric names recorded for an application, ordered alphabetically.
@@ -19,6 +55,23 @@ public interface MetricSampleRepository extends JpaRepository<MetricSample, Long
      */
     @Query("SELECT DISTINCT m.name FROM MetricSample m WHERE m.application.id = :applicationId ORDER BY m.name")
     List<String> findDistinctNames(@Param("applicationId") Long applicationId, Pageable pageable);
+
+    /**
+     * Most recent raw values for a metric within a time window, newest first.
+     *
+     * <p>Used by alert evaluation to obtain the latest observed value. Filtered strictly by
+     * {@code application_id} (tenant scope) and bounded via {@link Pageable} (callers request a
+     * single row), so an evaluation never scans an unbounded number of samples.
+     */
+    @Query("SELECT m.value FROM MetricSample m"
+            + " WHERE m.application.id = :applicationId"
+            + " AND m.name = :metricName"
+            + " AND m.timestamp >= :since"
+            + " ORDER BY m.timestamp DESC")
+    List<Double> findRecentValues(@Param("applicationId") Long applicationId,
+                                  @Param("metricName") String metricName,
+                                  @Param("since") Instant since,
+                                  Pageable pageable);
 
     /**
      * Aggregates metric points into time buckets of {@code intervalSeconds} seconds.
