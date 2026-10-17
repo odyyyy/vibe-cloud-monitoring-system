@@ -24,7 +24,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -70,7 +70,7 @@ class DashboardControllerTest {
                 .id(5L)
                 .name("Prod")
                 .userId(USER_ID)
-                .createdAt(LocalDateTime.parse("2026-10-09T10:00:00"))
+                .createdAt(Instant.parse("2026-10-09T10:00:00Z"))
                 .widgets(List.of())
                 .build();
     }

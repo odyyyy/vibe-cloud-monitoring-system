@@ -20,7 +20,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 
 /**
  * A user-owned synthetic HTTP check configuration.
@@ -74,11 +73,11 @@ public class HealthCheckConfig {
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
+    private Instant updatedAt;
 
     @Column(name = "last_checked_at")
     private Instant lastCheckedAt;

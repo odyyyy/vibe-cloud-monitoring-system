@@ -3,10 +3,11 @@ const HAS_TIMEZONE = /(Z|[+-]\d{2}:?\d{2})$/i
 /**
  * Parses a backend timestamp as a UTC instant.
  *
- * The backend serializes `LocalDateTime` values without a timezone designator
- * (e.g. `2024-05-01T10:15:30`). Those values are stored as UTC, so a trailing
- * `Z` is appended before parsing to prevent the browser from interpreting them
- * in the local timezone. Values that already carry an offset are used as-is.
+ * The backend serializes timestamps as UTC instants (e.g. `2024-05-01T10:15:30Z`).
+ * Older values may still arrive without a timezone designator (e.g. `2024-05-01T10:15:30`);
+ * those are treated as UTC, so a trailing `Z` is appended before parsing to prevent the
+ * browser from interpreting them in the local timezone. Values that already carry an
+ * offset are used as-is.
  */
 export function parseUtcInstant(value: string): Date | null {
   if (!value) {

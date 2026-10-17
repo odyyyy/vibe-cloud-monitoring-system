@@ -6,7 +6,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 @Getter
@@ -18,7 +18,7 @@ public class DashboardResponse {
     private Long id;
     private String name;
     private Long userId;
-    private LocalDateTime createdAt;
+    private Instant createdAt;
     private List<WidgetResponse> widgets;
 
     public static DashboardResponse fromEntity(Dashboard dashboard) {
