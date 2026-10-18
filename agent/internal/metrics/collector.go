@@ -20,6 +20,11 @@ const (
 	metricDiskUsage   = "system.disk.usage"
 )
 
+// Version is the agent version reported to the cloud as the "version" metric tag so the
+// fleet view can show which build each host runs. Override at build time with
+// -ldflags "-X github.com/vibemonitoring/agent/internal/metrics.Version=1.2.3".
+var Version = "0.1.0"
+
 // Point mirrors the backend MetricPoint DTO. Timestamp is an event time in UTC
 // serialized as RFC 3339, which Spring maps onto java.time.Instant.
 type Point struct {
@@ -47,7 +52,7 @@ func NewCollector() *Collector {
 // metric could be collected at all.
 func (c *Collector) Collect(ctx context.Context) ([]Point, error) {
 	now := time.Now().UTC()
-	tags := map[string]string{"host": c.hostname}
+	tags := c.tags()
 	points := make([]Point, 0, 3)
 
 	// interval=0 reports usage since the previous call (or since boot on the
@@ -81,4 +86,10 @@ func diskPath() string {
 		return "C:"
 	}
 	return "/"
+}
+
+// tags returns the labels attached to every collected point. The host identifies the agent
+// instance in the cloud fleet view, the version lets the platform show which build it runs.
+func (c *Collector) tags() map[string]string {
+	return map[string]string{"host": c.hostname, "version": Version}
 }
