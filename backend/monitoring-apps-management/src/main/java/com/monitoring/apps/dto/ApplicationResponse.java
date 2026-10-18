@@ -1,6 +1,6 @@
-package com.monitoring.storage.dto;
+package com.monitoring.apps.dto;
 
-import com.monitoring.storage.entity.Application;
+import com.monitoring.apps.entity.Application;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;

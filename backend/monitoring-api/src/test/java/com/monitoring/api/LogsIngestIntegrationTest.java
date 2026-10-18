@@ -2,9 +2,9 @@ package com.monitoring.api;
 
 import com.monitoring.collector.dto.LogEventPayload;
 import com.monitoring.collector.repository.LogEventRepository;
-import com.monitoring.storage.entity.Application;
-import com.monitoring.storage.repository.ApplicationRepository;
-import com.monitoring.storage.security.ApiKeyHasher;
+import com.monitoring.apps.entity.Application;
+import com.monitoring.apps.repository.ApplicationRepository;
+import com.monitoring.apps.security.ApiKeyHasher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

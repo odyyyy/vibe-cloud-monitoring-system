@@ -2,7 +2,7 @@ package com.monitoring.collector.controller;
 
 import com.monitoring.collector.dto.TraceIngestRequest;
 import com.monitoring.collector.service.TraceIngestService;
-import com.monitoring.storage.entity.Application;
+import com.monitoring.apps.entity.Application;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

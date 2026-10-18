@@ -1,13 +1,13 @@
-package com.monitoring.storage.service;
+package com.monitoring.apps.service;
 
-import com.monitoring.storage.dto.ApplicationCreateRequest;
-import com.monitoring.storage.dto.ApplicationWithKeyResponse;
-import com.monitoring.storage.entity.Application;
-import com.monitoring.storage.exception.ApplicationAccessDeniedException;
-import com.monitoring.storage.exception.ApplicationNameConflictException;
-import com.monitoring.storage.exception.ApplicationNotFoundException;
-import com.monitoring.storage.repository.ApplicationRepository;
-import com.monitoring.storage.security.ApiKeyHasher;
+import com.monitoring.apps.dto.ApplicationCreateRequest;
+import com.monitoring.apps.dto.ApplicationWithKeyResponse;
+import com.monitoring.apps.entity.Application;
+import com.monitoring.apps.exception.ApplicationAccessDeniedException;
+import com.monitoring.apps.exception.ApplicationNameConflictException;
+import com.monitoring.apps.exception.ApplicationNotFoundException;
+import com.monitoring.apps.repository.ApplicationRepository;
+import com.monitoring.apps.security.ApiKeyHasher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

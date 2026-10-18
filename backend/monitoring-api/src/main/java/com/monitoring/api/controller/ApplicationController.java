@@ -1,11 +1,11 @@
 package com.monitoring.api.controller;
 
-import com.monitoring.storage.dto.ApplicationCreateRequest;
-import com.monitoring.storage.dto.ApplicationResponse;
-import com.monitoring.storage.dto.ApplicationUpdateRequest;
-import com.monitoring.storage.dto.ApplicationWithKeyResponse;
-import com.monitoring.storage.entity.Application;
-import com.monitoring.storage.service.ApplicationService;
+import com.monitoring.apps.dto.ApplicationCreateRequest;
+import com.monitoring.apps.dto.ApplicationResponse;
+import com.monitoring.apps.dto.ApplicationUpdateRequest;
+import com.monitoring.apps.dto.ApplicationWithKeyResponse;
+import com.monitoring.apps.entity.Application;
+import com.monitoring.apps.service.ApplicationService;
 import com.monitoring.audit.annotation.AuditLog;
 import com.monitoring.auth.organization.entity.MembershipRole;
 import com.monitoring.auth.organization.security.RequireRole;

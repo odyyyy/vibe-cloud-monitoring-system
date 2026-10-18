@@ -2,7 +2,7 @@ package com.monitoring.collector.controller;
 
 import com.monitoring.collector.dto.MetricIngestRequest;
 import com.monitoring.collector.service.MetricIngestService;
-import com.monitoring.storage.entity.Application;
+import com.monitoring.apps.entity.Application;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

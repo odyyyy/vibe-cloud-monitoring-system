@@ -1,4 +1,4 @@
-package com.monitoring.storage.dto;
+package com.monitoring.apps.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

@@ -1,4 +1,4 @@
-package com.monitoring.storage.entity;
+package com.monitoring.apps.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

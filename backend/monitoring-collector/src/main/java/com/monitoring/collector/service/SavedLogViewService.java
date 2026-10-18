@@ -11,7 +11,7 @@ import com.monitoring.collector.exception.SavedLogViewAccessDeniedException;
 import com.monitoring.collector.exception.SavedLogViewLimitExceededException;
 import com.monitoring.collector.exception.SavedLogViewNotFoundException;
 import com.monitoring.collector.repository.SavedLogViewRepository;
-import com.monitoring.storage.service.ApplicationService;
+import com.monitoring.apps.service.ApplicationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

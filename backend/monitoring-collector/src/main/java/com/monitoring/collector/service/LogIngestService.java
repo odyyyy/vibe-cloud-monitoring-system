@@ -4,7 +4,7 @@ import com.monitoring.collector.dto.LogEventPayload;
 import com.monitoring.collector.dto.LogIngestRequest;
 import com.monitoring.collector.entity.LogEvent;
 import com.monitoring.collector.repository.LogEventRepository;
-import com.monitoring.storage.entity.Application;
+import com.monitoring.apps.entity.Application;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

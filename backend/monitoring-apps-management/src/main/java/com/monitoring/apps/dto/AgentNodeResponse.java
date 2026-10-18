@@ -1,6 +1,6 @@
-package com.monitoring.storage.dto;
+package com.monitoring.apps.dto;
 
-import com.monitoring.storage.entity.AgentNode;
+import com.monitoring.apps.entity.AgentNode;
 
 import java.time.Instant;
 

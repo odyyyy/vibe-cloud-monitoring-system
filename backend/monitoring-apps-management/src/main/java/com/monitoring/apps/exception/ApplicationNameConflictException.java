@@ -1,4 +1,4 @@
-package com.monitoring.storage.exception;
+package com.monitoring.apps.exception;
 
 /**
  * Raised when an application name is already used by another application of the same owner.

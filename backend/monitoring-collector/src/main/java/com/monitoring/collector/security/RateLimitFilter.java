@@ -1,7 +1,7 @@
 package com.monitoring.collector.security;
 
 import com.monitoring.collector.config.IngestionQuotaProperties;
-import com.monitoring.storage.entity.Application;
+import com.monitoring.apps.entity.Application;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

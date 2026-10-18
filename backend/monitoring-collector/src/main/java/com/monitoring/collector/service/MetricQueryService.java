@@ -4,7 +4,7 @@ import com.monitoring.collector.dto.AggregatedMetricResponse;
 import com.monitoring.collector.dto.MetricsQueryRequest;
 import com.monitoring.collector.repository.MetricBucketProjection;
 import com.monitoring.collector.repository.MetricSampleRepository;
-import com.monitoring.storage.service.ApplicationService;
+import com.monitoring.apps.service.ApplicationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;

@@ -1,4 +1,4 @@
-package com.monitoring.storage.security;
+package com.monitoring.apps.security;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

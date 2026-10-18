@@ -1,8 +1,8 @@
 package com.monitoring.collector.security;
 
-import com.monitoring.storage.entity.Application;
-import com.monitoring.storage.repository.ApplicationRepository;
-import com.monitoring.storage.security.ApiKeyHasher;
+import com.monitoring.apps.entity.Application;
+import com.monitoring.apps.repository.ApplicationRepository;
+import com.monitoring.apps.security.ApiKeyHasher;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

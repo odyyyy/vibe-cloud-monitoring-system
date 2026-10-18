@@ -1,6 +1,6 @@
-package com.monitoring.storage.repository;
+package com.monitoring.apps.repository;
 
-import com.monitoring.storage.entity.AgentNode;
+import com.monitoring.apps.entity.AgentNode;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

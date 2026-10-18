@@ -5,7 +5,7 @@ import com.monitoring.common.dto.PageResponse;
 import com.monitoring.collector.dto.LogEventResponse;
 import com.monitoring.collector.entity.LogEvent;
 import com.monitoring.collector.repository.LogEventRepository;
-import com.monitoring.storage.service.ApplicationService;
+import com.monitoring.apps.service.ApplicationService;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;

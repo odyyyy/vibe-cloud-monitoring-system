@@ -1,7 +1,7 @@
 package com.monitoring.collector.security;
 
 import com.monitoring.collector.config.IngestionQuotaProperties;
-import com.monitoring.storage.repository.ApplicationRepository;
+import com.monitoring.apps.repository.ApplicationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

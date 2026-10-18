@@ -1,4 +1,4 @@
-package com.monitoring.storage.exception;
+package com.monitoring.apps.exception;
 
 public class ApplicationAccessDeniedException extends RuntimeException {
 

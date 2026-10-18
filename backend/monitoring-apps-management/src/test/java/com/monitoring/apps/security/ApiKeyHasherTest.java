@@ -1,4 +1,4 @@
-package com.monitoring.storage.security;
+package com.monitoring.apps.security;
 
 import org.junit.jupiter.api.Test;
 

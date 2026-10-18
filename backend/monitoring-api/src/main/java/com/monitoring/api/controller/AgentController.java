@@ -1,7 +1,7 @@
 package com.monitoring.api.controller;
 
-import com.monitoring.storage.dto.AgentNodeResponse;
-import com.monitoring.storage.service.AgentService;
+import com.monitoring.apps.dto.AgentNodeResponse;
+import com.monitoring.apps.service.AgentService;
 import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

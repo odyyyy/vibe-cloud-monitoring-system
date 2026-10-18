@@ -1,4 +1,4 @@
-package com.monitoring.storage.dto;
+package com.monitoring.apps.dto;
 
 import java.time.Instant;
 

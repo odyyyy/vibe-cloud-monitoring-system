@@ -1,10 +1,10 @@
-package com.monitoring.storage.service;
+package com.monitoring.apps.service;
 
-import com.monitoring.storage.dto.AgentNodeResponse;
-import com.monitoring.storage.entity.AgentNode;
-import com.monitoring.storage.entity.Application;
-import com.monitoring.storage.exception.ApplicationAccessDeniedException;
-import com.monitoring.storage.repository.AgentNodeRepository;
+import com.monitoring.apps.dto.AgentNodeResponse;
+import com.monitoring.apps.entity.AgentNode;
+import com.monitoring.apps.entity.Application;
+import com.monitoring.apps.exception.ApplicationAccessDeniedException;
+import com.monitoring.apps.repository.AgentNodeRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

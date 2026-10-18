@@ -26,7 +26,7 @@ import com.monitoring.healthcheck.exception.HealthCheckAccessDeniedException;
 import com.monitoring.healthcheck.exception.HealthCheckNotFoundException;
 import com.monitoring.healthcheck.service.HealthCheckService;
 import com.monitoring.healthcheck.service.SsrfGuard;
-import com.monitoring.storage.service.ApplicationService;
+import com.monitoring.apps.service.ApplicationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;

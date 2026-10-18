@@ -1,9 +1,9 @@
-package com.monitoring.storage.service;
+package com.monitoring.apps.service;
 
-import com.monitoring.storage.dto.AgentNodeResponse;
-import com.monitoring.storage.entity.AgentNode;
-import com.monitoring.storage.entity.Application;
-import com.monitoring.storage.repository.AgentNodeRepository;
+import com.monitoring.apps.dto.AgentNodeResponse;
+import com.monitoring.apps.entity.AgentNode;
+import com.monitoring.apps.entity.Application;
+import com.monitoring.apps.repository.AgentNodeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

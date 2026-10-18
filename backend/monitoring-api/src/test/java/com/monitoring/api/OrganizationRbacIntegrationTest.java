@@ -10,7 +10,7 @@ import com.monitoring.auth.organization.service.OrganizationService;
 import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import com.monitoring.auth.repository.UserRepository;
 import com.monitoring.auth.service.EmailSender;
-import com.monitoring.storage.repository.ApplicationRepository;
+import com.monitoring.apps.repository.ApplicationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

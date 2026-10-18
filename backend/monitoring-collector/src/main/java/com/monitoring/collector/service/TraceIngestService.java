@@ -5,7 +5,7 @@ import com.monitoring.collector.dto.TraceIngestRequest;
 import com.monitoring.collector.entity.TraceSpan;
 import com.monitoring.collector.exception.InvalidTraceException;
 import com.monitoring.collector.repository.TraceSpanRepository;
-import com.monitoring.storage.entity.Application;
+import com.monitoring.apps.entity.Application;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

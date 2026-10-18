@@ -1,6 +1,6 @@
 package com.monitoring.collector.entity;
 
-import com.monitoring.storage.entity.Application;
+import com.monitoring.apps.entity.Application;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;

@@ -8,7 +8,7 @@ import com.monitoring.collector.exception.SavedLogViewAccessDeniedException;
 import com.monitoring.collector.exception.SavedLogViewLimitExceededException;
 import com.monitoring.collector.exception.SavedLogViewNotFoundException;
 import com.monitoring.collector.service.SavedLogViewService;
-import com.monitoring.storage.exception.ApplicationAccessDeniedException;
+import com.monitoring.apps.exception.ApplicationAccessDeniedException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

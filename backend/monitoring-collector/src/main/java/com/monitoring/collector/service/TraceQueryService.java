@@ -9,7 +9,7 @@ import com.monitoring.collector.entity.SpanStatus;
 import com.monitoring.collector.entity.TraceSpan;
 import com.monitoring.collector.exception.TraceNotFoundException;
 import com.monitoring.collector.repository.TraceSpanRepository;
-import com.monitoring.storage.service.ApplicationService;
+import com.monitoring.apps.service.ApplicationService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
