@@ -37,7 +37,7 @@ class ApiKeyAuthFilterTest {
 
     private Application app() {
         return Application.builder().id(7L).name("my-app")
-                .apiKeyHash(ApiKeyHasher.hash("app_valid")).ownerId(1L).build();
+                .apiKeyHash(ApiKeyHasher.hash("app_valid")).organizationId(1L).build();
     }
 
     @Test

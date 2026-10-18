@@ -60,7 +60,7 @@ class MetricMaintenanceIntegrationTest {
         application = applicationRepository.save(Application.builder()
                 .name("maintenance-app")
                 .apiKeyHash("maintenance-key-hash")
-                .ownerId(1L)
+                .organizationId(1L)
                 .build());
     }
 
