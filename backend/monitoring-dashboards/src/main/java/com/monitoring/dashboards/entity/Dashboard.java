@@ -26,13 +26,13 @@ import java.util.List;
 /**
  * A user-owned dashboard: a named collection of widgets with a saved layout.
  *
- * <p>Ownership is expressed by {@code ownerId}; every read and write is scoped to the
+ * <p>Ownership is expressed by {@code organizationId}; every read and write is scoped to the
  * authenticated user in the service layer (tenant invariant).
  */
 @Entity
 @Table(
         name = "dashboards",
-        indexes = @Index(name = "idx_dashboards_owner_id", columnList = "owner_id")
+        indexes = @Index(name = "idx_dashboards_organization_id", columnList = "organization_id")
 )
 @Getter
 @Setter
@@ -48,8 +48,8 @@ public class Dashboard {
     @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(name = "owner_id", nullable = false)
-    private Long ownerId;
+    @Column(name = "organization_id", nullable = false)
+    private Long organizationId;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

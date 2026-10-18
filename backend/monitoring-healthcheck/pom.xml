@@ -16,6 +16,12 @@
     <!-- groupId and version are inherited from the parent -->
 
     <dependencies>
+        <!-- Organization tenant context and role checks. -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-auth</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

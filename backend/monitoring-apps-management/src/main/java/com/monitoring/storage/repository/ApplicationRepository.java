@@ -16,7 +16,7 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
      * Applications are identified by name only within a single owner, so two tenants may reuse
      * the same name (for example "prod") without colliding or learning about each other.
      */
-    boolean existsByNameAndOwnerId(String name, Long ownerId);
+    boolean existsByNameAndOrganizationId(String name, Long organizationId);
 
-    List<Application> findByOwnerId(Long ownerId);
+    List<Application> findByOrganizationId(Long organizationId);
 }

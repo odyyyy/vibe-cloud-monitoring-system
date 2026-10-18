@@ -38,8 +38,8 @@ public class MetricQueryService {
     private final MetricSampleRepository metricSampleRepository;
     private final ApplicationService applicationService;
 
-    public List<AggregatedMetricResponse> query(Long userId, MetricsQueryRequest request) {
-        applicationService.getOwnedApplication(request.getApplicationId(), userId);
+    public List<AggregatedMetricResponse> query(Long organizationId, MetricsQueryRequest request) {
+        applicationService.getOwnedApplication(request.getApplicationId(), organizationId);
 
         long intervalSeconds = request.getIntervalMinutes().longValue() * SECONDS_PER_MINUTE;
 
@@ -67,11 +67,11 @@ public class MetricQueryService {
     }
 
     /**
-     * Returns the distinct metric names known for an application owned by {@code userId}.
+     * Returns the distinct metric names known for an application owned by {@code organizationId}.
      * Ownership is verified before reading, so one tenant cannot enumerate another's metrics.
      */
-    public List<String> listMetricNames(Long userId, Long applicationId) {
-        applicationService.getOwnedApplication(applicationId, userId);
+    public List<String> listMetricNames(Long organizationId, Long applicationId) {
+        applicationService.getOwnedApplication(applicationId, organizationId);
         return metricSampleRepository.findDistinctNames(applicationId, PageRequest.of(0, MAX_METRIC_NAMES));
     }
 
@@ -83,8 +83,8 @@ public class MetricQueryService {
      * tenant's series. Missing data returns empty rather than a sentinel value so callers can
      * distinguish "no data" from a real zero.
      */
-    public OptionalDouble latestValue(Long userId, Long applicationId, String metricName, Instant since) {
-        applicationService.getOwnedApplication(applicationId, userId);
+    public OptionalDouble latestValue(Long organizationId, Long applicationId, String metricName, Instant since) {
+        applicationService.getOwnedApplication(applicationId, organizationId);
         List<Double> values = metricSampleRepository.findRecentValues(
                 applicationId, metricName, since, PageRequest.of(0, 1));
         return values.isEmpty() ? OptionalDouble.empty() : OptionalDouble.of(values.get(0));

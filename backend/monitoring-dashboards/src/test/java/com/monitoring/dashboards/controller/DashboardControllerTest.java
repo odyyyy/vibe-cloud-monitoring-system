@@ -1,5 +1,6 @@
 package com.monitoring.dashboards.controller;
 
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import com.monitoring.dashboards.dto.CreateDashboardRequest;
 import com.monitoring.dashboards.dto.DashboardResponse;
 import com.monitoring.dashboards.dto.UpdateWidgetRequest;
@@ -52,8 +53,10 @@ class DashboardControllerTest {
     @BeforeEach
     void setUp() {
         dashboardService = Mockito.mock(DashboardService.class);
+        CurrentTenantService tenantService = Mockito.mock(CurrentTenantService.class);
+        when(tenantService.requireOrganizationId()).thenReturn(USER_ID);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new DashboardController(dashboardService))
+                .standaloneSetup(new DashboardController(dashboardService, tenantService))
                 .setControllerAdvice(new TestAdvice())
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
@@ -69,7 +72,7 @@ class DashboardControllerTest {
         return DashboardResponse.builder()
                 .id(5L)
                 .name("Prod")
-                .userId(USER_ID)
+                .organizationId(USER_ID)
                 .createdAt(Instant.parse("2026-10-09T10:00:00Z"))
                 .widgets(List.of())
                 .build();
@@ -95,7 +98,7 @@ class DashboardControllerTest {
         mockMvc.perform(get("/api/v1/dashboards"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(5))
-                .andExpect(jsonPath("$[0].userId").value(USER_ID));
+                .andExpect(jsonPath("$[0].organizationId").value(USER_ID));
     }
 
     @Test

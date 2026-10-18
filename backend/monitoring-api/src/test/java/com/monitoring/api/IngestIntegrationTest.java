@@ -44,7 +44,7 @@ class IngestIntegrationTest {
         applicationRepository.save(Application.builder()
                 .name("integration-app")
                 .apiKeyHash(ApiKeyHasher.hash("app_integration_test"))
-                .ownerId(1L)
+                .organizationId(1L)
                 .build());
     }
 

@@ -27,7 +27,7 @@ import java.util.List;
 /**
  * Application service for dashboards and their widgets.
  *
- * <p>Every operation is scoped to the authenticated {@code ownerId}; a dashboard that exists
+ * <p>Every operation is scoped to the authenticated {@code organizationId}; a dashboard that exists
  * but belongs to another user raises {@link DashboardAccessDeniedException} (HTTP 403), while
  * a missing one raises {@link DashboardNotFoundException} (HTTP 404).
  *
@@ -45,41 +45,41 @@ public class DashboardService {
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
-    public List<DashboardResponse> listDashboards(Long ownerId) {
-        return dashboardRepository.findAllWithWidgetsByOwnerId(ownerId).stream()
+    public List<DashboardResponse> listDashboards(Long organizationId) {
+        return dashboardRepository.findAllWithWidgetsByOrganizationId(organizationId).stream()
                 .map(DashboardResponse::fromEntity)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public DashboardResponse getDashboard(Long ownerId, Long dashboardId) {
-        return DashboardResponse.fromEntity(getOwnedDashboard(ownerId, dashboardId));
+    public DashboardResponse getDashboard(Long organizationId, Long dashboardId) {
+        return DashboardResponse.fromEntity(getOwnedDashboard(organizationId, dashboardId));
     }
 
     @Transactional
-    public DashboardResponse createDashboard(Long ownerId, CreateDashboardRequest request) {
+    public DashboardResponse createDashboard(Long organizationId, CreateDashboardRequest request) {
         Dashboard dashboard = Dashboard.builder()
                 .name(request.getName().trim())
-                .ownerId(ownerId)
+                .organizationId(organizationId)
                 .build();
         return DashboardResponse.fromEntity(dashboardRepository.save(dashboard));
     }
 
     @Transactional
-    public DashboardResponse updateDashboard(Long ownerId, Long dashboardId, UpdateDashboardRequest request) {
-        Dashboard dashboard = getOwnedDashboard(ownerId, dashboardId);
+    public DashboardResponse updateDashboard(Long organizationId, Long dashboardId, UpdateDashboardRequest request) {
+        Dashboard dashboard = getOwnedDashboard(organizationId, dashboardId);
         dashboard.setName(request.getName().trim());
         return DashboardResponse.fromEntity(dashboardRepository.save(dashboard));
     }
 
     @Transactional
-    public void deleteDashboard(Long ownerId, Long dashboardId) {
-        dashboardRepository.delete(getOwnedDashboard(ownerId, dashboardId));
+    public void deleteDashboard(Long organizationId, Long dashboardId) {
+        dashboardRepository.delete(getOwnedDashboard(organizationId, dashboardId));
     }
 
     @Transactional
-    public WidgetResponse addWidget(Long ownerId, Long dashboardId, CreateWidgetRequest request) {
-        Dashboard dashboard = getOwnedDashboard(ownerId, dashboardId);
+    public WidgetResponse addWidget(Long organizationId, Long dashboardId, CreateWidgetRequest request) {
+        Dashboard dashboard = getOwnedDashboard(organizationId, dashboardId);
 
         if (widgetRepository.countByDashboard_Id(dashboardId) >= MAX_WIDGETS_PER_DASHBOARD) {
             throw new WidgetLimitExceededException(MAX_WIDGETS_PER_DASHBOARD);
@@ -99,8 +99,8 @@ public class DashboardService {
     }
 
     @Transactional
-    public WidgetResponse updateWidget(Long ownerId, Long dashboardId, Long widgetId, UpdateWidgetRequest request) {
-        getOwnedDashboard(ownerId, dashboardId);
+    public WidgetResponse updateWidget(Long organizationId, Long dashboardId, Long widgetId, UpdateWidgetRequest request) {
+        getOwnedDashboard(organizationId, dashboardId);
         Widget widget = getWidget(widgetId, dashboardId);
 
         if (request.getType() != null) {
@@ -126,8 +126,8 @@ public class DashboardService {
     }
 
     @Transactional
-    public void deleteWidget(Long ownerId, Long dashboardId, Long widgetId) {
-        getOwnedDashboard(ownerId, dashboardId);
+    public void deleteWidget(Long organizationId, Long dashboardId, Long widgetId) {
+        getOwnedDashboard(organizationId, dashboardId);
         widgetRepository.delete(getWidget(widgetId, dashboardId));
     }
 
@@ -136,10 +136,10 @@ public class DashboardService {
                 .orElseThrow(() -> new WidgetNotFoundException(widgetId));
     }
 
-    private Dashboard getOwnedDashboard(Long ownerId, Long dashboardId) {
+    private Dashboard getOwnedDashboard(Long organizationId, Long dashboardId) {
         Dashboard dashboard = dashboardRepository.findById(dashboardId)
                 .orElseThrow(() -> new DashboardNotFoundException(dashboardId));
-        if (!dashboard.getOwnerId().equals(ownerId)) {
+        if (!dashboard.getOrganizationId().equals(organizationId)) {
             throw new DashboardAccessDeniedException();
         }
         return dashboard;

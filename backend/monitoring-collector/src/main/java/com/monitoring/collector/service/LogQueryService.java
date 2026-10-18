@@ -39,8 +39,8 @@ public class LogQueryService {
     private final LogEventRepository logEventRepository;
     private final ApplicationService applicationService;
 
-    public PageResponse<LogEventResponse> query(Long userId, LogsQueryRequest request) {
-        applicationService.getOwnedApplication(request.getApplicationId(), userId);
+    public PageResponse<LogEventResponse> query(Long organizationId, LogsQueryRequest request) {
+        applicationService.getOwnedApplication(request.getApplicationId(), organizationId);
 
         Pageable pageable = PageRequest.of(
                 request.getPage(),

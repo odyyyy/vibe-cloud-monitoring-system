@@ -21,6 +21,12 @@
             <artifactId>monitoring-apps-management</artifactId>
         </dependency>
 
+        <!-- Organization tenant context and role checks for user-facing query endpoints. -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-auth</artifactId>
+        </dependency>
+
         <!-- Spring Boot Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -43,6 +49,17 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!--
+            Micrometer: used by the ingestion rate limiter to expose the
+            ingestion.rate_limited_requests_total counter. The registry itself is provided by
+            the actuator in monitoring-api; the collector module only needs the API so the
+            limiter can optionally publish metrics when a registry is present.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
         </dependency>
 
         <!-- Lombok -->

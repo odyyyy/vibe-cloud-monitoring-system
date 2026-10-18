@@ -4,11 +4,12 @@ import com.monitoring.alerts.dto.CreateNotificationChannelRequest;
 import com.monitoring.alerts.dto.NotificationChannelResponse;
 import com.monitoring.alerts.dto.UpdateNotificationChannelRequest;
 import com.monitoring.alerts.service.AlertService;
+import com.monitoring.auth.organization.entity.MembershipRole;
+import com.monitoring.auth.organization.security.RequireRole;
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,43 +32,35 @@ import java.util.List;
 public class NotificationChannelController {
 
     private final AlertService alertService;
+    private final CurrentTenantService currentTenantService;
 
     @GetMapping
     public ResponseEntity<List<NotificationChannelResponse>> list() {
-        return ResponseEntity.ok(alertService.listChannels(currentUserId()));
+        return ResponseEntity.ok(alertService.listChannels(currentTenantService.requireOrganizationId()));
     }
 
     @PostMapping
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<NotificationChannelResponse> create(
             @Valid @RequestBody CreateNotificationChannelRequest request) {
-        NotificationChannelResponse created = alertService.createChannel(currentUserId(), request);
+        NotificationChannelResponse created = alertService.createChannel(
+                currentTenantService.requireOrganizationId(), request);
         return ResponseEntity.created(URI.create("/api/v1/notification-channels/" + created.getId())).body(created);
     }
 
     @PutMapping("/{id}")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<NotificationChannelResponse> update(
             @PathVariable Long id,
             @Valid @RequestBody UpdateNotificationChannelRequest request) {
-        return ResponseEntity.ok(alertService.updateChannel(currentUserId(), id, request));
+        return ResponseEntity.ok(alertService.updateChannel(
+                currentTenantService.requireOrganizationId(), id, request));
     }
 
     @DeleteMapping("/{id}")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<Void> delete(@PathVariable Long id) {
-        alertService.deleteChannel(currentUserId(), id);
+        alertService.deleteChannel(currentTenantService.requireOrganizationId(), id);
         return ResponseEntity.noContent().build();
-    }
-
-    private Long currentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Object principal = authentication != null ? authentication.getPrincipal() : null;
-
-        if (principal instanceof String userId) {
-            try {
-                return Long.parseLong(userId);
-            } catch (NumberFormatException e) {
-                throw new IllegalStateException("Invalid user ID in authentication token");
-            }
-        }
-        throw new IllegalStateException("No authenticated user available");
     }
 }

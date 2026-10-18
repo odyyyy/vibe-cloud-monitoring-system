@@ -66,7 +66,7 @@ public class WebhookDispatcher {
      * transaction has committed; it performs a read and then hands delivery to the executor.
      */
     public void dispatch(AlertEvent event) {
-        List<NotificationChannel> channels = channelRepository.findByOwnerIdAndActiveTrue(event.ownerId());
+        List<NotificationChannel> channels = channelRepository.findByOrganizationIdAndActiveTrue(event.organizationId());
         if (channels.isEmpty()) {
             return;
         }

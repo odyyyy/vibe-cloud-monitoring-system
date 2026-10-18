@@ -8,11 +8,12 @@ import com.monitoring.dashboards.dto.UpdateWidgetRequest;
 import com.monitoring.dashboards.dto.WidgetResponse;
 import com.monitoring.dashboards.service.DashboardService;
 import com.monitoring.audit.annotation.AuditLog;
+import com.monitoring.auth.organization.entity.MembershipRole;
+import com.monitoring.auth.organization.security.RequireRole;
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,72 +36,69 @@ import java.util.List;
 public class DashboardController {
 
     private final DashboardService dashboardService;
+    private final CurrentTenantService currentTenantService;
 
     @GetMapping
     public ResponseEntity<List<DashboardResponse>> listDashboards() {
-        return ResponseEntity.ok(dashboardService.listDashboards(currentUserId()));
+        return ResponseEntity.ok(dashboardService.listDashboards(currentTenantService.requireOrganizationId()));
     }
 
     @PostMapping
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<DashboardResponse> createDashboard(
             @Valid @RequestBody CreateDashboardRequest request) {
-        DashboardResponse created = dashboardService.createDashboard(currentUserId(), request);
+        DashboardResponse created = dashboardService.createDashboard(
+                currentTenantService.requireOrganizationId(), request);
         return ResponseEntity.created(URI.create("/api/v1/dashboards/" + created.getId())).body(created);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<DashboardResponse> getDashboard(@PathVariable Long id) {
-        return ResponseEntity.ok(dashboardService.getDashboard(currentUserId(), id));
+        return ResponseEntity.ok(dashboardService.getDashboard(currentTenantService.requireOrganizationId(), id));
     }
 
     @PutMapping("/{id}")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<DashboardResponse> updateDashboard(
             @PathVariable Long id,
             @Valid @RequestBody UpdateDashboardRequest request) {
-        return ResponseEntity.ok(dashboardService.updateDashboard(currentUserId(), id, request));
+        return ResponseEntity.ok(dashboardService.updateDashboard(
+                currentTenantService.requireOrganizationId(), id, request));
     }
 
     @DeleteMapping("/{id}")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     @AuditLog(action = "DASHBOARD_DELETED", resourceId = "#id")
     public ResponseEntity<Void> deleteDashboard(@PathVariable Long id) {
-        dashboardService.deleteDashboard(currentUserId(), id);
+        dashboardService.deleteDashboard(currentTenantService.requireOrganizationId(), id);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/widgets")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<WidgetResponse> addWidget(
             @PathVariable Long id,
             @Valid @RequestBody CreateWidgetRequest request) {
-        WidgetResponse created = dashboardService.addWidget(currentUserId(), id, request);
+        WidgetResponse created = dashboardService.addWidget(
+                currentTenantService.requireOrganizationId(), id, request);
         return ResponseEntity.created(URI.create("/api/v1/dashboards/" + id + "/widgets/" + created.getId()))
                 .body(created);
     }
 
     @PutMapping("/{id}/widgets/{widgetId}")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<WidgetResponse> updateWidget(
             @PathVariable Long id,
             @PathVariable Long widgetId,
             @Valid @RequestBody UpdateWidgetRequest request) {
-        return ResponseEntity.ok(dashboardService.updateWidget(currentUserId(), id, widgetId, request));
+        return ResponseEntity.ok(dashboardService.updateWidget(
+                currentTenantService.requireOrganizationId(), id, widgetId, request));
     }
 
     @DeleteMapping("/{id}/widgets/{widgetId}")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<Void> deleteWidget(@PathVariable Long id, @PathVariable Long widgetId) {
-        dashboardService.deleteWidget(currentUserId(), id, widgetId);
+        dashboardService.deleteWidget(currentTenantService.requireOrganizationId(), id, widgetId);
         return ResponseEntity.noContent().build();
-    }
-
-    private Long currentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Object principal = authentication != null ? authentication.getPrincipal() : null;
-
-        if (principal instanceof String userId) {
-            try {
-                return Long.parseLong(userId);
-            } catch (NumberFormatException e) {
-                throw new IllegalStateException("Invalid user ID in authentication token");
-            }
-        }
-        throw new IllegalStateException("No authenticated user available");
     }
 }

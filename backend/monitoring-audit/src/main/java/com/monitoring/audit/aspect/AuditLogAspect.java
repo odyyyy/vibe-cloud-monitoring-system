@@ -3,6 +3,9 @@ package com.monitoring.audit.aspect;
 import com.monitoring.audit.annotation.AuditLog;
 import com.monitoring.audit.service.AuditEventService;
 import com.monitoring.audit.service.ClientIpResolver;
+import com.monitoring.auth.organization.exception.TenantAccessDeniedException;
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
+import com.monitoring.auth.organization.tenant.TenantContext;
 import jakarta.servlet.http.HttpServletRequest;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
@@ -15,8 +18,6 @@ import org.springframework.core.DefaultParameterNameDiscoverer;
 import org.springframework.core.ParameterNameDiscoverer;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -43,16 +44,20 @@ public class AuditLogAspect {
     private static final int MAX_RESOURCE_ID_LENGTH = 128;
 
     private final AuditEventService auditEventService;
+    private final CurrentTenantService currentTenantService;
 
-    public AuditLogAspect(AuditEventService auditEventService) {
+    public AuditLogAspect(AuditEventService auditEventService, CurrentTenantService currentTenantService) {
         this.auditEventService = auditEventService;
+        this.currentTenantService = currentTenantService;
     }
 
     @AfterReturning(pointcut = "@annotation(auditLog)", returning = "result")
     public void record(JoinPoint joinPoint, AuditLog auditLog, Object result) {
-        Long userId = currentUserId();
-        if (userId == null) {
-            log.warn("Audit action '{}' completed without an authenticated user; event not recorded",
+        TenantContext tenant;
+        try {
+            tenant = currentTenantService.requireTenant();
+        } catch (TenantAccessDeniedException ex) {
+            log.warn("Audit action '{}' completed without a tenant context; event not recorded",
                     auditLog.action());
             return;
         }
@@ -61,9 +66,11 @@ public class AuditLogAspect {
         String ipAddress = ClientIpResolver.resolve(currentRequest());
 
         try {
-            auditEventService.record(userId, auditLog.action(), resourceId, ipAddress);
+            auditEventService.record(
+                    tenant.organizationId(), tenant.userId(), auditLog.action(), resourceId, ipAddress);
         } catch (RuntimeException ex) {
-            log.error("Failed to persist audit event action='{}' userId={}", auditLog.action(), userId, ex);
+            log.error("Failed to persist audit event action='{}' userId={}",
+                    auditLog.action(), tenant.userId(), ex);
         }
     }
 
@@ -87,20 +94,6 @@ public class AuditLogAspect {
         for (Object argument : joinPoint.getArgs()) {
             if (argument instanceof Long id) {
                 return String.valueOf(id);
-            }
-        }
-        return null;
-    }
-
-    private Long currentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Object principal = authentication != null ? authentication.getPrincipal() : null;
-
-        if (principal instanceof String userId) {
-            try {
-                return Long.parseLong(userId);
-            } catch (NumberFormatException e) {
-                return null;
             }
         }
         return null;

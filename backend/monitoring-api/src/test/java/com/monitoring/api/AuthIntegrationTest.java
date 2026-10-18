@@ -3,6 +3,9 @@ package com.monitoring.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.monitoring.auth.entity.AuthTokenType;
 import com.monitoring.auth.entity.User;
+import com.monitoring.auth.jwt.JwtTokenProvider;
+import com.monitoring.auth.organization.repository.MembershipRepository;
+import com.monitoring.auth.organization.repository.OrganizationRepository;
 import com.monitoring.auth.repository.AuthTokenRepository;
 import com.monitoring.auth.repository.UserRepository;
 import com.monitoring.auth.service.EmailSender;
@@ -24,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -55,7 +59,16 @@ class AuthIntegrationTest {
     private UserRepository userRepository;
 
     @Autowired
+    private OrganizationRepository organizationRepository;
+
+    @Autowired
+    private MembershipRepository membershipRepository;
+
+    @Autowired
     private AuthTokenRepository authTokenRepository;
+
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
 
     @MockBean
     private EmailSender emailSender;
@@ -63,6 +76,8 @@ class AuthIntegrationTest {
     @BeforeEach
     void setUp() {
         authTokenRepository.deleteAll();
+        membershipRepository.deleteAll();
+        organizationRepository.deleteAll();
         userRepository.deleteAll();
     }
 
@@ -164,6 +179,122 @@ class AuthIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void changeUsernameFlow() throws Exception {
+        register();
+        verifyEmail();
+
+        User user = userRepository.findByUsername(USERNAME).orElseThrow();
+
+        mockMvc.perform(put("/api/profile/username")
+                        .header("Authorization", bearer(user.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("currentPassword", PASSWORD, "username", "grace"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("grace"));
+
+        assertThat(userRepository.findByUsername("grace")).isPresent();
+        assertThat(userRepository.findByUsername(USERNAME)).isEmpty();
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(loginBody(USERNAME, PASSWORD))))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(loginBody("grace", PASSWORD))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty());
+    }
+
+    @Test
+    void changeUsernameRejectsTakenName() throws Exception {
+        register();
+        verifyEmail();
+        userRepository.save(User.builder()
+                .username("grace")
+                .email("grace@example.com")
+                .password("hashed")
+                .emailVerified(true)
+                .build());
+
+        User user = userRepository.findByUsername(USERNAME).orElseThrow();
+
+        mockMvc.perform(put("/api/profile/username")
+                        .header("Authorization", bearer(user.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("currentPassword", PASSWORD, "username", "grace"))))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void changeEmailFlow() throws Exception {
+        register();
+        verifyEmail();
+
+        User user = userRepository.findByUsername(USERNAME).orElseThrow();
+        String newEmail = "ada.new@example.com";
+
+        mockMvc.perform(put("/api/profile/email")
+                        .header("Authorization", bearer(user.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("currentPassword", PASSWORD, "newEmail", newEmail))))
+                .andExpect(status().isOk());
+
+        String changeToken = captureEmailChangeToken(newEmail);
+
+        mockMvc.perform(post("/api/auth/email-change/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("token", changeToken))))
+                .andExpect(status().isOk());
+
+        assertThat(userRepository.findByEmail(newEmail)).isPresent();
+        assertThat(userRepository.findByEmail(EMAIL)).isEmpty();
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(loginBody(newEmail, PASSWORD))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty());
+    }
+
+    @Test
+    void changeEmailRejectsWrongPassword() throws Exception {
+        register();
+        verifyEmail();
+
+        User user = userRepository.findByUsername(USERNAME).orElseThrow();
+
+        mockMvc.perform(put("/api/profile/email")
+                        .header("Authorization", bearer(user.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("currentPassword", "wrongpass", "newEmail", "other@example.com"))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    private void verifyEmail() throws Exception {
+        String token = captureToken(AuthTokenType.EMAIL_VERIFICATION);
+        mockMvc.perform(post("/api/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("token", token))))
+                .andExpect(status().isOk());
+    }
+
+    private String bearer(Long userId) {
+        return "Bearer " + jwtTokenProvider.generateToken(userId, "user-" + userId);
+    }
+
+    private String captureEmailChangeToken(String newEmail) {
+        ArgumentCaptor<String> linkCaptor = ArgumentCaptor.forClass(String.class);
+        verify(emailSender).sendEmailChangeConfirmation(eq(newEmail), eq(USERNAME), linkCaptor.capture());
+        String token = UriComponentsBuilder.fromUriString(linkCaptor.getValue())
+                .build()
+                .getQueryParams()
+                .getFirst("token");
+        assertThat(token).isNotBlank();
+        return token;
+    }
+
     private Map<String, String> registerBody() {
         Map<String, String> body = new LinkedHashMap<>();
         body.put("username", USERNAME);
@@ -173,8 +304,12 @@ class AuthIntegrationTest {
     }
 
     private Map<String, String> loginBody(String password) {
+        return loginBody(USERNAME, password);
+    }
+
+    private Map<String, String> loginBody(String identifier, String password) {
         Map<String, String> body = new LinkedHashMap<>();
-        body.put("username", USERNAME);
+        body.put("username", identifier);
         body.put("password", password);
         return body;
     }

@@ -25,9 +25,9 @@ public class ApplicationService {
     private final ApplicationRepository applicationRepository;
 
     @Transactional
-    public ApplicationWithKeyResponse createApplication(ApplicationCreateRequest request, Long ownerId) {
+    public ApplicationWithKeyResponse createApplication(ApplicationCreateRequest request, Long organizationId) {
         String name = request.getName().trim();
-        if (applicationRepository.existsByNameAndOwnerId(name, ownerId)) {
+        if (applicationRepository.existsByNameAndOrganizationId(name, organizationId)) {
             throw new ApplicationNameConflictException(name);
         }
 
@@ -35,29 +35,29 @@ public class ApplicationService {
         Application application = Application.builder()
                 .name(name)
                 .apiKeyHash(ApiKeyHasher.hash(rawApiKey))
-                .ownerId(ownerId)
+                .organizationId(organizationId)
                 .build();
 
         return toWithKeyResponse(applicationRepository.save(application), rawApiKey);
     }
 
-    public List<Application> findByOwnerId(Long ownerId) {
-        return applicationRepository.findByOwnerId(ownerId);
+    public List<Application> findByOrganizationId(Long organizationId) {
+        return applicationRepository.findByOrganizationId(organizationId);
     }
 
-    public Application getOwnedApplication(Long id, Long ownerId) {
+    public Application getOwnedApplication(Long id, Long organizationId) {
         Application application = findOrThrow(id);
-        verifyOwnership(application, ownerId);
+        verifyOwnership(application, organizationId);
         return application;
     }
 
     @Transactional
-    public Application updateApplication(Long id, String name, Long ownerId) {
-        Application application = getOwnedApplication(id, ownerId);
+    public Application updateApplication(Long id, String name, Long organizationId) {
+        Application application = getOwnedApplication(id, organizationId);
         String newName = name.trim();
 
         if (!application.getName().equals(newName)
-                && applicationRepository.existsByNameAndOwnerId(newName, ownerId)) {
+                && applicationRepository.existsByNameAndOrganizationId(newName, organizationId)) {
             throw new ApplicationNameConflictException(newName);
         }
 
@@ -66,16 +66,16 @@ public class ApplicationService {
     }
 
     @Transactional
-    public ApplicationWithKeyResponse regenerateApiKey(Long id, Long ownerId) {
-        Application application = getOwnedApplication(id, ownerId);
+    public ApplicationWithKeyResponse regenerateApiKey(Long id, Long organizationId) {
+        Application application = getOwnedApplication(id, organizationId);
         String rawApiKey = generateUniqueApiKey();
         application.setApiKeyHash(ApiKeyHasher.hash(rawApiKey));
         return toWithKeyResponse(applicationRepository.save(application), rawApiKey);
     }
 
     @Transactional
-    public void deleteApplication(Long id, Long ownerId) {
-        Application application = getOwnedApplication(id, ownerId);
+    public void deleteApplication(Long id, Long organizationId) {
+        Application application = getOwnedApplication(id, organizationId);
         applicationRepository.delete(application);
     }
 
@@ -89,8 +89,8 @@ public class ApplicationService {
                 .orElseThrow(() -> new ApplicationNotFoundException(id));
     }
 
-    private void verifyOwnership(Application application, Long ownerId) {
-        if (!application.getOwnerId().equals(ownerId)) {
+    private void verifyOwnership(Application application, Long organizationId) {
+        if (!application.getOrganizationId().equals(organizationId)) {
             throw new ApplicationAccessDeniedException();
         }
     }

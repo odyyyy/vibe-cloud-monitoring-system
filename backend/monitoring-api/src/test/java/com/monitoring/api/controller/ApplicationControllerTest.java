@@ -1,6 +1,7 @@
 package com.monitoring.api.controller;
 
 import com.monitoring.api.exception.ApiExceptionHandler;
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import com.monitoring.storage.dto.ApplicationCreateRequest;
 import com.monitoring.storage.dto.ApplicationWithKeyResponse;
 import com.monitoring.storage.entity.Application;
@@ -38,8 +39,10 @@ class ApplicationControllerTest {
     @BeforeEach
     void setUp() {
         applicationService = Mockito.mock(ApplicationService.class);
+        CurrentTenantService tenantService = Mockito.mock(CurrentTenantService.class);
+        when(tenantService.requireOrganizationId()).thenReturn(USER_ID);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new ApplicationController(applicationService))
+                .standaloneSetup(new ApplicationController(applicationService, tenantService))
                 .setControllerAdvice(new ApiExceptionHandler())
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
@@ -56,7 +59,7 @@ class ApplicationControllerTest {
                 .id(10L)
                 .name("my-app")
                 .apiKeyHash("hashed-key")
-                .ownerId(USER_ID)
+                .organizationId(USER_ID)
                 .build();
     }
 
@@ -66,7 +69,7 @@ class ApplicationControllerTest {
 
     @Test
     void listApplications_returnsOwnAppsWithoutApiKey() throws Exception {
-        when(applicationService.findByOwnerId(USER_ID)).thenReturn(List.of(sampleApp()));
+        when(applicationService.findByOrganizationId(USER_ID)).thenReturn(List.of(sampleApp()));
 
         mockMvc.perform(get("/api/applications"))
                 .andExpect(status().isOk())

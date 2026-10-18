@@ -40,7 +40,7 @@ import java.util.Locale;
 /**
  * Application service for alert rules, notification channels and incident history.
  *
- * <p>Every operation is scoped to the authenticated {@code ownerId}: a resource that exists but
+ * <p>Every operation is scoped to the authenticated {@code organizationId}: a resource that exists but
  * belongs to another user raises an {@code *AccessDeniedException} (HTTP 403), while a missing
  * one raises a {@code *NotFoundException} (HTTP 404). Rules that reference an application or a
  * health check are validated against that resource's ownership before they are stored, so a
@@ -67,20 +67,20 @@ public class AlertService {
     // ---------------------------------------------------------------------------------------
 
     @Transactional(readOnly = true)
-    public List<AlertRuleResponse> listRules(Long ownerId) {
-        return ruleRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId).stream()
+    public List<AlertRuleResponse> listRules(Long organizationId) {
+        return ruleRepository.findByOrganizationIdOrderByCreatedAtDesc(organizationId).stream()
                 .map(AlertRuleResponse::fromEntity)
                 .toList();
     }
 
     @Transactional
-    public AlertRuleResponse createRule(Long ownerId, CreateAlertRuleRequest request) {
+    public AlertRuleResponse createRule(Long organizationId, CreateAlertRuleRequest request) {
         AlertRuleType type = request.getType();
         String target = request.getTarget().trim();
-        Long applicationId = normalizeApplicationId(ownerId, type, request.getApplicationId(), target);
+        Long applicationId = normalizeApplicationId(organizationId, type, request.getApplicationId(), target);
 
         AlertRule rule = AlertRule.builder()
-                .ownerId(ownerId)
+                .organizationId(organizationId)
                 .applicationId(applicationId)
                 .name(request.getName().trim())
                 .type(type)
@@ -95,8 +95,8 @@ public class AlertService {
     }
 
     @Transactional
-    public AlertRuleResponse updateRule(Long ownerId, Long id, UpdateAlertRuleRequest request) {
-        AlertRule rule = getOwnedRule(ownerId, id);
+    public AlertRuleResponse updateRule(Long organizationId, Long id, UpdateAlertRuleRequest request) {
+        AlertRule rule = getOwnedRule(organizationId, id);
 
         if (request.getName() != null && !request.getName().isBlank()) {
             rule.setName(request.getName().trim());
@@ -120,7 +120,7 @@ public class AlertService {
         // Re-validate the merged rule: a partial update may have switched the type or target.
         Long requestedApplicationId = request.getApplicationId();
         Long normalizedApplicationId = normalizeApplicationId(
-                ownerId, rule.getType(),
+                organizationId, rule.getType(),
                 requestedApplicationId != null ? requestedApplicationId : rule.getApplicationId(),
                 rule.getTarget());
         rule.setApplicationId(normalizedApplicationId);
@@ -138,8 +138,8 @@ public class AlertService {
     }
 
     @Transactional
-    public void deleteRule(Long ownerId, Long id) {
-        AlertRule rule = getOwnedRule(ownerId, id);
+    public void deleteRule(Long organizationId, Long id) {
+        AlertRule rule = getOwnedRule(organizationId, id);
         ruleRepository.delete(rule);
     }
 
@@ -148,16 +148,16 @@ public class AlertService {
     // ---------------------------------------------------------------------------------------
 
     @Transactional(readOnly = true)
-    public List<NotificationChannelResponse> listChannels(Long ownerId) {
-        return channelRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId).stream()
+    public List<NotificationChannelResponse> listChannels(Long organizationId) {
+        return channelRepository.findByOrganizationIdOrderByCreatedAtDesc(organizationId).stream()
                 .map(NotificationChannelResponse::fromEntity)
                 .toList();
     }
 
     @Transactional
-    public NotificationChannelResponse createChannel(Long ownerId, CreateNotificationChannelRequest request) {
+    public NotificationChannelResponse createChannel(Long organizationId, CreateNotificationChannelRequest request) {
         NotificationChannel channel = NotificationChannel.builder()
-                .ownerId(ownerId)
+                .organizationId(organizationId)
                 .type(request.getType())
                 .url(validateWebhookUrl(request.getUrl()))
                 .active(request.getActive() == null || request.getActive())
@@ -167,8 +167,8 @@ public class AlertService {
     }
 
     @Transactional
-    public NotificationChannelResponse updateChannel(Long ownerId, Long id, UpdateNotificationChannelRequest request) {
-        NotificationChannel channel = getOwnedChannel(ownerId, id);
+    public NotificationChannelResponse updateChannel(Long organizationId, Long id, UpdateNotificationChannelRequest request) {
+        NotificationChannel channel = getOwnedChannel(organizationId, id);
 
         if (request.getType() != null) {
             channel.setType(request.getType());
@@ -184,8 +184,8 @@ public class AlertService {
     }
 
     @Transactional
-    public void deleteChannel(Long ownerId, Long id) {
-        NotificationChannel channel = getOwnedChannel(ownerId, id);
+    public void deleteChannel(Long organizationId, Long id) {
+        NotificationChannel channel = getOwnedChannel(organizationId, id);
         channelRepository.delete(channel);
     }
 
@@ -194,11 +194,11 @@ public class AlertService {
     // ---------------------------------------------------------------------------------------
 
     @Transactional(readOnly = true)
-    public List<AlertIncidentResponse> listIncidents(Long ownerId, Integer limit) {
+    public List<AlertIncidentResponse> listIncidents(Long organizationId, Integer limit) {
         int effectiveLimit = limit == null ? DEFAULT_INCIDENTS_LIMIT : limit;
         effectiveLimit = Math.max(1, Math.min(effectiveLimit, MAX_INCIDENTS_LIMIT));
         return incidentRepository
-                .findByOwnerIdOrderByTriggeredAtDesc(ownerId, PageRequest.of(0, effectiveLimit)).stream()
+                .findByOrganizationIdOrderByTriggeredAtDesc(organizationId, PageRequest.of(0, effectiveLimit)).stream()
                 .map(AlertIncidentResponse::fromEntity)
                 .toList();
     }
@@ -207,19 +207,19 @@ public class AlertService {
     // Helpers
     // ---------------------------------------------------------------------------------------
 
-    private AlertRule getOwnedRule(Long ownerId, Long id) {
+    private AlertRule getOwnedRule(Long organizationId, Long id) {
         AlertRule rule = ruleRepository.findById(id)
                 .orElseThrow(() -> new AlertRuleNotFoundException(id));
-        if (!rule.getOwnerId().equals(ownerId)) {
+        if (!rule.getOrganizationId().equals(organizationId)) {
             throw new AlertRuleAccessDeniedException();
         }
         return rule;
     }
 
-    private NotificationChannel getOwnedChannel(Long ownerId, Long id) {
+    private NotificationChannel getOwnedChannel(Long organizationId, Long id) {
         NotificationChannel channel = channelRepository.findById(id)
                 .orElseThrow(() -> new NotificationChannelNotFoundException(id));
-        if (!channel.getOwnerId().equals(ownerId)) {
+        if (!channel.getOrganizationId().equals(organizationId)) {
             throw new NotificationChannelAccessDeniedException();
         }
         return channel;
@@ -229,7 +229,7 @@ public class AlertService {
      * Validates the type-specific target and returns the application id to persist (null for
      * health-check rules). Throws {@link InvalidAlertRuleException} for inconsistent payloads.
      */
-    private Long normalizeApplicationId(Long ownerId, AlertRuleType type, Long applicationId, String target) {
+    private Long normalizeApplicationId(Long organizationId, AlertRuleType type, Long applicationId, String target) {
         if (type == null) {
             throw new InvalidAlertRuleException("Alert rule type is required");
         }
@@ -241,7 +241,7 @@ public class AlertService {
                 throw new InvalidAlertRuleException("A metric-threshold rule requires an application");
             }
             // Verifies ownership; throws ApplicationAccessDenied/NotFound on a foreign or missing app.
-            applicationService.getOwnedApplication(applicationId, ownerId);
+            applicationService.getOwnedApplication(applicationId, organizationId);
             return applicationId;
         }
 
@@ -253,7 +253,7 @@ public class AlertService {
         }
         // Verifies ownership; maps a missing/foreign check to an invalid-rule error.
         try {
-            healthCheckService.listResults(ownerId, healthCheckId, 1);
+            healthCheckService.listResults(organizationId, healthCheckId, 1);
         } catch (HealthCheckNotFoundException | HealthCheckAccessDeniedException ex) {
             throw new InvalidAlertRuleException("The referenced health check does not exist or is not yours");
         }

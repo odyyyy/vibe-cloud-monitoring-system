@@ -4,11 +4,10 @@ import com.monitoring.collector.dto.LogEventResponse;
 import com.monitoring.collector.dto.LogsQueryRequest;
 import com.monitoring.collector.dto.PageResponse;
 import com.monitoring.collector.service.LogQueryService;
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,23 +26,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class LogQueryController {
 
     private final LogQueryService logQueryService;
+    private final CurrentTenantService currentTenantService;
 
     @GetMapping
     public ResponseEntity<PageResponse<LogEventResponse>> query(@Valid LogsQueryRequest request) {
-        return ResponseEntity.ok(logQueryService.query(currentUserId(), request));
-    }
-
-    private Long currentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Object principal = authentication != null ? authentication.getPrincipal() : null;
-
-        if (principal instanceof String userId) {
-            try {
-                return Long.parseLong(userId);
-            } catch (NumberFormatException e) {
-                throw new IllegalStateException("Invalid user ID in authentication token");
-            }
-        }
-        throw new IllegalStateException("No authenticated user available");
+        return ResponseEntity.ok(logQueryService.query(currentTenantService.requireOrganizationId(), request));
     }
 }

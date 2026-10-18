@@ -1,5 +1,6 @@
 package com.monitoring.healthcheck.controller;
 
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import com.monitoring.healthcheck.dto.CreateHealthCheckRequest;
 import com.monitoring.healthcheck.dto.HealthCheckResponse;
 import com.monitoring.healthcheck.dto.HealthCheckResultResponse;
@@ -54,8 +55,10 @@ class HealthCheckControllerTest {
     @BeforeEach
     void setUp() {
         healthCheckService = Mockito.mock(HealthCheckService.class);
+        CurrentTenantService tenantService = Mockito.mock(CurrentTenantService.class);
+        when(tenantService.requireOrganizationId()).thenReturn(USER_ID);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new HealthCheckController(healthCheckService))
+                .standaloneSetup(new HealthCheckController(healthCheckService, tenantService))
                 .setControllerAdvice(new TestAdvice())
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
@@ -70,7 +73,7 @@ class HealthCheckControllerTest {
     private HealthCheckResponse sampleCheck() {
         return HealthCheckResponse.builder()
                 .id(5L)
-                .userId(USER_ID)
+                .organizationId(USER_ID)
                 .name("API health")
                 .targetUrl("https://example.com/health")
                 .method(HealthCheckMethod.GET)
@@ -87,7 +90,7 @@ class HealthCheckControllerTest {
         mockMvc.perform(get("/api/v1/health-checks"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(5))
-                .andExpect(jsonPath("$[0].userId").value(USER_ID))
+                .andExpect(jsonPath("$[0].organizationId").value(USER_ID))
                 .andExpect(jsonPath("$[0].isActive").value(true));
     }
 

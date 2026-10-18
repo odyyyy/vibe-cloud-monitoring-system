@@ -32,8 +32,8 @@ public class WorkspaceSummaryService {
     private final LogEventRepository logEventRepository;
 
     @Transactional(readOnly = true)
-    public WorkspaceSummaryResponse summarize(Long ownerId, Instant now) {
-        List<Long> applicationIds = applicationRepository.findByOwnerId(ownerId).stream()
+    public WorkspaceSummaryResponse summarize(Long organizationId, Instant now) {
+        List<Long> applicationIds = applicationRepository.findByOrganizationId(organizationId).stream()
                 .map(Application::getId)
                 .toList();
 

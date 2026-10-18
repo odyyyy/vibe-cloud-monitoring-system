@@ -11,7 +11,7 @@ interface AuthShellProps {
 
 export function AuthShell({ title, subtitle, children, footer }: AuthShellProps) {
   return (
-    <div className="noise relative min-h-screen bg-[#05070d]">
+    <div className="noise relative min-h-screen bg-canvas">
       <div className="bg-grid pointer-events-none absolute inset-0 opacity-40" aria-hidden="true" />
       <div className="orb left-[-10%] top-[-10%] h-[360px] w-[360px] bg-cyan-500/25" />
       <div className="orb bottom-[-12%] right-[-10%] h-[420px] w-[420px] bg-violet-600/25" />

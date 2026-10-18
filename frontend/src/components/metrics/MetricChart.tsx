@@ -51,7 +51,7 @@ function ChartTooltip({ active, payload, accentColor }: ChartTooltipProps) {
     return null
   }
   return (
-    <div className="rounded-lg border border-white/10 bg-[#0b101b] px-3 py-2 text-xs shadow-xl">
+    <div className="rounded-lg border border-white/10 bg-panel px-3 py-2 text-xs shadow-xl">
       <p className="text-slate-400">{new Date(point.timestamp).toLocaleString()}</p>
       <p className="mono mt-1" style={{ color: accentColor ?? DEFAULT_ACCENT_COLOR }}>
         {point.value}
@@ -230,7 +230,7 @@ export function MetricChart({
     >
       {canInteract ? (
         <div
-          className="absolute right-1 top-1 z-10 flex items-center gap-0.5 rounded-lg border border-white/10 bg-[#0b101b]/80 p-0.5 backdrop-blur"
+          className="absolute right-1 top-1 z-10 flex items-center gap-0.5 rounded-lg border border-white/10 bg-panel/80 p-0.5 backdrop-blur"
           onMouseDown={(event) => event.stopPropagation()}
           onDoubleClick={(event) => event.stopPropagation()}
         >
@@ -305,7 +305,7 @@ export function MetricChart({
   }
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#0b101b]/60 p-4 sm:p-6">
+    <section className="rounded-2xl border border-white/10 bg-panel/60 p-4 sm:p-6">
       <header className="mb-4 flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 font-display text-base font-semibold text-slate-100">
           <span

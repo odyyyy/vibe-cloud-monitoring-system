@@ -46,7 +46,7 @@ export function InstallCodePanel() {
   }
 
   return (
-    <div className="relative rounded-2xl border border-white/10 bg-[#0b101b]/70 overflow-hidden">
+    <div className="relative rounded-2xl border border-white/10 bg-panel/70 overflow-hidden">
       <div className="flex border-b border-white/10 bg-white/[0.02] px-4">
         {installItems.map((item) => (
           <button

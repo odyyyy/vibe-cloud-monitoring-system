@@ -55,7 +55,7 @@ class LogsQueryIntegrationTest {
         application = applicationRepository.save(Application.builder()
                 .name("logs-it-app")
                 .apiKeyHash("app_logs_it")
-                .ownerId(OWNER_ID)
+                .organizationId(OWNER_ID)
                 .build());
     }
 
@@ -139,7 +139,7 @@ class LogsQueryIntegrationTest {
         Application other = applicationRepository.save(Application.builder()
                 .name("other-logs-app")
                 .apiKeyHash("app_other_logs")
-                .ownerId(2L)
+                .organizationId(2L)
                 .build());
         saveLog(application, LogLevel.INFO, "mine", Instant.parse("2026-10-09T10:00:00Z"));
         saveLog(other, LogLevel.INFO, "theirs", Instant.parse("2026-10-09T10:00:00Z"));
@@ -155,7 +155,7 @@ class LogsQueryIntegrationTest {
         Application other = applicationRepository.save(Application.builder()
                 .name("foreign-app")
                 .apiKeyHash("app_foreign")
-                .ownerId(2L)
+                .organizationId(2L)
                 .build());
 
         LogsQueryRequest foreign = LogsQueryRequest.builder()

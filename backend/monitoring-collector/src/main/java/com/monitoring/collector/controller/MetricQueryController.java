@@ -4,11 +4,10 @@ import com.monitoring.collector.dto.AggregatedMetricResponse;
 import com.monitoring.collector.dto.MetricNamesRequest;
 import com.monitoring.collector.dto.MetricsQueryRequest;
 import com.monitoring.collector.service.MetricQueryService;
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,29 +29,18 @@ import java.util.List;
 public class MetricQueryController {
 
     private final MetricQueryService metricQueryService;
+    private final CurrentTenantService currentTenantService;
 
     @GetMapping("/query")
     public ResponseEntity<List<AggregatedMetricResponse>> query(@Valid MetricsQueryRequest request) {
-        List<AggregatedMetricResponse> response = metricQueryService.query(currentUserId(), request);
+        List<AggregatedMetricResponse> response = metricQueryService.query(
+                currentTenantService.requireOrganizationId(), request);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/names")
     public ResponseEntity<List<String>> names(@Valid MetricNamesRequest request) {
-        return ResponseEntity.ok(metricQueryService.listMetricNames(currentUserId(), request.getApplicationId()));
-    }
-
-    private Long currentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Object principal = authentication != null ? authentication.getPrincipal() : null;
-
-        if (principal instanceof String userId) {
-            try {
-                return Long.parseLong(userId);
-            } catch (NumberFormatException e) {
-                throw new IllegalStateException("Invalid user ID in authentication token");
-            }
-        }
-        throw new IllegalStateException("No authenticated user available");
+        return ResponseEntity.ok(metricQueryService.listMetricNames(
+                currentTenantService.requireOrganizationId(), request.getApplicationId()));
     }
 }

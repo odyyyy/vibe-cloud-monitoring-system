@@ -37,13 +37,13 @@ export function LivePanel() {
           ))}
         </div>
 
-        <div className="mt-4 rounded-xl border border-white/5 bg-[#05070d]/70 p-3">
+        <div className="mt-4 rounded-xl border border-white/5 bg-canvas/70 p-3">
           <div className="mono mb-2 flex items-center justify-between text-[10px] uppercase tracking-wider text-slate-500">
             <span>stream</span>
             <span>tail -f /var/log/app</span>
           </div>
           <div className="relative h-28 overflow-hidden">
-            <div className="absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-[#05070d] to-transparent" />
+            <div className="absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-canvas to-transparent" />
             <div className="log-stream space-y-1.5">
               {[...landingData.logLines, ...landingData.logLines].map((line, index) => (
                 <div key={`${line.t}-${index}`} className="mono flex gap-2 text-[10.5px] leading-relaxed">
@@ -70,11 +70,11 @@ export function LivePanel() {
         </div>
       </div>
 
-      <div className="float-slow absolute -right-6 -top-6 hidden rounded-xl border border-white/10 bg-[#0b101b]/90 px-4 py-3 shadow-xl lg:block">
+      <div className="float-slow absolute -right-6 -top-6 hidden rounded-xl border border-white/10 bg-panel/90 px-4 py-3 shadow-xl lg:block">
         <div className="mono text-[10px] uppercase tracking-wider text-slate-500">p99</div>
         <div className="font-display text-lg font-semibold text-lime-300">182ms</div>
       </div>
-      <div className="float-slower absolute -bottom-6 -left-6 hidden rounded-xl border border-white/10 bg-[#0b101b]/90 px-4 py-3 shadow-xl lg:block">
+      <div className="float-slower absolute -bottom-6 -left-6 hidden rounded-xl border border-white/10 bg-panel/90 px-4 py-3 shadow-xl lg:block">
         <div className="mono text-[10px] uppercase tracking-wider text-slate-500">agents</div>
         <div className="font-display text-lg font-semibold text-cyan-300">3 connected</div>
       </div>

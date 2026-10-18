@@ -51,7 +51,7 @@ class MetricsQueryIntegrationTest {
         application = applicationRepository.save(Application.builder()
                 .name("query-it-app")
                 .apiKeyHash("app_query_it")
-                .ownerId(1L)
+                .organizationId(1L)
                 .build());
     }
 
@@ -112,7 +112,7 @@ class MetricsQueryIntegrationTest {
         Application other = applicationRepository.save(Application.builder()
                 .name("other-app")
                 .apiKeyHash("app_other")
-                .ownerId(2L)
+                .organizationId(2L)
                 .build());
         saveSample(application, "cpu_usage", 10.0, Instant.parse("2026-10-09T12:00:00Z"));
         saveSample(other, "cpu_usage", 999.0, Instant.parse("2026-10-09T12:00:00Z"));
@@ -140,7 +140,7 @@ class MetricsQueryIntegrationTest {
         Application other = applicationRepository.save(Application.builder()
                 .name("other-names-app")
                 .apiKeyHash("app_other_names")
-                .ownerId(2L)
+                .organizationId(2L)
                 .build());
         saveSample(application, "cpu_usage", 1.0, Instant.parse("2026-10-09T12:00:00Z"));
         saveSample(other, "disk_usage", 1.0, Instant.parse("2026-10-09T12:00:00Z"));

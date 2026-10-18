@@ -19,7 +19,7 @@ public record AlertEvent(
         Long incidentId,
         Long ruleId,
         String ruleName,
-        Long ownerId,
+        Long organizationId,
         Long applicationId,
         AlertRuleType type,
         String target,

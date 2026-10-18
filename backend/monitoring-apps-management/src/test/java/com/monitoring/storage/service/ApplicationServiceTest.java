@@ -39,18 +39,18 @@ class ApplicationServiceTest {
         return request;
     }
 
-    private Application appOwnedBy(Long ownerId) {
+    private Application appOwnedBy(Long organizationId) {
         return Application.builder()
                 .id(10L)
                 .name("my-app")
                 .apiKeyHash(ApiKeyHasher.hash("app_old"))
-                .ownerId(ownerId)
+                .organizationId(organizationId)
                 .build();
     }
 
     @Test
     void createApplication_generatesApiKeyAndPersistsOnlyItsHash() {
-        when(applicationRepository.existsByNameAndOwnerId("my-app", OWNER_ID)).thenReturn(false);
+        when(applicationRepository.existsByNameAndOrganizationId("my-app", OWNER_ID)).thenReturn(false);
         when(applicationRepository.existsByApiKeyHash(any())).thenReturn(false);
         when(applicationRepository.save(any(Application.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
@@ -63,14 +63,14 @@ class ApplicationServiceTest {
         ArgumentCaptor<Application> captor = ArgumentCaptor.forClass(Application.class);
         verify(applicationRepository).save(captor.capture());
         Application saved = captor.getValue();
-        assertEquals(OWNER_ID, saved.getOwnerId());
+        assertEquals(OWNER_ID, saved.getOrganizationId());
         assertEquals(ApiKeyHasher.hash(created.apiKey()), saved.getApiKeyHash());
         assertNotEquals(created.apiKey(), saved.getApiKeyHash(), "raw key must never be persisted");
     }
 
     @Test
     void createApplication_duplicateName_throwsConflict() {
-        when(applicationRepository.existsByNameAndOwnerId("my-app", OWNER_ID)).thenReturn(true);
+        when(applicationRepository.existsByNameAndOrganizationId("my-app", OWNER_ID)).thenReturn(true);
 
         assertThrows(ApplicationNameConflictException.class,
                 () -> applicationService.createApplication(createRequest("my-app"), OWNER_ID));
@@ -79,7 +79,7 @@ class ApplicationServiceTest {
 
     @Test
     void createApplication_sameNameAllowedForDifferentOwner() {
-        when(applicationRepository.existsByNameAndOwnerId("my-app", OTHER_USER_ID)).thenReturn(false);
+        when(applicationRepository.existsByNameAndOrganizationId("my-app", OTHER_USER_ID)).thenReturn(false);
         when(applicationRepository.existsByApiKeyHash(any())).thenReturn(false);
         when(applicationRepository.save(any(Application.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
@@ -88,8 +88,8 @@ class ApplicationServiceTest {
 
         ArgumentCaptor<Application> captor = ArgumentCaptor.forClass(Application.class);
         verify(applicationRepository).save(captor.capture());
-        assertEquals(OTHER_USER_ID, captor.getValue().getOwnerId());
-        verify(applicationRepository).existsByNameAndOwnerId("my-app", OTHER_USER_ID);
+        assertEquals(OTHER_USER_ID, captor.getValue().getOrganizationId());
+        verify(applicationRepository).existsByNameAndOrganizationId("my-app", OTHER_USER_ID);
     }
 
     @Test

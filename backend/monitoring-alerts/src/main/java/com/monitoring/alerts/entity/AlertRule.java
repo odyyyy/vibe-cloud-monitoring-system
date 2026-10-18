@@ -24,7 +24,7 @@ import java.time.Instant;
 /**
  * A user-owned alert rule.
  *
- * <p>Ownership is expressed by {@code ownerId}; every read and write is scoped to the
+ * <p>Ownership is expressed by {@code organizationId}; every read and write is scoped to the
  * authenticated user in the service layer (tenant invariant). {@code target} is either a
  * metric name ({@link AlertRuleType#METRIC_THRESHOLD}) or a health-check id
  * ({@link AlertRuleType#HEALTH_CHECK}).
@@ -37,7 +37,7 @@ import java.time.Instant;
 @Table(
         name = "alert_rules",
         indexes = {
-                @Index(name = "idx_alert_rules_owner_id", columnList = "owner_id"),
+                @Index(name = "idx_alert_rules_organization_id", columnList = "organization_id"),
                 @Index(name = "idx_alert_rules_is_active", columnList = "is_active")
         }
 )
@@ -55,8 +55,8 @@ public class AlertRule {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "owner_id", nullable = false)
-    private Long ownerId;
+    @Column(name = "organization_id", nullable = false)
+    private Long organizationId;
 
     /** Required for {@link AlertRuleType#METRIC_THRESHOLD}; null for health-check rules. */
     @Column(name = "application_id")

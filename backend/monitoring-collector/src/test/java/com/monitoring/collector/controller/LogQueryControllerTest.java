@@ -1,5 +1,6 @@
 package com.monitoring.collector.controller;
 
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import com.monitoring.collector.dto.LogEventResponse;
 import com.monitoring.collector.dto.LogsQueryRequest;
 import com.monitoring.collector.dto.PageResponse;
@@ -49,8 +50,10 @@ class LogQueryControllerTest {
     @BeforeEach
     void setUp() {
         logQueryService = Mockito.mock(LogQueryService.class);
+        CurrentTenantService tenantService = Mockito.mock(CurrentTenantService.class);
+        when(tenantService.requireOrganizationId()).thenReturn(USER_ID);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new LogQueryController(logQueryService))
+                .standaloneSetup(new LogQueryController(logQueryService, tenantService))
                 .setControllerAdvice(new TestAdvice())
                 .build();
         SecurityContextHolder.getContext().setAuthentication(

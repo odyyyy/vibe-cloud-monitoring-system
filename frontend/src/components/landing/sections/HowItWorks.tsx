@@ -121,7 +121,7 @@ function FlowCard({ step, index, inView }: { step: FlowStep; index: number; inVi
   return (
     <div className="relative">
       <div
-        className={`card-hover group h-full rounded-2xl border border-white/10 bg-[#0b101b]/70 p-6 ${
+        className={`card-hover group h-full rounded-2xl border border-white/10 bg-panel/70 p-6 ${
           inView ? 'vp-step' : 'opacity-0'
         }`}
         style={{ animationDelay: `${index * 110}ms` }}
@@ -180,7 +180,7 @@ export function HowItWorks() {
         }
       `}</style>
 
-      <section id="flow" className="relative overflow-hidden border-y border-white/5 bg-[#070a12] py-24">
+      <section id="flow" className="relative overflow-hidden border-y border-white/5 bg-canvas-2 py-24">
         <div className="bg-grid-fine absolute inset-0 opacity-60" />
         <div className="orb -left-24 top-12 h-64 w-64 bg-cyan-500/30" />
         <div className="orb -right-20 bottom-0 h-72 w-72 bg-violet-600/25" />
@@ -237,7 +237,7 @@ export function HowItWorks() {
                 />
                 {installSteps.map((text, index) => (
                   <li key={text} className="group flex gap-4">
-                    <span className="mono relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-cyan-400/40 bg-[#070a12] text-[11px] text-cyan-300 transition-colors duration-300 group-hover:border-cyan-300 group-hover:bg-cyan-400/10 group-hover:text-cyan-200">
+                    <span className="mono relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-cyan-400/40 bg-canvas-2 text-[11px] text-cyan-300 transition-colors duration-300 group-hover:border-cyan-300 group-hover:bg-cyan-400/10 group-hover:text-cyan-200">
                       {index + 1}
                     </span>
                     <span

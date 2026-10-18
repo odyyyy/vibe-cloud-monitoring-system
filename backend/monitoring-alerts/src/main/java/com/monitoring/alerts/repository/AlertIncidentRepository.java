@@ -11,7 +11,7 @@ import java.util.Optional;
 
 public interface AlertIncidentRepository extends JpaRepository<AlertIncident, Long> {
 
-    Page<AlertIncident> findByOwnerIdOrderByTriggeredAtDesc(Long ownerId, Pageable pageable);
+    Page<AlertIncident> findByOrganizationIdOrderByTriggeredAtDesc(Long organizationId, Pageable pageable);
 
     Optional<AlertIncident> findFirstByRule_IdAndStatusOrderByTriggeredAtDesc(Long ruleId, IncidentStatus status);
 

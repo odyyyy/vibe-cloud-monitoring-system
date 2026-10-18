@@ -17,7 +17,7 @@ public class DashboardResponse {
 
     private Long id;
     private String name;
-    private Long userId;
+    private Long organizationId;
     private Instant createdAt;
     private List<WidgetResponse> widgets;
 
@@ -25,7 +25,7 @@ public class DashboardResponse {
         return DashboardResponse.builder()
                 .id(dashboard.getId())
                 .name(dashboard.getName())
-                .userId(dashboard.getOwnerId())
+                .organizationId(dashboard.getOrganizationId())
                 .createdAt(dashboard.getCreatedAt())
                 .widgets(dashboard.getWidgets().stream().map(WidgetResponse::fromEntity).toList())
                 .build();

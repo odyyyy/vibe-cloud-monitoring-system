@@ -49,7 +49,7 @@ class LogsIngestIntegrationTest {
         applicationRepository.save(Application.builder()
                 .name("logs-ingest-app")
                 .apiKeyHash(ApiKeyHasher.hash("app_logs_ingest"))
-                .ownerId(1L)
+                .organizationId(1L)
                 .build());
     }
 

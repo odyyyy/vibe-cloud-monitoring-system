@@ -55,7 +55,7 @@ export function DashboardSection({
       onDragOver={onDragOver}
       onDrop={onDrop}
       className={cn(
-        'space-y-4 rounded-2xl border border-white/10 bg-[#0b101b]/30 p-4 sm:p-5',
+        'space-y-4 rounded-2xl border border-white/10 bg-panel/30 p-4 sm:p-5',
         isDragging && 'border-cyan-400/40 opacity-60',
       )}
     >

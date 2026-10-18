@@ -25,7 +25,7 @@ import java.time.Instant;
 /**
  * A single firing episode of an alert rule.
  *
- * <p>{@code ownerId} is denormalized so incidents can be listed and scoped to a tenant
+ * <p>{@code organizationId} is denormalized so incidents can be listed and scoped to a tenant
  * without joining the rule. Incidents are removed when their rule is deleted (FK cascade).
  */
 @Entity
@@ -33,7 +33,7 @@ import java.time.Instant;
         name = "alert_incidents",
         indexes = {
                 @Index(name = "idx_alert_incidents_rule_id", columnList = "rule_id"),
-                @Index(name = "idx_alert_incidents_owner_id", columnList = "owner_id"),
+                @Index(name = "idx_alert_incidents_organization_id", columnList = "organization_id"),
                 @Index(name = "idx_alert_incidents_triggered_at", columnList = "triggered_at")
         }
 )
@@ -52,8 +52,8 @@ public class AlertIncident {
     @JoinColumn(name = "rule_id", nullable = false)
     private AlertRule rule;
 
-    @Column(name = "owner_id", nullable = false)
-    private Long ownerId;
+    @Column(name = "organization_id", nullable = false)
+    private Long organizationId;
 
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)

@@ -22,7 +22,7 @@ import java.time.Instant;
 public class AlertRuleResponse {
 
     private Long id;
-    private Long userId;
+    private Long organizationId;
     private Long applicationId;
     private String name;
     private AlertRuleType type;
@@ -40,7 +40,7 @@ public class AlertRuleResponse {
     public static AlertRuleResponse fromEntity(AlertRule rule) {
         return AlertRuleResponse.builder()
                 .id(rule.getId())
-                .userId(rule.getOwnerId())
+                .organizationId(rule.getOrganizationId())
                 .applicationId(rule.getApplicationId())
                 .name(rule.getName())
                 .type(rule.getType())

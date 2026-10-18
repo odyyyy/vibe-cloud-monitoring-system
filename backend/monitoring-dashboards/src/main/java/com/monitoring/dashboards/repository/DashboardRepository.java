@@ -17,10 +17,10 @@ public interface DashboardRepository extends JpaRepository<Dashboard, Long> {
     @Query("""
             SELECT DISTINCT d FROM Dashboard d
             LEFT JOIN FETCH d.widgets
-            WHERE d.ownerId = :ownerId
+            WHERE d.organizationId = :organizationId
             ORDER BY d.createdAt DESC
             """)
-    List<Dashboard> findAllWithWidgetsByOwnerId(@Param("ownerId") Long ownerId);
+    List<Dashboard> findAllWithWidgetsByOrganizationId(@Param("organizationId") Long organizationId);
 
     @Query("SELECT d FROM Dashboard d LEFT JOIN FETCH d.widgets WHERE d.id = :id")
     Optional<Dashboard> findWithWidgetsById(@Param("id") Long id);

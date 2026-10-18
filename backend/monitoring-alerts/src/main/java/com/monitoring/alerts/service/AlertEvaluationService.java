@@ -110,7 +110,7 @@ public class AlertEvaluationService {
 
         AlertIncident incident = incidentRepository.save(AlertIncident.builder()
                 .rule(rule)
-                .ownerId(rule.getOwnerId())
+                .organizationId(rule.getOrganizationId())
                 .status(IncidentStatus.FIRING)
                 .triggeredAt(now)
                 .build());
@@ -155,7 +155,7 @@ public class AlertEvaluationService {
         OptionalDouble latest;
         try {
             latest = metricQueryService.latestValue(
-                    rule.getOwnerId(), rule.getApplicationId(), rule.getTarget(), since);
+                    rule.getOrganizationId(), rule.getApplicationId(), rule.getTarget(), since);
         } catch (RuntimeException ex) {
             // The application may have been deleted or become inaccessible; skip this round.
             log.debug("Metric lookup for rule {} failed: {}", rule.getId(), ex.getMessage());
@@ -178,7 +178,7 @@ public class AlertEvaluationService {
 
         List<HealthCheckResultResponse> results;
         try {
-            results = healthCheckService.listResults(rule.getOwnerId(), healthCheckId, 1);
+            results = healthCheckService.listResults(rule.getOrganizationId(), healthCheckId, 1);
         } catch (HealthCheckNotFoundException | HealthCheckAccessDeniedException ex) {
             log.debug("Health check {} for rule {} is gone: {}", healthCheckId, rule.getId(), ex.getMessage());
             return Optional.empty();
@@ -211,7 +211,7 @@ public class AlertEvaluationService {
                 incident.getId(),
                 rule.getId(),
                 rule.getName(),
-                rule.getOwnerId(),
+                rule.getOrganizationId(),
                 rule.getApplicationId(),
                 rule.getType(),
                 rule.getTarget(),

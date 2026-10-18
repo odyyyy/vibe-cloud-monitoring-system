@@ -30,8 +30,9 @@ import java.util.stream.Collectors;
  *
  * <p>Writes run in an independent transaction ({@link Propagation#REQUIRES_NEW}) so a recorded
  * event is committed as soon as the action completes and is not rolled back together with
- * unrelated work. Reads are always scoped to the acting user ({@code userId}); the identifier
- * comes from the authenticated principal, never from the request.
+ * unrelated work. Reads are always scoped to the acting organization; the identifier comes
+ * from the authenticated tenant context, never from the request. The acting user is stored
+ * separately for display.
  */
 @Service
 @RequiredArgsConstructor
@@ -42,8 +43,9 @@ public class AuditEventService {
 
     /** Persists a single audit event synchronously. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void record(Long userId, String action, String resourceId, String ipAddress) {
+    public void record(Long organizationId, Long userId, String action, String resourceId, String ipAddress) {
         auditEventRepository.save(AuditEvent.builder()
+                .organizationId(organizationId)
                 .userId(userId)
                 .action(action)
                 .resourceId(resourceId)
@@ -52,35 +54,35 @@ public class AuditEventService {
                 .build());
     }
 
-    /** Returns the authenticated user's events, newest first, with optional filters. */
+    /** Returns the organization's events, newest first, with optional filters. */
     @Transactional(readOnly = true)
-    public PageResponse<AuditEventResponse> list(Long userId, AuditEventQuery query) {
+    public PageResponse<AuditEventResponse> list(Long organizationId, AuditEventQuery query) {
         Pageable pageable = PageRequest.of(
                 query.getPage(),
                 query.getSize(),
                 Sort.by(Sort.Order.desc("timestamp"), Sort.Order.desc("id"))
         );
 
-        Page<AuditEvent> page = auditEventRepository.findAll(toSpecification(userId, query), pageable);
+        Page<AuditEvent> page = auditEventRepository.findAll(toSpecification(organizationId, query), pageable);
         Map<Long, String> usernames = resolveUsernames(page.getContent());
 
         return PageResponse.of(page, event -> AuditEventResponse.from(event, usernames.get(event.getUserId())));
     }
 
-    /** Returns a single event only when it belongs to the given user; otherwise empty. */
+    /** Returns a single event only when it belongs to the given organization; otherwise empty. */
     @Transactional(readOnly = true)
-    public Optional<AuditEventResponse> find(Long userId, Long eventId) {
+    public Optional<AuditEventResponse> find(Long organizationId, Long eventId) {
         return auditEventRepository.findById(eventId)
-                .filter(event -> event.getUserId().equals(userId))
+                .filter(event -> event.getOrganizationId().equals(organizationId))
                 .map(event -> AuditEventResponse.from(event, resolveUsername(event.getUserId())));
     }
 
-    private Specification<AuditEvent> toSpecification(Long userId, AuditEventQuery query) {
+    private Specification<AuditEvent> toSpecification(Long organizationId, AuditEventQuery query) {
         String action = normalize(query.getAction());
 
         return (root, criteriaQuery, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
-            predicates.add(cb.equal(root.get("userId"), userId));
+            predicates.add(cb.equal(root.get("organizationId"), organizationId));
 
             if (action != null) {
                 predicates.add(cb.equal(root.get("action"), action));

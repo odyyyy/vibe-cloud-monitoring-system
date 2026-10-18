@@ -9,7 +9,7 @@ export function Footer() {
   ]
 
   return (
-    <footer className="relative border-t border-white/5 bg-[#05070d] py-14">
+    <footer className="relative border-t border-white/5 bg-canvas py-14">
       <div className="mx-auto max-w-7xl px-6">
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
           <div>

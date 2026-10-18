@@ -62,6 +62,14 @@ public class AuthToken {
     @Column(nullable = false, length = 32)
     private AuthTokenType type;
 
+    /**
+     * Target address of an {@link AuthTokenType#EMAIL_CHANGE} token; {@code null} for every
+     * other token type. The confirmation link applies this address, so the raw email is only
+     * ever stored alongside the token that authorises it.
+     */
+    @Column(name = "new_email", length = 255)
+    private String newEmail;
+
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 

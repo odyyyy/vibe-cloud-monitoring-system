@@ -35,7 +35,7 @@ public class Application {
     private String apiKeyHash;
 
     @Column(nullable = false)
-    private Long ownerId;
+    private Long organizationId;
 
     @CreationTimestamp
     private Instant createdAt;

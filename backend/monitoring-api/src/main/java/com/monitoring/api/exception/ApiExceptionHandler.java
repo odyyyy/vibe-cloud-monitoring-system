@@ -1,5 +1,16 @@
 package com.monitoring.api.exception;
 
+import com.monitoring.auth.organization.exception.InviteTargetNotFoundException;
+import com.monitoring.auth.organization.exception.LastOwnerException;
+import com.monitoring.auth.organization.exception.MemberAlreadyExistsException;
+import com.monitoring.auth.organization.exception.MemberNotFoundException;
+import com.monitoring.auth.organization.exception.OrganizationNotFoundException;
+import com.monitoring.auth.organization.exception.TenantAccessDeniedException;
+import com.monitoring.collector.exception.SavedLogViewAccessDeniedException;
+import com.monitoring.collector.exception.SavedLogViewLimitExceededException;
+import com.monitoring.collector.exception.SavedLogViewNotFoundException;
+import com.monitoring.collector.exception.InvalidTraceException;
+import com.monitoring.collector.exception.TraceNotFoundException;
 import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
 import com.monitoring.dashboards.exception.DashboardNotFoundException;
 import com.monitoring.dashboards.exception.InvalidWidgetConfigException;
@@ -35,6 +46,25 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiError> handleNotFound(ApplicationNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(TenantAccessDeniedException.class)
+    public ResponseEntity<ApiError> handleTenantAccessDenied(TenantAccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiError(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler({OrganizationNotFoundException.class, MemberNotFoundException.class,
+            InviteTargetNotFoundException.class})
+    public ResponseEntity<ApiError> handleOrganizationNotFound(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler({MemberAlreadyExistsException.class, LastOwnerException.class})
+    public ResponseEntity<ApiError> handleOrganizationConflict(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(HttpStatus.CONFLICT.value(), ex.getMessage()));
     }
 
     @ExceptionHandler(ApplicationAccessDeniedException.class)
@@ -104,10 +134,36 @@ public class ApiExceptionHandler {
      * mapped here; unexpected exceptions fall through to the default handler (HTTP 500 without
      * internal details).
      */
-    @ExceptionHandler({ApplicationNameConflictException.class, WidgetLimitExceededException.class})
+    @ExceptionHandler({ApplicationNameConflictException.class, WidgetLimitExceededException.class,
+            SavedLogViewLimitExceededException.class})
     public ResponseEntity<ApiError> handleConflict(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ApiError(HttpStatus.CONFLICT.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(SavedLogViewNotFoundException.class)
+    public ResponseEntity<ApiError> handleSavedLogViewNotFound(SavedLogViewNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(SavedLogViewAccessDeniedException.class)
+    public ResponseEntity<ApiError> handleSavedLogViewAccessDenied(SavedLogViewAccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiError(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(TraceNotFoundException.class)
+    public ResponseEntity<ApiError> handleTraceNotFound(TraceNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
+    }
+
+    /** Trace-level ingestion constraints (for example too many spans for a single trace). */
+    @ExceptionHandler(InvalidTraceException.class)
+    public ResponseEntity<ApiError> handleInvalidTrace(InvalidTraceException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

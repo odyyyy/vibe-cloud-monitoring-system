@@ -209,14 +209,26 @@ class AuthControllerTest {
     }
 
     @Test
-    void resetPassword_invalidToken() throws Exception {
-        ResetPasswordRequest request = new ResetPasswordRequest();
+    void confirmEmailChange_success() throws Exception {
+        VerifyEmailRequest request = new VerifyEmailRequest();
         request.setToken("raw-token");
-        request.setNewPassword("newsecret1");
-        BDDMockito.given(authService.resetPassword(ArgumentMatchers.anyString(), ArgumentMatchers.anyString()))
+        BDDMockito.given(authService.confirmEmailChange("raw-token")).willReturn(mockMessageResponse);
+
+        mockMvc.perform(post("/api/auth/email-change/confirm")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("mock-message"));
+    }
+
+    @Test
+    void confirmEmailChange_invalidToken() throws Exception {
+        VerifyEmailRequest request = new VerifyEmailRequest();
+        request.setToken("raw-token");
+        BDDMockito.given(authService.confirmEmailChange(ArgumentMatchers.anyString()))
                 .willThrow(new InvalidTokenException("Invalid or expired token"));
 
-        mockMvc.perform(post("/api/auth/reset-password")
+        mockMvc.perform(post("/api/auth/email-change/confirm")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());

@@ -81,7 +81,7 @@ class HealthChecksIntegrationTest {
         assertEquals(200, created.getExpectedStatusCode());
         assertEquals(HealthCheckService.DEFAULT_INTERVAL_SECONDS, created.getIntervalSeconds());
         assertTrue(created.isActive());
-        assertEquals(OWNER_ID, created.getUserId());
+        assertEquals(OWNER_ID, created.getOrganizationId());
     }
 
     @Test

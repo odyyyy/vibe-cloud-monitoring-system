@@ -1,6 +1,13 @@
 package com.monitoring.api;
 
 import com.monitoring.auth.jwt.JwtTokenProvider;
+import com.monitoring.auth.organization.entity.Membership;
+import com.monitoring.auth.organization.entity.MembershipRole;
+import com.monitoring.auth.organization.entity.Organization;
+import com.monitoring.auth.organization.repository.MembershipRepository;
+import com.monitoring.auth.organization.repository.OrganizationRepository;
+import com.monitoring.auth.entity.User;
+import com.monitoring.auth.repository.UserRepository;
 import com.monitoring.collector.entity.LogEvent;
 import com.monitoring.collector.entity.LogLevel;
 import com.monitoring.collector.entity.MetricSample;
@@ -39,14 +46,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class OverviewControllerIntegrationTest {
 
-    private static final long USER_ID = 1L;
-    private static final long OTHER_USER_ID = 2L;
+    private static final String OWNER_USERNAME = "overview-owner";
+    private static final String OTHER_USERNAME = "overview-other";
 
     @Autowired
     private MockMvc mockMvc;
 
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private OrganizationRepository organizationRepository;
+
+    @Autowired
+    private MembershipRepository membershipRepository;
 
     @Autowired
     private ApplicationRepository applicationRepository;
@@ -57,11 +73,24 @@ class OverviewControllerIntegrationTest {
     @Autowired
     private LogEventRepository logEventRepository;
 
+    private User owner;
+    private User other;
+    private Long ownerOrganizationId;
+    private Long otherOrganizationId;
+
     @BeforeEach
     void setUp() {
         logEventRepository.deleteAll();
         metricSampleRepository.deleteAll();
         applicationRepository.deleteAll();
+        membershipRepository.deleteAll();
+        organizationRepository.deleteAll();
+        userRepository.deleteAll();
+
+        owner = createUser(OWNER_USERNAME);
+        other = createUser(OTHER_USERNAME);
+        ownerOrganizationId = createOrganization(owner);
+        otherOrganizationId = createOrganization(other);
     }
 
     @Test
@@ -74,7 +103,7 @@ class OverviewControllerIntegrationTest {
         Application application = applicationRepository.save(Application.builder()
                 .name("overview-http-app")
                 .apiKeyHash("app_overview_http")
-                .ownerId(USER_ID)
+                .organizationId(ownerOrganizationId)
                 .build());
 
         Instant recent = Instant.now().minusSeconds(60);
@@ -94,7 +123,7 @@ class OverviewControllerIntegrationTest {
                 .receivedAt(recent)
                 .build());
 
-        mockMvc.perform(get("/api/v1/overview").header("Authorization", bearer(USER_ID)))
+        mockMvc.perform(get("/api/v1/overview").header("Authorization", bearer(owner.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.applicationCount").value(1))
                 .andExpect(jsonPath("$.metricNameCount24h").value(1))
@@ -106,14 +135,35 @@ class OverviewControllerIntegrationTest {
         applicationRepository.save(Application.builder()
                 .name("overview-http-other")
                 .apiKeyHash("app_overview_http_other")
-                .ownerId(OTHER_USER_ID)
+                .organizationId(otherOrganizationId)
                 .build());
 
-        mockMvc.perform(get("/api/v1/overview").header("Authorization", bearer(USER_ID)))
+        mockMvc.perform(get("/api/v1/overview").header("Authorization", bearer(owner.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.applicationCount").value(0))
                 .andExpect(jsonPath("$.metricNameCount24h").value(0))
                 .andExpect(jsonPath("$.logEventCount24h").value(0));
+    }
+
+    private User createUser(String username) {
+        return userRepository.save(User.builder()
+                .username(username)
+                .email(username + "@example.com")
+                .password("encoded-secret")
+                .emailVerified(true)
+                .role("USER")
+                .build());
+    }
+
+    private Long createOrganization(User user) {
+        Organization organization = organizationRepository.save(
+                Organization.builder().name(user.getUsername() + " org").build());
+        membershipRepository.save(Membership.builder()
+                .organizationId(organization.getId())
+                .userId(user.getId())
+                .role(MembershipRole.OWNER)
+                .build());
+        return organization.getId();
     }
 
     private String bearer(Long userId) {

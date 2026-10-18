@@ -27,11 +27,17 @@ public class AuthProperties {
     /** How long a password-reset link stays valid. */
     private Duration resetTtl = Duration.ofHours(1);
 
+    /** How long an email-change confirmation link stays valid. */
+    private Duration emailChangeTtl = Duration.ofHours(1);
+
     /** Frontend base URL used to build the confirmation link. */
     private String verificationUrl = "http://localhost:3000/verify-email";
 
     /** Frontend base URL used to build the password-reset link. */
     private String resetUrl = "http://localhost:3000/reset-password";
+
+    /** Frontend base URL used to build the email-change confirmation link. */
+    private String emailChangeUrl = "http://localhost:3000/confirm-email-change";
 
     /**
      * When true, outbound emails (with their one-time links) are written to the log.

@@ -36,4 +36,20 @@ public class LoggingEmailSender implements EmailSender {
         }
         log.info("[email] Reset your password for {} ({}) -> {}", username, recipient, resetLink);
     }
+
+    @Override
+    public void sendEmailChangeConfirmation(String recipient, String username, String confirmationLink) {
+        if (!authProperties.isLogEmails()) {
+            return;
+        }
+        log.info("[email] Confirm your new email for {} ({}) -> {}", username, recipient, confirmationLink);
+    }
+
+    @Override
+    public void sendEmailChangeNotice(String recipient, String username, String newEmail) {
+        if (!authProperties.isLogEmails()) {
+            return;
+        }
+        log.info("[email] Email change requested for {} ({}); new address: {}", username, recipient, newEmail);
+    }
 }

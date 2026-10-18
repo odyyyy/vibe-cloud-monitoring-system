@@ -22,7 +22,7 @@ import java.util.List;
 /**
  * Application service for synthetic health checks.
  *
- * <p>Every operation is scoped to the authenticated {@code ownerId}: a check that exists but
+ * <p>Every operation is scoped to the authenticated {@code organizationId}: a check that exists but
  * belongs to another user raises {@link HealthCheckAccessDeniedException} (HTTP 403), while a
  * missing one raises {@link HealthCheckNotFoundException} (HTTP 404).
  *
@@ -43,18 +43,18 @@ public class HealthCheckService {
     private final SsrfGuard ssrfGuard;
 
     @Transactional(readOnly = true)
-    public List<HealthCheckResponse> list(Long ownerId) {
-        return configRepository.findByOwnerIdOrderByCreatedAtDesc(ownerId).stream()
+    public List<HealthCheckResponse> list(Long organizationId) {
+        return configRepository.findByOrganizationIdOrderByCreatedAtDesc(organizationId).stream()
                 .map(HealthCheckResponse::fromEntity)
                 .toList();
     }
 
     @Transactional
-    public HealthCheckResponse create(Long ownerId, CreateHealthCheckRequest request) {
+    public HealthCheckResponse create(Long organizationId, CreateHealthCheckRequest request) {
         URI target = ssrfGuard.validate(request.getTargetUrl().trim());
 
         HealthCheckConfig config = HealthCheckConfig.builder()
-                .ownerId(ownerId)
+                .organizationId(organizationId)
                 .name(request.getName().trim())
                 .targetUrl(target.toString())
                 .method(request.getMethod())
@@ -71,8 +71,8 @@ public class HealthCheckService {
     }
 
     @Transactional
-    public HealthCheckResponse update(Long ownerId, Long id, UpdateHealthCheckRequest request) {
-        HealthCheckConfig config = getOwned(ownerId, id);
+    public HealthCheckResponse update(Long organizationId, Long id, UpdateHealthCheckRequest request) {
+        HealthCheckConfig config = getOwned(organizationId, id);
 
         if (request.getName() != null && !request.getName().isBlank()) {
             config.setName(request.getName().trim());
@@ -98,15 +98,15 @@ public class HealthCheckService {
     }
 
     @Transactional
-    public void delete(Long ownerId, Long id) {
-        HealthCheckConfig config = getOwned(ownerId, id);
+    public void delete(Long organizationId, Long id) {
+        HealthCheckConfig config = getOwned(organizationId, id);
         resultRepository.deleteByConfig_Id(id);
         configRepository.delete(config);
     }
 
     @Transactional(readOnly = true)
-    public List<HealthCheckResultResponse> listResults(Long ownerId, Long id, Integer limit) {
-        getOwned(ownerId, id);
+    public List<HealthCheckResultResponse> listResults(Long organizationId, Long id, Integer limit) {
+        getOwned(organizationId, id);
         int effectiveLimit = limit == null ? DEFAULT_RESULTS_LIMIT : limit;
         effectiveLimit = Math.max(1, Math.min(effectiveLimit, MAX_RESULTS_LIMIT));
         return resultRepository
@@ -138,10 +138,10 @@ public class HealthCheckService {
         configRepository.save(config);
     }
 
-    private HealthCheckConfig getOwned(Long ownerId, Long id) {
+    private HealthCheckConfig getOwned(Long organizationId, Long id) {
         HealthCheckConfig config = configRepository.findById(id)
                 .orElseThrow(() -> new HealthCheckNotFoundException(id));
-        if (!config.getOwnerId().equals(ownerId)) {
+        if (!config.getOrganizationId().equals(organizationId)) {
             throw new HealthCheckAccessDeniedException();
         }
         return config;

@@ -59,7 +59,7 @@ class AlertEvaluationServiceTest {
     private AlertRule metricRule() {
         return AlertRule.builder()
                 .id(1L)
-                .ownerId(OWNER_ID)
+                .organizationId(OWNER_ID)
                 .applicationId(APP_ID)
                 .name("High CPU")
                 .type(AlertRuleType.METRIC_THRESHOLD)
@@ -74,7 +74,7 @@ class AlertEvaluationServiceTest {
     private AlertRule healthCheckRule() {
         return AlertRule.builder()
                 .id(2L)
-                .ownerId(OWNER_ID)
+                .organizationId(OWNER_ID)
                 .name("API down")
                 .type(AlertRuleType.HEALTH_CHECK)
                 .target("5")
@@ -148,7 +148,7 @@ class AlertEvaluationServiceTest {
         AlertIncident firing = AlertIncident.builder()
                 .id(3L)
                 .rule(rule)
-                .ownerId(OWNER_ID)
+                .organizationId(OWNER_ID)
                 .status(IncidentStatus.FIRING)
                 .triggeredAt(NOW.minusSeconds(120))
                 .build();
@@ -236,7 +236,7 @@ class AlertEvaluationServiceTest {
         AlertIncident firing = AlertIncident.builder()
                 .id(4L)
                 .rule(rule)
-                .ownerId(OWNER_ID)
+                .organizationId(OWNER_ID)
                 .status(IncidentStatus.FIRING)
                 .build();
         when(incidentRepository.findFirstByRule_IdAndStatusOrderByTriggeredAtDesc(2L, IncidentStatus.FIRING))

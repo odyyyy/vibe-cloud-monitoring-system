@@ -58,7 +58,7 @@ class WorkspaceSummaryServiceIntegrationTest {
         application = applicationRepository.save(Application.builder()
                 .name("overview-it-app")
                 .apiKeyHash("app_overview_it")
-                .ownerId(OWNER_ID)
+                .organizationId(OWNER_ID)
                 .build());
     }
 
@@ -104,7 +104,7 @@ class WorkspaceSummaryServiceIntegrationTest {
         Application second = applicationRepository.save(Application.builder()
                 .name("overview-it-second")
                 .apiKeyHash("app_overview_it_second")
-                .ownerId(OWNER_ID)
+                .organizationId(OWNER_ID)
                 .build());
         saveSample(second, "disk_usage", WITHIN_WINDOW);
         saveLog(second, WITHIN_WINDOW);
@@ -133,7 +133,7 @@ class WorkspaceSummaryServiceIntegrationTest {
         Application other = applicationRepository.save(Application.builder()
                 .name("overview-it-other")
                 .apiKeyHash("app_overview_it_other")
-                .ownerId(2L)
+                .organizationId(2L)
                 .build());
         saveSample(other, "cpu_usage", WITHIN_WINDOW);
         saveLog(other, WITHIN_WINDOW);

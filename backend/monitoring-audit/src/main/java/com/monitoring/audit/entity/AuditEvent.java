@@ -20,8 +20,8 @@ import java.time.Instant;
  *
  * <p>Audit events are append-only: every column is {@code updatable = false}, there is no
  * setter, and no service or endpoint exposes a way to modify or delete a row. The tenant
- * scope is the acting {@code userId}; reads are filtered by it so a user can only see their
- * own events.
+ * scope is the {@code organizationId}; reads are filtered by it so members only see events of
+ * the organization they are acting in. {@code userId} identifies the acting user.
  *
  * <p>{@code timestamp} is the server-side instant (UTC) at which the action completed.
  * {@code ipAddress} is best-effort client information derived from the request headers.
@@ -30,8 +30,9 @@ import java.time.Instant;
 @Table(
         name = "audit_events",
         indexes = {
+                @Index(name = "idx_audit_events_organization_id", columnList = "organization_id"),
+                @Index(name = "idx_audit_events_organization_action", columnList = "organization_id,action"),
                 @Index(name = "idx_audit_events_user_id", columnList = "user_id"),
-                @Index(name = "idx_audit_events_user_action", columnList = "user_id,action"),
                 @Index(name = "idx_audit_events_event_time", columnList = "event_time")
         }
 )
@@ -44,6 +45,9 @@ public class AuditEvent {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "organization_id", nullable = false, updatable = false)
+    private Long organizationId;
 
     @Column(name = "user_id", nullable = false, updatable = false)
     private Long userId;

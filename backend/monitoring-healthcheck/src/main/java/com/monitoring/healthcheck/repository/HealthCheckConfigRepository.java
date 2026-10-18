@@ -8,9 +8,9 @@ import java.util.Optional;
 
 public interface HealthCheckConfigRepository extends JpaRepository<HealthCheckConfig, Long> {
 
-    List<HealthCheckConfig> findByOwnerIdOrderByCreatedAtDesc(Long ownerId);
+    List<HealthCheckConfig> findByOrganizationIdOrderByCreatedAtDesc(Long organizationId);
 
-    Optional<HealthCheckConfig> findByIdAndOwnerId(Long id, Long ownerId);
+    Optional<HealthCheckConfig> findByIdAndOrganizationId(Long id, Long organizationId);
 
     /** Active configurations considered by the scheduler. */
     List<HealthCheckConfig> findByActiveTrue();

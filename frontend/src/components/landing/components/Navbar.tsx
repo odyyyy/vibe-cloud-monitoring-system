@@ -11,7 +11,7 @@ export function Navbar() {
   useProfile()
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-white/5 bg-[#05070d]/70 backdrop-blur-xl">
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-white/5 bg-canvas/70 backdrop-blur-xl">
       <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         <a href="#top" className="flex items-center gap-2.5">
           <Logo />
@@ -53,7 +53,7 @@ export function Navbar() {
               </Link>
               <Link
                 to="/register"
-                className="group inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2 text-sm font-semibold text-[#05070d] transition-transform hover:scale-[1.03]"
+                className="group inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 px-4 py-2 text-sm font-semibold text-canvas transition-transform hover:scale-[1.03]"
               >
                 Start free
                 <IconArrow className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />

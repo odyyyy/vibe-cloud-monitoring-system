@@ -74,7 +74,7 @@ class DashboardsIntegrationTest {
         List<DashboardResponse> list = dashboardService.listDashboards(OWNER_ID);
         assertEquals(1, list.size());
         assertEquals("Prod", list.get(0).getName());
-        assertEquals(OWNER_ID, list.get(0).getUserId());
+        assertEquals(OWNER_ID, list.get(0).getOrganizationId());
 
         DashboardResponse fetched = dashboardService.getDashboard(OWNER_ID, created.getId());
         assertEquals(created.getId(), fetched.getId());

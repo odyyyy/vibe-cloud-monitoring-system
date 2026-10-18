@@ -6,5 +6,6 @@ package com.monitoring.auth.entity;
  */
 public enum AuthTokenType {
     EMAIL_VERIFICATION,
-    PASSWORD_RESET
+    PASSWORD_RESET,
+    EMAIL_CHANGE
 }

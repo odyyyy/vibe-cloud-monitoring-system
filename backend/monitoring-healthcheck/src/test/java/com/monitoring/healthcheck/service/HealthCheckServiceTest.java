@@ -44,10 +44,10 @@ class HealthCheckServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
-    private HealthCheckConfig existingConfig(long ownerId) {
+    private HealthCheckConfig existingConfig(long organizationId) {
         return HealthCheckConfig.builder()
                 .id(7L)
-                .ownerId(ownerId)
+                .organizationId(organizationId)
                 .name("API")
                 .targetUrl(PUBLIC_URL)
                 .method(HealthCheckMethod.GET)

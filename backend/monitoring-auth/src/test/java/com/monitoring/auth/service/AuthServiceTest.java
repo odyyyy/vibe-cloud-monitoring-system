@@ -14,6 +14,7 @@ import com.monitoring.auth.exception.EmailNotVerifiedException;
 import com.monitoring.auth.exception.InvalidCredentialsException;
 import com.monitoring.auth.exception.InvalidTokenException;
 import com.monitoring.auth.jwt.JwtTokenProvider;
+import com.monitoring.auth.organization.service.OrganizationService;
 import com.monitoring.auth.repository.AuthTokenRepository;
 import com.monitoring.auth.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,13 +56,17 @@ class AuthServiceTest {
     @Mock
     private EmailSender emailSender;
 
+    @Mock
+    private OrganizationService organizationService;
+
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         AuthProperties authProperties = new AuthProperties();
         authService = new AuthService(
-                userRepository, authTokenRepository, passwordEncoder, jwtTokenProvider, emailSender, authProperties);
+                userRepository, authTokenRepository, passwordEncoder, jwtTokenProvider, emailSender,
+                authProperties, organizationService);
     }
 
     // --- profile ---
@@ -174,6 +179,46 @@ class AuthServiceTest {
         AuthResponse response = authService.login(loginRequest());
 
         assertThat(response.getToken()).isEqualTo("jwt-token");
+    }
+
+    @Test
+    void login_returnsTokenWhenIdentifierIsEmail() {
+        User user = User.builder().id(3L).username("ada").password("hashed").emailVerified(true).build();
+        given(userRepository.findByEmail("ada@example.com")).willReturn(Optional.of(user));
+        given(passwordEncoder.matches("supersecret", "hashed")).willReturn(true);
+        given(jwtTokenProvider.generateToken(3L, "ada")).willReturn("jwt-token");
+
+        LoginRequest request = loginRequest();
+        request.setUsername("ada@example.com");
+        AuthResponse response = authService.login(request);
+
+        assertThat(response.getToken()).isEqualTo("jwt-token");
+        then(userRepository).should(never()).findByUsername(anyString());
+    }
+
+    @Test
+    void login_trimsIdentifierBeforeLookup() {
+        User user = User.builder().id(3L).username("ada").password("hashed").emailVerified(true).build();
+        given(userRepository.findByUsername("ada")).willReturn(Optional.of(user));
+        given(passwordEncoder.matches("supersecret", "hashed")).willReturn(true);
+        given(jwtTokenProvider.generateToken(3L, "ada")).willReturn("jwt-token");
+
+        LoginRequest request = loginRequest();
+        request.setUsername("  ada  ");
+        AuthResponse response = authService.login(request);
+
+        assertThat(response.getToken()).isEqualTo("jwt-token");
+    }
+
+    @Test
+    void login_rejectsUnknownEmail() {
+        given(userRepository.findByEmail("nobody@example.com")).willReturn(Optional.empty());
+
+        LoginRequest request = loginRequest();
+        request.setUsername("nobody@example.com");
+
+        assertThatThrownBy(() -> authService.login(request))
+                .isInstanceOf(InvalidCredentialsException.class);
     }
 
     @Test
@@ -333,6 +378,178 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.resetPassword("raw-token", "newsecret1"))
                 .isInstanceOf(InvalidTokenException.class);
+    }
+
+    // --- username change ---
+
+    @Test
+    void updateUsername_updatesNameAndReturnsProfile() {
+        User user = User.builder()
+                .id(7L).username("ada").email("ada@example.com").password("hashed").build();
+        given(userRepository.findById(7L)).willReturn(Optional.of(user));
+        given(passwordEncoder.matches("supersecret", "hashed")).willReturn(true);
+        given(userRepository.existsByUsername("grace")).willReturn(false);
+
+        UserProfileResponse profile = authService.updateUsername(7L, "supersecret", "grace");
+
+        assertThat(profile.getUsername()).isEqualTo("grace");
+        assertThat(user.getUsername()).isEqualTo("grace");
+        then(userRepository).should().save(user);
+    }
+
+    @Test
+    void updateUsername_isNoOpWhenUnchanged() {
+        User user = User.builder()
+                .id(7L).username("ada").email("ada@example.com").password("hashed").build();
+        given(userRepository.findById(7L)).willReturn(Optional.of(user));
+        given(passwordEncoder.matches("supersecret", "hashed")).willReturn(true);
+
+        UserProfileResponse profile = authService.updateUsername(7L, "supersecret", "ada");
+
+        assertThat(profile.getUsername()).isEqualTo("ada");
+        then(userRepository).should(never()).save(any(User.class));
+    }
+
+    @Test
+    void updateUsername_rejectsWrongPassword() {
+        User user = User.builder()
+                .id(7L).username("ada").password("hashed").build();
+        given(userRepository.findById(7L)).willReturn(Optional.of(user));
+        given(passwordEncoder.matches("wrong", "hashed")).willReturn(false);
+
+        assertThatThrownBy(() -> authService.updateUsername(7L, "wrong", "grace"))
+                .isInstanceOf(InvalidCredentialsException.class);
+        then(userRepository).should(never()).save(any(User.class));
+    }
+
+    @Test
+    void updateUsername_rejectsTakenUsername() {
+        User user = User.builder()
+                .id(7L).username("ada").password("hashed").build();
+        given(userRepository.findById(7L)).willReturn(Optional.of(user));
+        given(passwordEncoder.matches("supersecret", "hashed")).willReturn(true);
+        given(userRepository.existsByUsername("grace")).willReturn(true);
+
+        assertThatThrownBy(() -> authService.updateUsername(7L, "supersecret", "grace"))
+                .isInstanceOf(EmailAlreadyUsedException.class);
+        then(userRepository).should(never()).save(any(User.class));
+    }
+
+    @Test
+    void isUsernameAvailable_reflectsRepository() {
+        given(userRepository.existsByUsername("grace")).willReturn(false);
+        given(userRepository.existsByUsername("ada")).willReturn(true);
+
+        assertThat(authService.isUsernameAvailable("grace")).isTrue();
+        assertThat(authService.isUsernameAvailable("ada")).isFalse();
+        assertThat(authService.isUsernameAvailable("  ")).isFalse();
+    }
+
+    // --- email change ---
+
+    @Test
+    void requestEmailChange_issuesTokenAndEmailsBothAddresses() {
+        User user = User.builder()
+                .id(7L).username("ada").email("ada@example.com").password("hashed").build();
+        given(userRepository.findById(7L)).willReturn(Optional.of(user));
+        given(passwordEncoder.matches("supersecret", "hashed")).willReturn(true);
+        given(userRepository.existsByEmail("new@example.com")).willReturn(false);
+
+        MessageResponse response = authService.requestEmailChange(7L, "supersecret", "new@example.com");
+
+        ArgumentCaptor<AuthToken> tokenCaptor = ArgumentCaptor.forClass(AuthToken.class);
+        then(authTokenRepository).should().save(tokenCaptor.capture());
+        assertThat(tokenCaptor.getValue().getType()).isEqualTo(AuthTokenType.EMAIL_CHANGE);
+        assertThat(tokenCaptor.getValue().getNewEmail()).isEqualTo("new@example.com");
+        then(authTokenRepository).should().deleteByUserIdAndType(7L, AuthTokenType.EMAIL_CHANGE);
+
+        ArgumentCaptor<String> linkCaptor = ArgumentCaptor.forClass(String.class);
+        then(emailSender).should()
+                .sendEmailChangeConfirmation(eq("new@example.com"), eq("ada"), linkCaptor.capture());
+        assertThat(linkCaptor.getValue()).startsWith("http://localhost:3000/confirm-email-change?token=");
+        then(emailSender).should()
+                .sendEmailChangeNotice(eq("ada@example.com"), eq("ada"), eq("new@example.com"));
+        assertThat(response.getMessage()).contains("new@example.com");
+    }
+
+    @Test
+    void requestEmailChange_rejectsWrongPassword() {
+        User user = User.builder()
+                .id(7L).username("ada").email("ada@example.com").password("hashed").build();
+        given(userRepository.findById(7L)).willReturn(Optional.of(user));
+        given(passwordEncoder.matches("wrong", "hashed")).willReturn(false);
+
+        assertThatThrownBy(() -> authService.requestEmailChange(7L, "wrong", "new@example.com"))
+                .isInstanceOf(InvalidCredentialsException.class);
+        then(authTokenRepository).should(never()).save(any(AuthToken.class));
+    }
+
+    @Test
+    void requestEmailChange_rejectsEmailUsedByAnotherAccount() {
+        User user = User.builder()
+                .id(7L).username("ada").email("ada@example.com").password("hashed").build();
+        given(userRepository.findById(7L)).willReturn(Optional.of(user));
+        given(passwordEncoder.matches("supersecret", "hashed")).willReturn(true);
+        given(userRepository.existsByEmail("taken@example.com")).willReturn(true);
+
+        assertThatThrownBy(() -> authService.requestEmailChange(7L, "supersecret", "taken@example.com"))
+                .isInstanceOf(EmailAlreadyUsedException.class);
+        then(emailSender).should(never())
+                .sendEmailChangeConfirmation(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void requestEmailChange_rejectsCurrentEmail() {
+        User user = User.builder()
+                .id(7L).username("ada").email("ada@example.com").password("hashed").build();
+        given(userRepository.findById(7L)).willReturn(Optional.of(user));
+        given(passwordEncoder.matches("supersecret", "hashed")).willReturn(true);
+
+        assertThatThrownBy(() -> authService.requestEmailChange(7L, "supersecret", "ada@example.com"))
+                .isInstanceOf(EmailAlreadyUsedException.class);
+    }
+
+    @Test
+    void confirmEmailChange_updatesEmailAndMarksVerified() {
+        User user = User.builder().id(1L).username("ada").email("ada@example.com").build();
+        AuthToken token = activeToken(1L, AuthTokenType.EMAIL_CHANGE);
+        token.setNewEmail("new@example.com");
+        given(authTokenRepository.findByTokenHashAndType(anyString(), eq(AuthTokenType.EMAIL_CHANGE)))
+                .willReturn(Optional.of(token));
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(userRepository.existsByEmail("new@example.com")).willReturn(false);
+
+        authService.confirmEmailChange("raw-token");
+
+        assertThat(user.getEmail()).isEqualTo("new@example.com");
+        assertThat(user.isEmailVerified()).isTrue();
+        assertThat(user.getEmailVerifiedAt()).isNotNull();
+        assertThat(token.getUsedAt()).isNotNull();
+        then(userRepository).should().save(user);
+    }
+
+    @Test
+    void confirmEmailChange_rejectsInvalidToken() {
+        given(authTokenRepository.findByTokenHashAndType(anyString(), eq(AuthTokenType.EMAIL_CHANGE)))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.confirmEmailChange("raw-token"))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void confirmEmailChange_rejectsAddressClaimedInTheMeantime() {
+        User user = User.builder().id(1L).username("ada").email("ada@example.com").build();
+        AuthToken token = activeToken(1L, AuthTokenType.EMAIL_CHANGE);
+        token.setNewEmail("taken@example.com");
+        given(authTokenRepository.findByTokenHashAndType(anyString(), eq(AuthTokenType.EMAIL_CHANGE)))
+                .willReturn(Optional.of(token));
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(userRepository.existsByEmail("taken@example.com")).willReturn(true);
+
+        assertThatThrownBy(() -> authService.confirmEmailChange("raw-token"))
+                .isInstanceOf(EmailAlreadyUsedException.class);
+        assertThat(user.getEmail()).isEqualTo("ada@example.com");
     }
 
     private AuthToken activeToken(Long userId, AuthTokenType type) {

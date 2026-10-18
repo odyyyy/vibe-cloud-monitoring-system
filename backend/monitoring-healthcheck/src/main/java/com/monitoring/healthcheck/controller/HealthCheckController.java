@@ -5,11 +5,12 @@ import com.monitoring.healthcheck.dto.HealthCheckResponse;
 import com.monitoring.healthcheck.dto.HealthCheckResultResponse;
 import com.monitoring.healthcheck.dto.UpdateHealthCheckRequest;
 import com.monitoring.healthcheck.service.HealthCheckService;
+import com.monitoring.auth.organization.entity.MembershipRole;
+import com.monitoring.auth.organization.security.RequireRole;
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,28 +35,34 @@ import java.util.List;
 public class HealthCheckController {
 
     private final HealthCheckService healthCheckService;
+    private final CurrentTenantService currentTenantService;
 
     @GetMapping
     public ResponseEntity<List<HealthCheckResponse>> list() {
-        return ResponseEntity.ok(healthCheckService.list(currentUserId()));
+        return ResponseEntity.ok(healthCheckService.list(currentTenantService.requireOrganizationId()));
     }
 
     @PostMapping
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<HealthCheckResponse> create(@Valid @RequestBody CreateHealthCheckRequest request) {
-        HealthCheckResponse created = healthCheckService.create(currentUserId(), request);
+        HealthCheckResponse created = healthCheckService.create(
+                currentTenantService.requireOrganizationId(), request);
         return ResponseEntity.created(URI.create("/api/v1/health-checks/" + created.getId())).body(created);
     }
 
     @PutMapping("/{id}")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<HealthCheckResponse> update(
             @PathVariable Long id,
             @Valid @RequestBody UpdateHealthCheckRequest request) {
-        return ResponseEntity.ok(healthCheckService.update(currentUserId(), id, request));
+        return ResponseEntity.ok(healthCheckService.update(
+                currentTenantService.requireOrganizationId(), id, request));
     }
 
     @DeleteMapping("/{id}")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<Void> delete(@PathVariable Long id) {
-        healthCheckService.delete(currentUserId(), id);
+        healthCheckService.delete(currentTenantService.requireOrganizationId(), id);
         return ResponseEntity.noContent().build();
     }
 
@@ -63,20 +70,7 @@ public class HealthCheckController {
     public ResponseEntity<List<HealthCheckResultResponse>> results(
             @PathVariable Long id,
             @RequestParam(name = "limit", required = false) Integer limit) {
-        return ResponseEntity.ok(healthCheckService.listResults(currentUserId(), id, limit));
-    }
-
-    private Long currentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Object principal = authentication != null ? authentication.getPrincipal() : null;
-
-        if (principal instanceof String userId) {
-            try {
-                return Long.parseLong(userId);
-            } catch (NumberFormatException e) {
-                throw new IllegalStateException("Invalid user ID in authentication token");
-            }
-        }
-        throw new IllegalStateException("No authenticated user available");
+        return ResponseEntity.ok(healthCheckService.listResults(
+                currentTenantService.requireOrganizationId(), id, limit));
     }
 }

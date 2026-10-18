@@ -4,6 +4,11 @@ import com.monitoring.audit.entity.AuditEvent;
 import com.monitoring.audit.repository.AuditEventRepository;
 import com.monitoring.auth.entity.User;
 import com.monitoring.auth.jwt.JwtTokenProvider;
+import com.monitoring.auth.organization.entity.Membership;
+import com.monitoring.auth.organization.entity.MembershipRole;
+import com.monitoring.auth.organization.entity.Organization;
+import com.monitoring.auth.organization.repository.MembershipRepository;
+import com.monitoring.auth.organization.repository.OrganizationRepository;
 import com.monitoring.auth.repository.UserRepository;
 import com.monitoring.dashboards.entity.Dashboard;
 import com.monitoring.dashboards.repository.DashboardRepository;
@@ -17,7 +22,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -54,23 +61,34 @@ class AuditLoggingIntegrationTest {
     private UserRepository userRepository;
 
     @Autowired
+    private OrganizationRepository organizationRepository;
+
+    @Autowired
+    private MembershipRepository membershipRepository;
+
+    @Autowired
     private ApplicationRepository applicationRepository;
 
     @Autowired
     private DashboardRepository dashboardRepository;
+
+    private final Map<Long, Long> organizationIdsByUser = new HashMap<>();
 
     @BeforeEach
     void setUp() {
         auditEventRepository.deleteAll();
         dashboardRepository.deleteAll();
         applicationRepository.deleteAll();
+        membershipRepository.deleteAll();
+        organizationRepository.deleteAll();
         userRepository.deleteAll();
+        organizationIdsByUser.clear();
     }
 
     @Test
     void regeneratingApiKeyCreatesAuditEvent() throws Exception {
         User user = createUser("ada");
-        Application application = createApplication(user.getId());
+        Application application = createApplication(orgId(user));
 
         mockMvc.perform(post("/api/applications/{id}/regenerate-api-key", application.getId())
                         .header("Authorization", bearer(user.getId())))
@@ -89,7 +107,7 @@ class AuditLoggingIntegrationTest {
     @Test
     void deletingDashboardCreatesAuditEvent() throws Exception {
         User user = createUser("grace");
-        Dashboard dashboard = createDashboard(user.getId());
+        Dashboard dashboard = createDashboard(orgId(user));
 
         mockMvc.perform(delete("/api/v1/dashboards/{id}", dashboard.getId())
                         .header("Authorization", bearer(user.getId())))
@@ -105,8 +123,8 @@ class AuditLoggingIntegrationTest {
     @Test
     void auditEventsAreReturnedNewestFirstWithResolvedUsername() throws Exception {
         User user = createUser("linus");
-        Application application = createApplication(user.getId());
-        Dashboard dashboard = createDashboard(user.getId());
+        Application application = createApplication(orgId(user));
+        Dashboard dashboard = createDashboard(orgId(user));
 
         mockMvc.perform(post("/api/applications/{id}/regenerate-api-key", application.getId())
                 .header("Authorization", bearer(user.getId()))).andExpect(status().isOk());
@@ -129,7 +147,7 @@ class AuditLoggingIntegrationTest {
     void auditEventsAreScopedToTheAuthenticatedUser() throws Exception {
         User owner = createUser("owner");
         User other = createUser("other");
-        Application application = createApplication(owner.getId());
+        Application application = createApplication(orgId(owner));
 
         mockMvc.perform(post("/api/applications/{id}/regenerate-api-key", application.getId())
                 .header("Authorization", bearer(owner.getId()))).andExpect(status().isOk());
@@ -146,8 +164,8 @@ class AuditLoggingIntegrationTest {
     @Test
     void actionFilterReturnsOnlyMatchingEvents() throws Exception {
         User user = createUser("filter");
-        Application application = createApplication(user.getId());
-        Dashboard dashboard = createDashboard(user.getId());
+        Application application = createApplication(orgId(user));
+        Dashboard dashboard = createDashboard(orgId(user));
 
         mockMvc.perform(post("/api/applications/{id}/regenerate-api-key", application.getId())
                 .header("Authorization", bearer(user.getId()))).andExpect(status().isOk());
@@ -165,7 +183,7 @@ class AuditLoggingIntegrationTest {
     @Test
     void xForwardedForIsCaptured() throws Exception {
         User user = createUser("proxy");
-        Application application = createApplication(user.getId());
+        Application application = createApplication(orgId(user));
 
         mockMvc.perform(post("/api/applications/{id}/regenerate-api-key", application.getId())
                         .header("Authorization", bearer(user.getId()))
@@ -178,7 +196,7 @@ class AuditLoggingIntegrationTest {
     @Test
     void deletingAuditEventsIsNotAllowed() throws Exception {
         User user = createUser("delete");
-        createAuditEvent(user.getId(), "API_KEY_REGENERATED", "1");
+        createAuditEvent(user.getId(), orgId(user), "API_KEY_REGENERATED", "1");
 
         Long eventId = auditEventRepository.findAll().get(0).getId();
 
@@ -208,35 +226,49 @@ class AuditLoggingIntegrationTest {
     }
 
     private User createUser(String username) {
-        return userRepository.save(User.builder()
+        User user = userRepository.save(User.builder()
                 .username(username)
                 .email(username + "@example.com")
                 .password("encoded-secret")
                 .emailVerified(true)
                 .role("USER")
                 .build());
+        Organization organization = organizationRepository.save(
+                Organization.builder().name(username + " org").build());
+        membershipRepository.save(Membership.builder()
+                .organizationId(organization.getId())
+                .userId(user.getId())
+                .role(MembershipRole.OWNER)
+                .build());
+        organizationIdsByUser.put(user.getId(), organization.getId());
+        return user;
     }
 
-    private Application createApplication(Long ownerId) {
+    private Long orgId(User user) {
+        return organizationIdsByUser.get(user.getId());
+    }
+
+    private Application createApplication(Long organizationId) {
         return applicationRepository.save(Application.builder()
-                .name("app-" + ownerId)
-                .apiKeyHash("app_hash_" + ownerId + "_" + System.nanoTime())
-                .ownerId(ownerId)
+                .name("app-" + organizationId)
+                .apiKeyHash("app_hash_" + organizationId + "_" + System.nanoTime())
+                .organizationId(organizationId)
                 .build());
     }
 
-    private Dashboard createDashboard(Long ownerId) {
+    private Dashboard createDashboard(Long organizationId) {
         return dashboardRepository.save(Dashboard.builder()
-                .name("dashboard-" + ownerId)
-                .ownerId(ownerId)
+                .name("dashboard-" + organizationId)
+                .organizationId(organizationId)
                 .build());
     }
 
-    private void createAuditEvent(Long userId, String action, String resourceId) {
+    private void createAuditEvent(Long userId, Long organizationId, String action, String resourceId) {
         // Written directly through the repository (append-only insert) to seed a row without
         // depending on an endpoint; the aspect uses the same repository under the hood.
         auditEventRepository.save(AuditEvent.builder()
                 .userId(userId)
+                .organizationId(organizationId)
                 .action(action)
                 .resourceId(resourceId)
                 .ipAddress("127.0.0.1")

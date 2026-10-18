@@ -106,15 +106,15 @@ class AlertsIntegrationTest {
         applicationRepository.deleteAll();
     }
 
-    private Application createApplication(long ownerId, String name) {
+    private Application createApplication(long organizationId, String name) {
         ApplicationCreateRequest request = new ApplicationCreateRequest();
         request.setName(name);
-        ApplicationWithKeyResponse created = applicationService.createApplication(request, ownerId);
+        ApplicationWithKeyResponse created = applicationService.createApplication(request, organizationId);
         return applicationRepository.findById(created.id()).orElseThrow();
     }
 
-    private AlertRuleResponse createMetricRule(long ownerId, long applicationId) {
-        return alertService.createRule(ownerId, CreateAlertRuleRequest.builder()
+    private AlertRuleResponse createMetricRule(long organizationId, long applicationId) {
+        return alertService.createRule(organizationId, CreateAlertRuleRequest.builder()
                 .name("High CPU")
                 .applicationId(applicationId)
                 .type(AlertRuleType.METRIC_THRESHOLD)

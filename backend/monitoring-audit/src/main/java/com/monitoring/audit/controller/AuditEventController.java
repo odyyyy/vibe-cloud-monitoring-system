@@ -4,11 +4,10 @@ import com.monitoring.audit.dto.AuditEventQuery;
 import com.monitoring.audit.dto.AuditEventResponse;
 import com.monitoring.audit.dto.PageResponse;
 import com.monitoring.audit.service.AuditEventService;
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,29 +27,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuditEventController {
 
     private final AuditEventService auditEventService;
+    private final CurrentTenantService currentTenantService;
 
     @GetMapping
     public ResponseEntity<PageResponse<AuditEventResponse>> list(@Valid AuditEventQuery query) {
-        return ResponseEntity.ok(auditEventService.list(currentUserId(), query));
+        return ResponseEntity.ok(auditEventService.list(
+                currentTenantService.requireOrganizationId(), query));
     }
 
-    /** Returns a single event, or 404 when it does not exist or belongs to another user. */
+    /** Returns a single event, or 404 when it does not exist or belongs to another tenant. */
     @GetMapping("/{id}")
     public ResponseEntity<AuditEventResponse> getOne(@PathVariable Long id) {
-        return ResponseEntity.of(auditEventService.find(currentUserId(), id));
-    }
-
-    private Long currentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Object principal = authentication != null ? authentication.getPrincipal() : null;
-
-        if (principal instanceof String userId) {
-            try {
-                return Long.parseLong(userId);
-            } catch (NumberFormatException e) {
-                throw new IllegalStateException("Invalid user ID in authentication token");
-            }
-        }
-        throw new IllegalStateException("No authenticated user available");
+        return ResponseEntity.of(auditEventService.find(
+                currentTenantService.requireOrganizationId(), id));
     }
 }

@@ -9,7 +9,7 @@ import { Footer } from '../components/landing/components/Footer'
 
 export default function LandingPage() {
   return (
-    <div className="noise min-h-screen bg-[#05070d]">
+    <div className="noise min-h-screen bg-canvas">
       <Navbar />
       <main>
         <Hero />

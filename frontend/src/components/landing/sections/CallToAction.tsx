@@ -18,7 +18,7 @@ export function CallToAction() {
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
             to="/register"
-            className="group inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 px-6 py-3 text-sm font-semibold text-[#05070d] transition-transform hover:scale-[1.03]"
+            className="group inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-cyan-400 to-violet-500 px-6 py-3 text-sm font-semibold text-canvas transition-transform hover:scale-[1.03]"
           >
             Create free account
             <IconArrow className="h-4 w-4 transition-transform group-hover:translate-x-1" />

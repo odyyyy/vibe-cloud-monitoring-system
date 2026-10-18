@@ -47,6 +47,11 @@ public class AuthController {
         return ResponseEntity.ok(authService.resetPassword(request.getToken(), request.getNewPassword()));
     }
 
+    @PostMapping("/email-change/confirm")
+    public ResponseEntity<MessageResponse> confirmEmailChange(@Valid @RequestBody VerifyEmailRequest request) {
+        return ResponseEntity.ok(authService.confirmEmailChange(request.getToken()));
+    }
+
     @GetMapping("/me")
     public ResponseEntity<UserProfileResponse> me(Authentication authentication) {
         if (authentication == null

@@ -16,7 +16,7 @@ import lombok.NoArgsConstructor;
 public class NotificationChannelResponse {
 
     private Long id;
-    private Long userId;
+    private Long organizationId;
     private NotificationChannelType type;
     private String url;
 
@@ -26,7 +26,7 @@ public class NotificationChannelResponse {
     public static NotificationChannelResponse fromEntity(NotificationChannel channel) {
         return NotificationChannelResponse.builder()
                 .id(channel.getId())
-                .userId(channel.getOwnerId())
+                .organizationId(channel.getOrganizationId())
                 .type(channel.getType())
                 .url(channel.getUrl())
                 .active(channel.isActive())

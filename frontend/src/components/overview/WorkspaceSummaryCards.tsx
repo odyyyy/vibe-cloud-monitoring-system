@@ -49,7 +49,7 @@ export function WorkspaceSummaryCards() {
             <Link
               key={card.title}
               to={card.href}
-              className="group rounded-2xl border border-white/10 bg-[#0b101b]/60 p-5 transition-colors hover:border-cyan-400/30 hover:bg-[#0b101b]"
+              className="group rounded-2xl border border-white/10 bg-panel/60 p-5 transition-colors hover:border-cyan-400/30 hover:bg-panel"
             >
               <div className="flex items-center gap-2 text-slate-400">
                 <Icon className="h-4 w-4" aria-hidden="true" />

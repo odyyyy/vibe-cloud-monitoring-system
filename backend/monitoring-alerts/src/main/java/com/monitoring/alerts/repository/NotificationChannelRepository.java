@@ -8,10 +8,10 @@ import java.util.Optional;
 
 public interface NotificationChannelRepository extends JpaRepository<NotificationChannel, Long> {
 
-    List<NotificationChannel> findByOwnerIdOrderByCreatedAtDesc(Long ownerId);
+    List<NotificationChannel> findByOrganizationIdOrderByCreatedAtDesc(Long organizationId);
 
-    Optional<NotificationChannel> findByIdAndOwnerId(Long id, Long ownerId);
+    Optional<NotificationChannel> findByIdAndOrganizationId(Long id, Long organizationId);
 
     /** Channels that should receive notifications for a tenant. */
-    List<NotificationChannel> findByOwnerIdAndActiveTrue(Long ownerId);
+    List<NotificationChannel> findByOrganizationIdAndActiveTrue(Long organizationId);
 }

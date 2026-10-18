@@ -19,6 +19,7 @@ import java.time.Instant;
 public class AuditEventResponse {
 
     private Long id;
+    private Long organizationId;
     private Long userId;
     private String username;
     private String action;
@@ -29,6 +30,7 @@ public class AuditEventResponse {
     public static AuditEventResponse from(AuditEvent event, String username) {
         return AuditEventResponse.builder()
                 .id(event.getId())
+                .organizationId(event.getOrganizationId())
                 .userId(event.getUserId())
                 .username(username)
                 .action(event.getAction())

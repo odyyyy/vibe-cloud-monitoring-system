@@ -133,7 +133,7 @@ function FeatureVisual({ visual }: { visual: VisualKind }) {
   switch (visual) {
     case 'pulse':
       return (
-        <div className="rounded-xl border border-white/5 bg-[#05070d]/70 p-3">
+        <div className="rounded-xl border border-white/5 bg-canvas/70 p-3">
           <div className="mono flex items-center justify-between gap-2 text-[9px] uppercase tracking-wider text-slate-500">
             <span>mem.utilization</span>
             <span>counter · gauge · histogram</span>
@@ -150,7 +150,7 @@ function FeatureVisual({ visual }: { visual: VisualKind }) {
       )
     case 'logs':
       return (
-        <div className="rounded-xl border border-white/5 bg-[#05070d]/70 p-3">
+        <div className="rounded-xl border border-white/5 bg-canvas/70 p-3">
           <div className="mono space-y-1.5 text-[10px] leading-relaxed">
             {logLines.map((line) => (
               <div key={line.t} className="flex gap-2">
@@ -164,7 +164,7 @@ function FeatureVisual({ visual }: { visual: VisualKind }) {
       )
     case 'widgets':
       return (
-        <div className="rounded-xl border border-white/5 bg-[#05070d]/70 p-3">
+        <div className="rounded-xl border border-white/5 bg-canvas/70 p-3">
           <div className="grid grid-cols-2 gap-2">
             <div className="col-span-2 rounded-lg border border-white/5 bg-white/[0.02] p-2.5">
               <div className="mono text-[9px] uppercase tracking-wider text-slate-500">cpu.usage</div>
@@ -194,7 +194,7 @@ function FeatureVisual({ visual }: { visual: VisualKind }) {
       )
     case 'perimeter':
       return (
-        <div className="rounded-xl border border-white/5 bg-[#05070d]/70 p-3">
+        <div className="rounded-xl border border-white/5 bg-canvas/70 p-3">
           <div className="mono mb-2 flex justify-between text-[9px] uppercase tracking-wider text-slate-500">
             <span>scoped perimeter</span>
             <span>tenant boundary</span>
@@ -214,7 +214,7 @@ function FeatureVisual({ visual }: { visual: VisualKind }) {
       )
     case 'limits':
       return (
-        <div className="rounded-xl border border-white/5 bg-[#05070d]/70 p-3">
+        <div className="rounded-xl border border-white/5 bg-canvas/70 p-3">
           <div className="mono mb-2 flex justify-between text-[9px] uppercase tracking-wider text-slate-500">
             <span>enforced quotas</span>
             <span className="text-rose-400/80">limit</span>
@@ -237,13 +237,13 @@ function FeatureVisual({ visual }: { visual: VisualKind }) {
       )
     case 'stack':
       return (
-        <div className="rounded-xl border border-white/5 bg-[#05070d]/70 p-3">
+        <div className="rounded-xl border border-white/5 bg-canvas/70 p-3">
           <div className="mono mb-2 flex justify-between text-[9px] uppercase tracking-wider text-slate-500">
             <span>versioned contracts</span>
             <span>v1 · v2</span>
           </div>
           <div className="relative h-14">
-            <div className="absolute inset-x-1.5 top-0 h-12 rounded-lg border border-violet-400/20 bg-[#0b101b]" />
+            <div className="absolute inset-x-1.5 top-0 h-12 rounded-lg border border-violet-400/20 bg-panel" />
             <div className="absolute inset-x-0.5 top-2 h-12 rounded-lg border border-violet-400/35 bg-[#0d1322]" />
             <div className="absolute inset-x-0 top-3.5 flex h-12 flex-col justify-center gap-0.5 rounded-lg border border-violet-400/60 bg-[#111a2e] px-2.5 shadow-lg shadow-violet-500/10">
               <span className="mono text-[9px] text-violet-300">POST /v1/telemetry</span>
@@ -274,7 +274,7 @@ function FeatureCard({ feature, inView, delay }: FeatureCardProps) {
   return (
     <div
       onMouseMove={handleMouseMove}
-      className={`card-hover group relative flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0b101b]/70 p-6 ${
+      className={`card-hover group relative flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-panel/70 p-6 ${
         inView ? 'vp-card' : 'opacity-0'
       }`}
       style={{ animationDelay: `${delay}ms` }}
@@ -317,7 +317,7 @@ export function ValueProposition() {
   const { ref, inView } = useInView<HTMLDivElement>()
 
   return (
-    <section id="features" className="relative overflow-hidden border-y border-white/5 bg-[#070a12] py-24">
+    <section id="features" className="relative overflow-hidden border-y border-white/5 bg-canvas-2 py-24">
       <style>{`
         @keyframes vp-fade-up {
           from { opacity: 0; transform: translateY(16px); }

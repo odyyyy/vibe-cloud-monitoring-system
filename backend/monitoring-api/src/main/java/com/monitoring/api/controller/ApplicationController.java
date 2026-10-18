@@ -7,11 +7,12 @@ import com.monitoring.storage.dto.ApplicationWithKeyResponse;
 import com.monitoring.storage.entity.Application;
 import com.monitoring.storage.service.ApplicationService;
 import com.monitoring.audit.annotation.AuditLog;
+import com.monitoring.auth.organization.entity.MembershipRole;
+import com.monitoring.auth.organization.security.RequireRole;
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -23,10 +24,11 @@ import java.util.List;
 public class ApplicationController {
 
     private final ApplicationService applicationService;
+    private final CurrentTenantService currentTenantService;
 
     @GetMapping
     public ResponseEntity<List<ApplicationResponse>> listApplications() {
-        List<ApplicationResponse> response = applicationService.findByOwnerId(currentUserId())
+        List<ApplicationResponse> response = applicationService.findByOrganizationId(currentTenantService.requireOrganizationId())
                 .stream()
                 .map(ApplicationResponse::fromEntity)
                 .toList();
@@ -34,31 +36,37 @@ public class ApplicationController {
     }
 
     @PostMapping
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<ApplicationWithKeyResponse> createApplication(
             @Valid @RequestBody ApplicationCreateRequest request) {
-        ApplicationWithKeyResponse application = applicationService.createApplication(request, currentUserId());
+        ApplicationWithKeyResponse application = applicationService.createApplication(
+                request, currentTenantService.requireOrganizationId());
         URI location = URI.create("/api/applications/" + application.id());
         return ResponseEntity.created(location).body(application);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApplicationResponse> getApplication(@PathVariable Long id) {
-        Application application = applicationService.getOwnedApplication(id, currentUserId());
+        Application application = applicationService.getOwnedApplication(
+                id, currentTenantService.requireOrganizationId());
         return ResponseEntity.ok(ApplicationResponse.fromEntity(application));
     }
 
     @PutMapping("/{id}")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<ApplicationResponse> updateApplication(
             @PathVariable Long id,
             @Valid @RequestBody ApplicationUpdateRequest request) {
-        Application application = applicationService.updateApplication(id, request.getName(), currentUserId());
+        Application application = applicationService.updateApplication(
+                id, request.getName(), currentTenantService.requireOrganizationId());
         return ResponseEntity.ok(ApplicationResponse.fromEntity(application));
     }
 
     @DeleteMapping("/{id}")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     @AuditLog(action = "APPLICATION_DELETED", resourceId = "#id")
     public ResponseEntity<Void> deleteApplication(@PathVariable Long id) {
-        applicationService.deleteApplication(id, currentUserId());
+        applicationService.deleteApplication(id, currentTenantService.requireOrganizationId());
         return ResponseEntity.noContent().build();
     }
 
@@ -67,22 +75,10 @@ public class ApplicationController {
      * so it cannot be retrieved again.
      */
     @PostMapping("/{id}/regenerate-api-key")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     @AuditLog(action = "API_KEY_REGENERATED", resourceId = "#id")
     public ResponseEntity<ApplicationWithKeyResponse> regenerateApiKey(@PathVariable Long id) {
-        return ResponseEntity.ok(applicationService.regenerateApiKey(id, currentUserId()));
-    }
-
-    private Long currentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Object principal = authentication != null ? authentication.getPrincipal() : null;
-
-        if (principal instanceof String userId) {
-            try {
-                return Long.parseLong(userId);
-            } catch (NumberFormatException e) {
-                throw new IllegalStateException("Invalid user ID in authentication token");
-            }
-        }
-        throw new IllegalStateException("No authenticated user available");
+        return ResponseEntity.ok(applicationService.regenerateApiKey(
+                id, currentTenantService.requireOrganizationId()));
     }
 }

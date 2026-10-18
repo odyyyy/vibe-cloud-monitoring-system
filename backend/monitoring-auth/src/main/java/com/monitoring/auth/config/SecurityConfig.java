@@ -65,6 +65,12 @@ public class SecurityConfig {
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(endpoints.toArray(String[]::new)).permitAll()
+                // Self-service profile changes (username/email) require an authenticated user;
+                // the account is taken from the JWT principal inside ProfileController.
+                .requestMatchers("/api/profile/**").authenticated()
+                // Organization and membership management. The organization in the path is
+                // authorized against the caller's membership inside OrganizationService.
+                .requestMatchers("/api/v1/organizations/**").authenticated()
                 .requestMatchers("/api/applications/**").authenticated()
                 // Metrics queries require an authenticated user; ownership of the
                 // requested application is verified in MetricQueryService.
@@ -72,9 +78,15 @@ public class SecurityConfig {
                 // Log queries require an authenticated user; ownership of the requested
                 // application is verified in LogQueryService.
                 .requestMatchers("/api/v1/logs/**").authenticated()
+                // Trace queries require an authenticated user; ownership of the requested
+                // application is verified in TraceQueryService.
+                .requestMatchers("/api/v1/traces/**").authenticated()
                 // Dashboards and widgets require an authenticated user; ownership is
                 // verified in DashboardService.
                 .requestMatchers("/api/v1/dashboards/**").authenticated()
+                // Saved log views require an authenticated user; they are scoped to the
+                // owner in SavedLogViewService.
+                .requestMatchers("/api/v1/saved-log-views/**").authenticated()
                 // Health checks require an authenticated user; ownership is verified
                 // in HealthCheckService.
                 .requestMatchers("/api/v1/health-checks/**").authenticated()

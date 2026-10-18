@@ -24,7 +24,7 @@ export function UserAvatar({ username, avatarUrl, className }: UserAvatarProps) 
     <span
       aria-hidden="true"
       className={cn(
-        'flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-violet-500 text-sm font-semibold text-[#05070d]',
+        'flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-violet-500 text-sm font-semibold text-canvas',
         className,
       )}
     >

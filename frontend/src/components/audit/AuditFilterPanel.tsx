@@ -21,7 +21,7 @@ export function AuditFilterPanel({ draft, onChange, onApply, error, isApplying }
 
   return (
     <form
-      className="rounded-2xl border border-white/10 bg-[#0b101b]/60 p-4 sm:p-5"
+      className="rounded-2xl border border-white/10 bg-panel/60 p-4 sm:p-5"
       onSubmit={(event) => {
         event.preventDefault()
         onApply()

@@ -26,12 +26,12 @@ import java.time.Instant;
  *
  * <p>{@code url} is validated for SSRF safety (https only, public host) before it is stored
  * and again right before each delivery ({@code SsrfGuard}). Ownership is enforced by
- * {@code ownerId} in the service layer.
+ * {@code organizationId} in the service layer.
  */
 @Entity
 @Table(
         name = "notification_channels",
-        indexes = @Index(name = "idx_notification_channels_owner_id", columnList = "owner_id")
+        indexes = @Index(name = "idx_notification_channels_organization_id", columnList = "organization_id")
 )
 @Getter
 @Setter
@@ -46,8 +46,8 @@ public class NotificationChannel {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "owner_id", nullable = false)
-    private Long ownerId;
+    @Column(name = "organization_id", nullable = false)
+    private Long organizationId;
 
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)

@@ -1,5 +1,6 @@
 package com.monitoring.alerts.controller;
 
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import com.monitoring.alerts.dto.AlertRuleResponse;
 import com.monitoring.alerts.dto.CreateAlertRuleRequest;
 import com.monitoring.alerts.entity.AlertCondition;
@@ -50,8 +51,10 @@ class AlertRuleControllerTest {
     @BeforeEach
     void setUp() {
         alertService = Mockito.mock(AlertService.class);
+        CurrentTenantService tenantService = Mockito.mock(CurrentTenantService.class);
+        when(tenantService.requireOrganizationId()).thenReturn(USER_ID);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AlertRuleController(alertService))
+                .standaloneSetup(new AlertRuleController(alertService, tenantService))
                 .setControllerAdvice(new TestAdvice())
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
@@ -66,7 +69,7 @@ class AlertRuleControllerTest {
     private AlertRuleResponse sampleRule() {
         return AlertRuleResponse.builder()
                 .id(5L)
-                .userId(USER_ID)
+                .organizationId(USER_ID)
                 .applicationId(7L)
                 .name("High CPU")
                 .type(AlertRuleType.METRIC_THRESHOLD)

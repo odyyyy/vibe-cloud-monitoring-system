@@ -90,7 +90,7 @@ class AlertServiceTest {
 
         assertEquals(APP_ID, response.getApplicationId());
         assertEquals("system.cpu.usage", response.getTarget());
-        assertEquals(OWNER_ID, response.getUserId());
+        assertEquals(OWNER_ID, response.getOrganizationId());
         assertTrue(response.isActive());
     }
 
@@ -187,7 +187,7 @@ class AlertServiceTest {
 
     @Test
     void foreignRuleUpdateIsDenied() {
-        AlertRule rule = AlertRule.builder().id(9L).ownerId(OWNER_ID).build();
+        AlertRule rule = AlertRule.builder().id(9L).organizationId(OWNER_ID).build();
         when(ruleRepository.findById(9L)).thenReturn(Optional.of(rule));
 
         assertThrows(AlertRuleAccessDeniedException.class,
@@ -206,7 +206,7 @@ class AlertServiceTest {
     void deactivatingRuleResolvesOpenIncidents() {
         AlertRule rule = AlertRule.builder()
                 .id(9L)
-                .ownerId(OWNER_ID)
+                .organizationId(OWNER_ID)
                 .name("High CPU")
                 .type(AlertRuleType.METRIC_THRESHOLD)
                 .applicationId(APP_ID)
@@ -222,7 +222,7 @@ class AlertServiceTest {
         AlertIncident firing = AlertIncident.builder()
                 .id(3L)
                 .rule(rule)
-                .ownerId(OWNER_ID)
+                .organizationId(OWNER_ID)
                 .status(IncidentStatus.FIRING)
                 .build();
         when(incidentRepository.findByRule_IdAndStatus(9L, IncidentStatus.FIRING))
@@ -239,12 +239,12 @@ class AlertServiceTest {
 
     @Test
     void listIncidentsClampsLimit() {
-        when(incidentRepository.findByOwnerIdOrderByTriggeredAtDesc(any(), any())).thenReturn(org.springframework.data.domain.Page.empty());
+        when(incidentRepository.findByOrganizationIdOrderByTriggeredAtDesc(any(), any())).thenReturn(org.springframework.data.domain.Page.empty());
 
         List<AlertIncidentResponse> result = service.listIncidents(OWNER_ID, 100_000);
 
         assertTrue(result.isEmpty());
-        verify(incidentRepository).findByOwnerIdOrderByTriggeredAtDesc(
+        verify(incidentRepository).findByOrganizationIdOrderByTriggeredAtDesc(
                 org.mockito.ArgumentMatchers.eq(OWNER_ID),
                 org.mockito.ArgumentMatchers.argThat(page -> page.getPageSize() == AlertService.MAX_INCIDENTS_LIMIT));
     }

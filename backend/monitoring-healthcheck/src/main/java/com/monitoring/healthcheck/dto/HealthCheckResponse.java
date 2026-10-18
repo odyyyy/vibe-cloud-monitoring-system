@@ -21,7 +21,7 @@ import lombok.NoArgsConstructor;
 public class HealthCheckResponse {
 
     private Long id;
-    private Long userId;
+    private Long organizationId;
     private String name;
     private String targetUrl;
     private HealthCheckMethod method;
@@ -34,7 +34,7 @@ public class HealthCheckResponse {
     public static HealthCheckResponse fromEntity(HealthCheckConfig config) {
         return HealthCheckResponse.builder()
                 .id(config.getId())
-                .userId(config.getOwnerId())
+                .organizationId(config.getOrganizationId())
                 .name(config.getName())
                 .targetUrl(config.getTargetUrl())
                 .method(config.getMethod())

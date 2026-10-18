@@ -3,6 +3,7 @@ package com.monitoring.collector.controller;
 import com.monitoring.collector.dto.AggregatedMetricResponse;
 import com.monitoring.collector.dto.MetricsQueryRequest;
 import com.monitoring.collector.service.MetricQueryService;
+import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import com.monitoring.storage.exception.ApplicationAccessDeniedException;
 import com.monitoring.storage.exception.ApplicationNotFoundException;
 import org.junit.jupiter.api.AfterEach;
@@ -48,8 +49,10 @@ class MetricQueryControllerTest {
     @BeforeEach
     void setUp() {
         metricQueryService = Mockito.mock(MetricQueryService.class);
+        CurrentTenantService tenantService = Mockito.mock(CurrentTenantService.class);
+        when(tenantService.requireOrganizationId()).thenReturn(USER_ID);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new MetricQueryController(metricQueryService))
+                .standaloneSetup(new MetricQueryController(metricQueryService, tenantService))
                 .setControllerAdvice(new TestAdvice())
                 .build();
         SecurityContextHolder.getContext().setAuthentication(

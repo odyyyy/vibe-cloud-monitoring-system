@@ -39,7 +39,7 @@ export function DashboardWidget({ widget, showActions, refetchInterval, onEdit, 
     parsed.success && parsed.data.type === 'METRIC_CHART' ? metricColor(parsed.data.config.metricName) : null
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0b101b]/60">
+    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-panel/60">
       <header className="flex items-center gap-2 border-b border-white/5 px-3 py-2">
         <span className="widget-drag-handle flex min-w-0 flex-1 cursor-grab items-center gap-2 active:cursor-grabbing">
           <Badge variant="muted" className="shrink-0">

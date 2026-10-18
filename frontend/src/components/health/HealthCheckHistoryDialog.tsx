@@ -74,7 +74,7 @@ export function HealthCheckHistoryDialog({ open, onOpenChange, healthCheck }: He
               </Button>
             </div>
           ) : results.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-white/10 bg-[#0b101b]/40 p-8 text-center">
+            <div className="rounded-xl border border-dashed border-white/10 bg-panel/40 p-8 text-center">
               <p className="text-sm text-slate-300">No results yet.</p>
               <p className="mt-1 text-xs text-slate-500">
                 Results appear after the first scheduled check, which runs within one interval.

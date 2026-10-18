@@ -5,14 +5,135 @@
 @tailwind utilities;
 
 :root {
-  --bg: #05070d;
-  --bg-2: #080b14;
-  --panel: #0b101b;
-  --line: rgba(148, 163, 184, 0.14);
-  --cyan: #22d3ee;
-  --violet: #8b5cf6;
-  --lime: #a3e635;
-  --amber: #fbbf24;
+  color-scheme: dark;
+}
+
+/* Theme tokens as RGB triplets so Tailwind colour utilities can apply opacity
+   modifiers (e.g. bg-panel/60). `midnight` is the default (the values in :root);
+   the other themes override the same variables and are activated via data-theme
+   on <html>. */
+:root,
+[data-theme='midnight'] {
+  /* surfaces */
+  --c-canvas: 5 7 13;
+  --c-canvas-2: 8 11 20;
+  --c-panel: 11 16 27;
+  --c-line: 148 163 184;
+  /* control knob: stays light across themes so it reads on the accent track */
+  --c-knob: 255 255 255;
+  /* neutral text + subtle overlays (light on dark) */
+  --c-white: 255 255 255;
+  --c-slate-100: 241 245 249;
+  --c-slate-200: 226 232 240;
+  --c-slate-300: 203 213 225;
+  --c-slate-400: 148 163 184;
+  --c-slate-500: 100 116 139;
+  --c-slate-600: 71 85 105;
+  /* accents */
+  --c-accent-200: 165 243 252;
+  --c-accent-300: 103 232 249;
+  --c-accent-400: 34 211 238;
+  --c-accent-500: 6 182 212;
+  --c-accent-2-300: 196 181 253;
+  --c-accent-2-400: 167 139 250;
+  --c-accent-2-500: 139 92 246;
+  --c-accent-2-600: 124 58 237;
+  --c-accent-3-300: 190 242 100;
+  --c-accent-3-400: 163 230 53;
+  /* status */
+  --c-red-100: 254 226 226;
+  --c-red-200: 254 202 202;
+  --c-red-300: 252 165 165;
+  --c-red-400: 248 113 113;
+  --c-red-500: 239 68 68;
+  --c-red-600: 220 38 38;
+  --c-red-700: 185 28 28;
+  --c-amber-200: 253 230 138;
+  --c-amber-300: 252 211 77;
+  --c-amber-400: 251 191 36;
+  --c-amber-500: 245 158 11;
+  --c-amber-600: 217 119 6;
+  --c-amber-700: 180 83 9;
+  --c-emerald-200: 167 243 208;
+  --c-emerald-300: 110 231 183;
+  --c-emerald-400: 52 211 153;
+  --c-emerald-500: 16 185 129;
+  --c-emerald-600: 5 150 105;
+  --c-emerald-700: 4 120 87;
+  --c-rose-400: 251 113 133;
+  --c-rose-500: 244 63 94;
+  --c-rose-600: 225 29 72;
+}
+
+[data-theme='aurora'] {
+  /* surfaces + accents only; neutrals and status keep the dark defaults */
+  --c-canvas: 4 13 11;
+  --c-canvas-2: 6 20 16;
+  --c-panel: 9 28 23;
+  --c-line: 148 190 178;
+  --c-accent-200: 167 243 208;
+  --c-accent-300: 110 231 183;
+  --c-accent-400: 52 211 153;
+  --c-accent-500: 16 185 129;
+  --c-accent-2-300: 147 197 253;
+  --c-accent-2-400: 96 165 250;
+  --c-accent-2-500: 59 130 246;
+  --c-accent-2-600: 37 99 235;
+  --c-accent-3-300: 190 242 100;
+  --c-accent-3-400: 163 230 53;
+}
+
+/* Light theme: white surfaces with monochrome ink accents. The neutral scale is
+   inverted so text/overlays darken on light surfaces. */
+[data-theme='daylight'] {
+  color-scheme: light;
+
+  --c-canvas: 255 255 255;
+  --c-canvas-2: 241 245 249;
+  --c-panel: 255 255 255;
+  --c-line: 15 23 42;
+
+  --c-white: 15 23 42;
+  --c-slate-100: 15 23 42;
+  --c-slate-200: 30 41 59;
+  --c-slate-300: 51 65 85;
+  --c-slate-400: 71 85 105;
+  --c-slate-500: 100 116 139;
+  --c-slate-600: 148 163 184;
+
+  --c-accent-200: 107 114 128;
+  --c-accent-300: 55 65 81;
+  --c-accent-400: 17 24 39;
+  --c-accent-500: 3 7 18;
+  --c-accent-2-300: 75 85 99;
+  --c-accent-2-400: 55 65 81;
+  --c-accent-2-500: 31 41 55;
+  --c-accent-2-600: 17 24 39;
+  --c-accent-3-300: 156 163 175;
+  --c-accent-3-400: 107 114 128;
+
+  --c-red-100: 127 29 29;
+  --c-red-200: 153 27 27;
+  --c-red-300: 185 28 28;
+  --c-red-400: 185 28 28;
+  --c-red-500: 220 38 38;
+  --c-red-600: 185 28 28;
+  --c-red-700: 153 27 27;
+  --c-amber-200: 146 64 14;
+  --c-amber-300: 180 83 9;
+  --c-amber-400: 217 119 6;
+  --c-amber-500: 180 83 9;
+  --c-amber-600: 146 64 14;
+  --c-amber-700: 120 53 15;
+  --c-emerald-200: 6 95 70;
+  --c-emerald-300: 4 120 87;
+  --c-emerald-400: 4 120 87;
+  --c-emerald-500: 5 150 105;
+  --c-emerald-600: 4 120 87;
+  --c-emerald-700: 6 95 70;
+  --c-rose-400: 190 18 60;
+  --c-rose-500: 225 29 72;
+  --c-rose-600: 190 18 60;
 }
 
 * {
@@ -25,15 +146,15 @@ html {
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: #e2e8f0;
+  background: rgb(var(--c-canvas));
+  color: rgb(var(--c-slate-200));
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
 
 ::selection {
-  background: rgba(34, 211, 238, 0.35);
+  background: rgb(var(--c-accent-400) / 0.35);
   color: #ffffff;
 }
 
@@ -42,12 +163,12 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: #070a12;
+  background: rgb(var(--c-canvas-2));
 }
 ::-webkit-scrollbar-thumb {
   background: #1e293b;
   border-radius: 999px;
-  border: 2px solid #070a12;
+  border: 2px solid rgb(var(--c-canvas-2));
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
@@ -62,7 +183,7 @@ body {
 }
 
 .text-gradient {
-  background: linear-gradient(100deg, #e2e8f0 0%, #67e8f9 42%, #a78bfa 78%, #e2e8f0 100%);
+  background: linear-gradient(100deg, #e2e8f0 0%, rgb(var(--c-accent-300)) 42%, rgb(var(--c-accent-2-400)) 78%, #e2e8f0 100%);
   background-size: 220% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -114,13 +235,13 @@ body {
 .gradient-border {
   position: relative;
   border: 1px solid transparent;
-  background: linear-gradient(180deg, rgba(13, 18, 30, 0.92), rgba(8, 11, 20, 0.92)) padding-box,
-    linear-gradient(140deg, rgba(34, 211, 238, 0.55), rgba(139, 92, 246, 0.18) 45%, rgba(163, 230, 53, 0.12) 90%)
+  background: linear-gradient(180deg, rgb(var(--c-panel) / 0.92), rgb(var(--c-canvas-2) / 0.92)) padding-box,
+    linear-gradient(140deg, rgb(var(--c-accent-400) / 0.55), rgb(var(--c-accent-2-500) / 0.18) 45%, rgb(var(--c-accent-3-400) / 0.12) 90%)
       border-box;
 }
 
 .glass {
-  background: rgba(11, 16, 27, 0.6);
+  background: rgb(var(--c-panel) / 0.6);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -144,8 +265,8 @@ body {
 }
 .card-hover:hover {
   transform: translateY(-4px);
-  border-color: rgba(34, 211, 238, 0.35);
-  box-shadow: 0 24px 60px -30px rgba(34, 211, 238, 0.45);
+  border-color: rgb(var(--c-accent-400) / 0.35);
+  box-shadow: 0 24px 60px -30px rgb(var(--c-accent-400) / 0.45);
 }
 
 .scanline {
@@ -154,7 +275,7 @@ body {
   right: 0;
   height: 120px;
   top: -120px;
-  background: linear-gradient(to bottom, transparent, rgba(34, 211, 238, 0.09), transparent);
+  background: linear-gradient(to bottom, transparent, rgb(var(--c-accent-400) / 0.09), transparent);
   animation: scan 5.5s linear infinite;
   pointer-events: none;
 }
@@ -199,13 +320,13 @@ body {
   font-size: 0.72rem;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: #67e8f9;
+  color: rgb(var(--c-accent-300));
 }
 .section-tag::before {
   content: '';
   width: 1.75rem;
   height: 1px;
-  background: linear-gradient(to right, transparent, #22d3ee);
+  background: linear-gradient(to right, transparent, rgb(var(--c-accent-400)));
 }
 
 .chip {
@@ -214,14 +335,14 @@ body {
   gap: 0.4rem;
   padding: 0.3rem 0.7rem;
   border-radius: 9999px;
-  border: 1px solid var(--line);
-  background: rgba(11, 16, 27, 0.6);
+  border: 1px solid rgb(var(--c-line) / 0.14);
+  background: rgb(var(--c-panel) / 0.6);
   font-size: 0.72rem;
   color: #94a3b8;
   transition: border-color 0.3s ease, color 0.3s ease, transform 0.3s ease;
 }
 .chip:hover {
-  border-color: rgba(34, 211, 238, 0.45);
+  border-color: rgb(var(--c-accent-400) / 0.45);
   color: #e2e8f0;
   transform: translateY(-2px);
 }
@@ -321,9 +442,33 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(100deg, transparent 20%, rgba(103, 232, 249, 0.18) 50%, transparent 80%);
+  background: linear-gradient(100deg, transparent 20%, rgb(var(--c-accent-300) / 0.18) 50%, transparent 80%);
   transform: translateX(-120%);
   animation: shimmer 3.2s ease-in-out infinite;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -12px;
+  border-radius: 9999px;
+  opacity: 0;
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  animation-fill-mode: forwards;
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--confetti-drift, 0px), 260px, 0) rotate(var(--confetti-rotation, 360deg));
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
