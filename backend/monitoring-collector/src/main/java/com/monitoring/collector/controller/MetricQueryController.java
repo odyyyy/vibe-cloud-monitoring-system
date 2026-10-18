@@ -4,7 +4,7 @@ import com.monitoring.collector.dto.response.AggregatedMetricResponse;
 import com.monitoring.collector.dto.request.MetricNamesRequest;
 import com.monitoring.collector.dto.request.MetricsQueryRequest;
 import com.monitoring.collector.service.MetricQueryService;
-import com.monitoring.auth.organization.tenant.CurrentTenantService;
+import com.monitoring.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

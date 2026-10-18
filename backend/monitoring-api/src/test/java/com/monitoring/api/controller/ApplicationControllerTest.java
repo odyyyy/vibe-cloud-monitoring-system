@@ -1,7 +1,7 @@
 package com.monitoring.api.controller;
 
 import com.monitoring.api.exception.ApiExceptionHandler;
-import com.monitoring.auth.organization.tenant.CurrentTenantService;
+import com.monitoring.organization.tenant.CurrentTenantService;
 import com.monitoring.apps.dto.request.ApplicationCreateRequest;
 import com.monitoring.apps.dto.response.ApplicationWithKeyResponse;
 import com.monitoring.apps.entity.Application;

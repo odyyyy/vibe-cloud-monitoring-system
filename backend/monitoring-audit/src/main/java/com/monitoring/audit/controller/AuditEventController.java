@@ -4,7 +4,7 @@ import com.monitoring.audit.dto.request.AuditEventQuery;
 import com.monitoring.audit.dto.response.AuditEventResponse;
 import com.monitoring.common.dto.PageResponse;
 import com.monitoring.audit.service.AuditEventService;
-import com.monitoring.auth.organization.tenant.CurrentTenantService;
+import com.monitoring.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

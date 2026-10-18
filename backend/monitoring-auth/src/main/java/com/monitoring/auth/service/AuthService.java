@@ -12,7 +12,7 @@ import com.monitoring.auth.exception.InvalidCredentialsException;
 import com.monitoring.auth.exception.InvalidTokenException;
 import com.monitoring.auth.exception.UserNotFoundException;
 import com.monitoring.auth.jwt.JwtTokenProvider;
-import com.monitoring.auth.organization.service.OrganizationService;
+import com.monitoring.organization.service.OrganizationService;
 import com.monitoring.auth.repository.AuthTokenRepository;
 import com.monitoring.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;

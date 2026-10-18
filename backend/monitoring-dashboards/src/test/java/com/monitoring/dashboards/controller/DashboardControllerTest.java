@@ -1,6 +1,6 @@
 package com.monitoring.dashboards.controller;
 
-import com.monitoring.auth.organization.tenant.CurrentTenantService;
+import com.monitoring.organization.tenant.CurrentTenantService;
 import com.monitoring.dashboards.dto.request.CreateDashboardRequest;
 import com.monitoring.dashboards.dto.response.DashboardResponse;
 import com.monitoring.dashboards.dto.request.UpdateWidgetRequest;

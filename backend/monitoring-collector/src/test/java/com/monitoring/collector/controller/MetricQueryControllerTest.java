@@ -3,7 +3,7 @@ package com.monitoring.collector.controller;
 import com.monitoring.collector.dto.response.AggregatedMetricResponse;
 import com.monitoring.collector.dto.request.MetricsQueryRequest;
 import com.monitoring.collector.service.MetricQueryService;
-import com.monitoring.auth.organization.tenant.CurrentTenantService;
+import com.monitoring.organization.tenant.CurrentTenantService;
 import com.monitoring.apps.exception.ApplicationAccessDeniedException;
 import com.monitoring.apps.exception.ApplicationNotFoundException;
 import org.junit.jupiter.api.AfterEach;

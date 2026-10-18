@@ -1,6 +1,6 @@
 package com.monitoring.healthcheck.controller;
 
-import com.monitoring.auth.organization.tenant.CurrentTenantService;
+import com.monitoring.organization.tenant.CurrentTenantService;
 import com.monitoring.healthcheck.dto.request.CreateHealthCheckRequest;
 import com.monitoring.healthcheck.dto.response.HealthCheckResponse;
 import com.monitoring.healthcheck.dto.response.HealthCheckResultResponse;

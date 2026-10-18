@@ -1,11 +1,11 @@
 package com.monitoring.api;
 
 import com.monitoring.auth.jwt.JwtTokenProvider;
-import com.monitoring.auth.organization.entity.Membership;
-import com.monitoring.auth.organization.entity.MembershipRole;
-import com.monitoring.auth.organization.entity.Organization;
-import com.monitoring.auth.organization.repository.MembershipRepository;
-import com.monitoring.auth.organization.repository.OrganizationRepository;
+import com.monitoring.organization.entity.Membership;
+import com.monitoring.organization.entity.MembershipRole;
+import com.monitoring.organization.entity.Organization;
+import com.monitoring.organization.repository.MembershipRepository;
+import com.monitoring.organization.repository.OrganizationRepository;
 import com.monitoring.auth.entity.User;
 import com.monitoring.auth.repository.UserRepository;
 import com.monitoring.collector.entity.LogEvent;

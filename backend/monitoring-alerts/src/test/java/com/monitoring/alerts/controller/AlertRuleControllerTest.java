@@ -1,6 +1,6 @@
 package com.monitoring.alerts.controller;
 
-import com.monitoring.auth.organization.tenant.CurrentTenantService;
+import com.monitoring.organization.tenant.CurrentTenantService;
 import com.monitoring.alerts.dto.response.AlertRuleResponse;
 import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
 import com.monitoring.alerts.entity.AlertCondition;

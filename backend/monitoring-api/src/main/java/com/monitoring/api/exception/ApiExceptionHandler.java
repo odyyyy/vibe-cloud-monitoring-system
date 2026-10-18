@@ -1,12 +1,12 @@
 package com.monitoring.api.exception;
 
 import com.monitoring.common.error.ApiError;
-import com.monitoring.auth.organization.exception.InviteTargetNotFoundException;
-import com.monitoring.auth.organization.exception.LastOwnerException;
-import com.monitoring.auth.organization.exception.MemberAlreadyExistsException;
-import com.monitoring.auth.organization.exception.MemberNotFoundException;
-import com.monitoring.auth.organization.exception.OrganizationNotFoundException;
-import com.monitoring.auth.organization.exception.TenantAccessDeniedException;
+import com.monitoring.organization.exception.InviteTargetNotFoundException;
+import com.monitoring.organization.exception.LastOwnerException;
+import com.monitoring.organization.exception.MemberAlreadyExistsException;
+import com.monitoring.organization.exception.MemberNotFoundException;
+import com.monitoring.organization.exception.OrganizationNotFoundException;
+import com.monitoring.organization.exception.TenantAccessDeniedException;
 import com.monitoring.collector.exception.SavedLogViewAccessDeniedException;
 import com.monitoring.collector.exception.SavedLogViewLimitExceededException;
 import com.monitoring.collector.exception.SavedLogViewNotFoundException;

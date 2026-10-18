@@ -53,14 +53,21 @@ Backend собран как Maven multi-module проект:
 
 | Модуль | Ответственность |
 | --- | --- |
-| `monitoring-auth` | Пользователи, регистрация/логин, JWT, Spring Security |
+| `monitoring-auth` | Пользователи (identity), регистрация/логин, JWT, Spring Security; организации, членство и роли, tenant isolation |
 | `monitoring-apps-management` | CRUD приложений и управление API-ключами |
 | `monitoring-collector` | Приём метрик/логов (`/api/v1/ingest`) и запросы метрик/логов (`/api/v1/metrics/query`, `/api/v1/metrics/names`, `/api/v1/logs`), сохранённые представления логов (`/api/v1/saved-log-views`) |
 | `monitoring-dashboards` | CRUD дашбордов и виджетов (`/api/v1/dashboards`) |
 | `monitoring-healthcheck` | Синтетические HTTP health-checks: CRUD, scheduler, SSRF-защита, история результатов (`/api/v1/health-checks`) |
 | `monitoring-alerts` | Правила алертов (метрики/health-checks), плановый evaluator, webhook-уведомления (SSRF-защита) и инциденты (`/api/v1/alert-rules`, `/api/v1/notification-channels`, `/api/v1/alert-incidents`) |
 | `monitoring-audit` | Аудит-лог: запись событий через AOP (`@AuditLog`) и read-only API (`/api/v1/audit-events`) |
+| `monitoring-common` | Общие типы без домена: пагинация (`PageResponse`), тело ошибки (`ApiError`) |
 | `monitoring-api` | Точка входа, конфигурация, композиция модулей, Actuator, OpenAPI |
+
+Соглашения по пакетам:
+
+- DTO каждого модуля лежат в `dto/request` и `dto/response`.
+- Домены не смешиваются в одном пакете: identity — `com.monitoring.auth`, организации — `com.monitoring.organization`.
+- Доменные события размещаются в отдельном пакете `event`.
 
 Поток телеметрии:
 
@@ -129,6 +136,7 @@ cloud-monitoring/
 │   ├── monitoring-dashboards/   # дашборды и виджеты
 │   ├── monitoring-healthcheck/  # синтетические health-checks
 │   ├── monitoring-audit/        # аудит-лог (immutable, read-only API)
+│   ├── monitoring-common/       # общие DTO/ошибки без доменных зависимостей
 │   ├── monitoring-api/          # entry point (порт 8080)
 │   ├── docker/mysql/initdb/     # init-скрипты MySQL
 │   ├── Dockerfile

@@ -1,6 +1,6 @@
 package com.monitoring.collector.controller;
 
-import com.monitoring.auth.organization.tenant.CurrentTenantService;
+import com.monitoring.organization.tenant.CurrentTenantService;
 import com.monitoring.collector.dto.request.SavedLogViewQuery;
 import com.monitoring.collector.dto.response.SavedLogViewResponse;
 import com.monitoring.collector.entity.LogLevel;

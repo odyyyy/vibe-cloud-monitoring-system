@@ -2,7 +2,7 @@ package com.monitoring.alerts.controller;
 
 import com.monitoring.alerts.dto.response.AlertIncidentResponse;
 import com.monitoring.alerts.service.AlertService;
-import com.monitoring.auth.organization.tenant.CurrentTenantService;
+import com.monitoring.organization.tenant.CurrentTenantService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

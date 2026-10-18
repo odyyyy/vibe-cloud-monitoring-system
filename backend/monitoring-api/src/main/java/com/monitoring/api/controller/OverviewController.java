@@ -2,7 +2,7 @@ package com.monitoring.api.controller;
 
 import com.monitoring.api.dto.response.WorkspaceSummaryResponse;
 import com.monitoring.api.service.WorkspaceSummaryService;
-import com.monitoring.auth.organization.tenant.CurrentTenantService;
+import com.monitoring.organization.tenant.CurrentTenantService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

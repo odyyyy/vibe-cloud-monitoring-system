@@ -5,7 +5,7 @@ import com.monitoring.collector.dto.response.TraceDetailResponse;
 import com.monitoring.collector.dto.response.TraceSummaryResponse;
 import com.monitoring.collector.dto.request.TracesQueryRequest;
 import com.monitoring.collector.service.TraceQueryService;
-import com.monitoring.auth.organization.tenant.CurrentTenantService;
+import com.monitoring.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

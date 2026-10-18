@@ -4,7 +4,7 @@ import com.monitoring.collector.dto.request.CreateSavedLogViewRequest;
 import com.monitoring.collector.dto.response.SavedLogViewResponse;
 import com.monitoring.collector.dto.request.UpdateSavedLogViewRequest;
 import com.monitoring.collector.service.SavedLogViewService;
-import com.monitoring.auth.organization.tenant.CurrentTenantService;
+import com.monitoring.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
