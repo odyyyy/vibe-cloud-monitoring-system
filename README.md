@@ -8,8 +8,9 @@ SaaS-интерфейсе, подключают свои приложения и
 > Статус: ранняя стадия. Реализованы аутентификация (регистрация с подтверждением email и
 > сбросом пароля), управление приложениями (Applications), конвейеры метрик и логов
 > (ingest + query), дашборды с виджетами (Metric chart / Log table / Status),
-> синтетические health-checks (HTTP-проверки с историей результатов), а также правила
-> алертов (по метрике или health-check) с webhook-уведомлениями и историей инцидентов —
+> синтетические health-checks (HTTP-проверки с историей результатов), правила
+> алертов (по метрике или health-check) с webhook-уведомлениями и историей инцидентов,
+> а также настройки профиля (смена username/email с подтверждением и три темы оформления) —
 > см. раздел [Текущие ограничения](#текущие-ограничения).
 
 ---
@@ -54,7 +55,7 @@ Backend собран как Maven multi-module проект:
 | --- | --- |
 | `monitoring-auth` | Пользователи, регистрация/логин, JWT, Spring Security |
 | `monitoring-apps-management` | CRUD приложений и управление API-ключами |
-| `monitoring-collector` | Приём метрик/логов (`/api/v1/ingest`) и запросы метрик/логов (`/api/v1/metrics/query`, `/api/v1/metrics/names`, `/api/v1/logs`) |
+| `monitoring-collector` | Приём метрик/логов (`/api/v1/ingest`) и запросы метрик/логов (`/api/v1/metrics/query`, `/api/v1/metrics/names`, `/api/v1/logs`), сохранённые представления логов (`/api/v1/saved-log-views`) |
 | `monitoring-dashboards` | CRUD дашбордов и виджетов (`/api/v1/dashboards`) |
 | `monitoring-healthcheck` | Синтетические HTTP health-checks: CRUD, scheduler, SSRF-защита, история результатов (`/api/v1/health-checks`) |
 | `monitoring-alerts` | Правила алертов (метрики/health-checks), плановый evaluator, webhook-уведомления (SSRF-защита) и инциденты (`/api/v1/alert-rules`, `/api/v1/notification-channels`, `/api/v1/alert-incidents`) |
@@ -286,8 +287,10 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `SPRING_JPA_HIBERNATE_DDL_AUTO` | Режим схемы Hibernate (схему создаёт Flyway) | `validate` |
 | `APP_AUTH_VERIFICATION_URL` | Фронтенд-URL страницы подтверждения email | `http://localhost:3000/verify-email` |
 | `APP_AUTH_RESET_URL` | Фронтенд-URL страницы сброса пароля | `http://localhost:3000/reset-password` |
+| `APP_AUTH_EMAIL_CHANGE_URL` | Фронтенд-URL страницы подтверждения смены email | `http://localhost:3000/confirm-email-change` |
 | `APP_AUTH_VERIFICATION_TTL` | TTL токена подтверждения (ISO-8601 Duration) | `PT24H` |
 | `APP_AUTH_RESET_TTL` | TTL токена сброса пароля (ISO-8601 Duration) | `PT1H` |
+| `APP_AUTH_EMAIL_CHANGE_TTL` | TTL токена смены email (ISO-8601 Duration) | `PT1H` |
 | `APP_AUTH_LOG_EMAILS` | Писать письма (со ссылками) в лог вместо SMTP | `false` (в профиле `dev` — `true`) |
 | `MONITORING_DOWNSAMPLE_ENABLED` | Включить job сворачивания старых метрик в часовые агрегаты | `true` |
 | `MONITORING_DOWNSAMPLE_CRON` | Расписание downsampling (Spring cron) | `0 5 * * * *` |
@@ -330,7 +333,8 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 `POST /api/v1/ingest/metrics` с заголовком `X-API-Key`.
 
 Собираемые метрики: `system.cpu.usage`, `system.memory.usage`, `system.disk.usage`
-(с тегом `host`).
+(с тегами `host` и `version`). Тег `host` используется для отображения агента в разделе
+**Agent fleet**, `version` — для показа версии сборки агента.
 
 ### 1. Получите API-ключ
 
@@ -428,7 +432,8 @@ docker run -d \
 | `POST` | `/api/auth/resend-verification` | Повторно отправить письмо подтверждения | публичный |
 | `POST` | `/api/auth/forgot-password` | Запросить ссылку сброса пароля | публичный |
 | `POST` | `/api/auth/reset-password` | Установить новый пароль по токену | публичный |
-| `POST` | `/api/auth/login` | Логин, возвращает JWT (только для подтверждённых аккаунтов) | публичный |
+| `POST` | `/api/auth/email-change/confirm` | Подтвердить новый email по одноразовому токену | публичный |
+| `POST` | `/api/auth/login` | Логин по username или email, возвращает JWT (только для подтверждённых аккаунтов) | публичный |
 | `GET` | `/api/auth/me` | Текущий профиль | JWT |
 
 Поток подтверждения email: `register` создаёт пользователя с `emailVerified=false` и
@@ -444,6 +449,31 @@ docker run -d \
 в профиле `dev` — включено). SMTP-провайдер ещё не подключён
 (см. [Текущие ограничения](#текущие-ограничения)).
 
+### Profile — `/api/profile`
+
+Управление собственной учётной записью. Владелец всегда определяется из JWT (тело запроса
+не может указать чужого пользователя). Смена username и email требует текущего пароля.
+
+| Метод | Путь | Описание | Доступ |
+| --- | --- | --- | --- |
+| `PUT` | `/api/profile/username` | Сменить username (`username`, `currentPassword`) | JWT |
+| `GET` | `/api/profile/username-available` | Проверить доступность username (`username`) | JWT |
+| `PUT` | `/api/profile/email` | Запросить смену email (`newEmail`, `currentPassword`) | JWT |
+
+`GET /api/profile/username-available` возвращает `{ "available": boolean }`. Ответ
+успешной смены username/email — обновлённый профиль
+(`id`, `username`, `email`, `avatarUrl`, `role`). Занятый username/email или совпадение с
+текущим email → `409`.
+
+Смена email двухфазная: `PUT /api/profile/email` создаёт одноразовый токен типа
+`EMAIL_CHANGE` (хранит новый адрес, TTL — 1 час) и отправляет письмо со ссылкой на
+фронтенд-страницу `/confirm-email-change?token=...`. Новый адрес применяется только после
+`POST /api/auth/email-change/confirm`; до этого вход по-прежнему возможен по старому адресу.
+На старый адрес дополнительно уходит уведомление о запросе смены. Уникальность нового email
+перепроверяется в момент подтверждения. Ссылка для смены email: `app.auth.email-change-url`
+(по умолчанию `http://localhost:3000/confirm-email-change`), TTL — `app.auth.email-change-ttl`
+(по умолчанию `PT1H`).
+
 ### Applications — `/api/applications`
 
 | Метод | Путь | Описание | Доступ |
@@ -454,11 +484,27 @@ docker run -d \
 | `PUT` | `/api/applications/{id}` | Переименовать | JWT (владелец) |
 | `DELETE` | `/api/applications/{id}` | Удалить | JWT (владелец) |
 | `POST` | `/api/applications/{id}/regenerate-api-key` | Перевыпустить API-ключ | JWT (владелец) |
+| `GET` | `/api/applications/{id}/agents` | Агенты (fleet) приложения | JWT (владелец) |
 
 API-ключи хранятся только как SHA-256-хэш. Открытый ключ возвращается один раз — в ответе на
 создание (`POST /api/applications`) или перевыпуск (`POST .../regenerate-api-key`); в списке и
 в ответе `GET` ключ не возвращается. Старый plaintext-ключ после миграции недействителен и
 требует перевыпуска.
+
+`GET /api/applications/{id}/agents` возвращает агентов, которые присылали телеметрию для
+приложения. Запись агента заводится по тегу `host` при приёме метрик; `agentVersion` берётся из
+тега `version` (может отсутствовать), `lastSeenAt` — момент последнего принятого батча (UTC).
+Online/Offline вычисляется на фронтенде по `lastSeenAt` (порог — 5 минут). IP-адреса агентов не
+хранятся и не отдаются. Перевыпуск API-ключа (`regenerate-api-key`) обесточивает все агенты
+приложения до их перенастройки.
+
+Страница **Agent fleet** (`/app/agents`) показывает таблицу агентов выбранного приложения
+(Hostname, Version, Status, Last seen) с автообновлением раз в 30 секунд, кнопку
+**Revoke API key** (через диалог подтверждения, с предупреждением об отключении агентов) и
+действие **View agent logs**, которое открывает Log Explorer (`/app/logs`) с
+предзаполненными `applicationId`, диапазоном времени за последний час и `searchText` = hostname.
+Поиск в логах ищет только по тексту сообщения, а колонки `host`/`service` в логах не
+индексируются, поэтому фильтр по агенту — best-effort.
 
 ### Metrics — `/api/v1`
 
@@ -535,6 +581,27 @@ Content-Type: application/json
 range в форме виджета, по умолчанию 1 час) до текущего момента, а `GET /api/v1/logs`
 отдаёт только события внутри `from`..`to`. Событие с фиксированной датой из примера
 (`2026-01-01`) в это окно не попадёт и в виджете не отобразится.
+
+### Saved log views — `/api/v1/saved-log-views`
+
+| Метод | Путь | Описание | Доступ |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/saved-log-views` | Список сохранённых представлений | JWT (владелец) |
+| `POST` | `/api/v1/saved-log-views` | Сохранить текущие фильтры | JWT |
+| `PUT` | `/api/v1/saved-log-views/{id}` | Переименовать | JWT (владелец) |
+| `DELETE` | `/api/v1/saved-log-views/{id}` | Удалить | JWT (владелец) |
+
+Сохранённое представление хранит имя (до 100 символов) и `queryParams` — проверенный
+фильтр вида `{ applicationId, level?, searchText?, timeRange: { from, to } }`. Этот JSON
+перепроверяется при каждой записи: приложение должно принадлежать владельцу, `from < to`,
+диапазон не более 30 дней, `searchText` до 200 символов и без символов `<`/`>`; на одного
+пользователя — не более 50 представлений (иначе HTTP 409). Пагинация в представление не
+сохраняется. В Log Explorer (`/app/logs`) панель **Saved views** позволяет применить
+представление одним нажатием, сохранить текущие фильтры, переименовать и удалить.
+
+> В текущей модели представления привязаны к владельцу (`owner_id`), как и дашборды,
+> алерты и health checks. Когда будет включён полноценный tenant-контур организаций,
+> привязку следует перевести на `organizationId` через `CurrentTenantService`.
 
 ### Overview — `/api/v1/overview`
 
@@ -672,6 +739,49 @@ IP учитывается `X-Forwarded-For`.
 Action, Resource, IP Address) с фильтрами по action и диапазону дат и постраничной
 навигацией, новые события первыми.
 
+### Онбординг — Setup guide
+
+Для нового пользователя (нет приложений или за последние 24 часа не приходило ни метрик,
+ни логов) автоматически открывается мастер настройки из 4 шагов:
+
+1. **Create application** — создание первой Application (встроенная форма).
+2. **Install the agent** — готовый `docker run` с подставленными backend URL и API-ключом
+   и кнопкой **Copy**. URL и ключ экранируются по правилам POSIX single-quote; если
+   plaintext-ключ больше не доступен, команда содержит плейсхолдер и кнопку
+   **Regenerate key**.
+3. **Verify connection** — мастер опрашивает
+   `GET /api/v1/applications/{id}/agents` каждые 4 секунды и ждёт агента со свежим
+   `lastSeenAt`. Через 2 минуты ожидание останавливается (без бессрочного спиннера),
+   доступны «Check now» и повтор правил диагностики.
+4. **Success** — экран успеха с переходом к метрикам этой Application или к обзору.
+
+Пройденный или закрытый мастер больше не открывается автоматически: статус хранится в
+`localStorage` (`onboarding:v1:<userId>`), отдельно для каждого пользователя. Вернуться к
+мастеру можно кнопкой **Setup guide** в сайдбаре.
+
+### Settings — `/app/settings`
+
+Страница настроек аккаунта позволяет:
+
+- **Сменить тему оформления.** Доступны три темы — **Midnight** (тёмная, по умолчанию),
+  **Daylight** (светлая, чёрно-белая) и **Aurora** (тёмная).
+
+  **Daylight** использует белые поверхности и монохромные акценты в оттенках почти-чёрного:
+  нейтральная палитра (`slate`, оверлеи `white/*`) и светлые оттенки статусных цветов
+  инвертируются через CSS-переменные, поэтому текст и границы остаются читаемыми без правок
+  каждого компонента. Выбор сохраняется в `localStorage` этого устройства (ключ
+  `theme`) и не синхронизируется между устройствами. Темы реализованы через CSS-переменные
+  (`--c-*` в `src/index.css`) и атрибут `data-theme` на `<html>`; палитра подключена в
+  `tailwind.config.js`.
+- **Сменить username.** Форма проверяет доступность имени по мере ввода (debounce, запрос к
+  `GET /api/profile/username-available`) и требует текущий пароль. После успеха стор
+  обновляется без повторного логина (JWT аутентифицирует по `uid`, а не по username).
+- **Сменить email.** Ввод нового адреса и текущего пароля; платформа отправляет письмо со
+  ссылкой подтверждения (см. [Profile](#profile--apiprofile)). Результат подтверждается на
+  странице `/confirm-email-change`.
+
+Форма «Change password» на этой странице — пока превью (эндпоинт не реализован).
+
 ---
 
 ## Тесты
@@ -703,6 +813,12 @@ H2, frontend-тесты — jsdom.
   планах.
 - Каналы уведомлений ограничены webhook (email/Slack — в планах); правила поддерживают
   одно условие без логики AND/OR.
+- Тема оформления перекрашивает интерфейс (поверхности, нейтральный текст, акценты и статусы),
+  но серии графиков (Recharts), маркетинговый лендинг и изображения используют фиксированные
+  цвета. В светлой теме **Daylight** акценты монохромные, поэтому разные серии на графике
+  могут различаться слабо.
+- Смена username/email не пишется в аудит-лог: модуль `monitoring-audit` зависит от
+  `monitoring-auth`, поэтому обратный `@AuditLog` создал бы циклическую зависимость.
 - Детали задач и статусы: `TASKS.md`.
 
 ---
