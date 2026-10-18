@@ -1,5 +1,6 @@
 package com.monitoring.collector.security;
 
+import com.monitoring.collector.config.IngestionQuotaProperties;
 import com.monitoring.storage.repository.ApplicationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -17,8 +18,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *
  * <p>It matches only {@code /api/v1/ingest/**} (and the {@code /api/ingest/**} alias) and has
  * {@link Order @Order(0)}, so it is evaluated before the catch-all chains. Inside the chain the
- * request is authenticated by {@link ApiKeyAuthFilter} (HTTP 401 for a missing or invalid key);
- * JWT is not used here.
+ * request is authenticated by {@link ApiKeyAuthFilter} (HTTP 401 for a missing or invalid key)
+ * and then rate-limited per application by {@link RateLimitFilter} (HTTP 429); JWT is not used
+ * here.
  */
 @Configuration
 @EnableWebSecurity
@@ -27,18 +29,22 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class IngestSecurityConfig {
 
     private final ApplicationRepository applicationRepository;
+    private final IngestionRateLimiter rateLimiter;
+    private final IngestionQuotaProperties quotaProperties;
 
     @Bean
     @Order(0)
     public SecurityFilterChain ingestFilterChain(HttpSecurity http) throws Exception {
         ApiKeyAuthFilter apiKeyAuthFilter = new ApiKeyAuthFilter(applicationRepository);
+        RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiter, quotaProperties);
 
         http
             .securityMatcher("/api/v1/ingest/**", "/api/ingest/**")
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
-            .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(rateLimitFilter, ApiKeyAuthFilter.class);
 
         return http.build();
     }

@@ -61,6 +61,12 @@ monitoring:
     logs-days: ${MONITORING_RETENTION_LOGS_DAYS:14}
     metrics-days: ${MONITORING_RETENTION_METRICS_DAYS:90}
     batch-size: ${MONITORING_RETENTION_BATCH_SIZE:10000}
+  # Per-application ingestion rate limits (requests per minute), enforced per API key and
+  # separately for metrics and logs. Set monitoring.quotas.enabled=false to disable.
+  quotas:
+    enabled: ${MONITORING_QUOTAS_ENABLED:true}
+    metrics-per-minute: ${MONITORING_QUOTAS_METRICS_PER_MINUTE:10000}
+    logs-per-minute: ${MONITORING_QUOTAS_LOGS_PER_MINUTE:5000}
   # Alert evaluation. The scheduler is enabled by default and can be disabled with
   # monitoring.alerts.scheduler.enabled=false (for example in tests or single-shot environments).
   alerts:
