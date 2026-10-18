@@ -5,9 +5,11 @@ import { toast } from 'sonner'
 import { ApiError } from '../../api/client'
 import type { LogEvent, LogsQueryParams } from '../../api/logs'
 import { useLogsQuery } from '../../api/logs'
+import type { SavedLogView } from '../../api/savedLogViews'
 import { LogDetailModal } from '../../components/logs/LogDetailModal'
 import { LogTable } from '../../components/logs/LogTable'
 import { LogsFilterPanel } from '../../components/logs/LogsFilterPanel'
+import { SavedViewsPanel } from '../../components/logs/SavedViewsPanel'
 import { Button } from '../../components/ui/button'
 import { Label } from '../../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
@@ -19,6 +21,7 @@ import {
   parseLogSearchParams,
   type LogFilters,
 } from '../../features/logs/searchParams'
+import { savedViewToSearchParams } from '../../features/logs/savedViews'
 import { TIME_RANGE_PRESETS, resolvePresetRange } from '../../features/metrics/timeRange'
 
 export default function LogExplorerPage() {
@@ -97,6 +100,10 @@ export default function LogExplorerPage() {
     commit({ ...params, size, page: 0 })
   }
 
+  const applySavedView = (view: SavedLogView) => {
+    setSearchParams(savedViewToSearchParams(view))
+  }
+
   const validationError = parsed.error ?? applyError
   const isRefreshing = query.isFetching && !query.isLoading
 
@@ -110,50 +117,56 @@ export default function LogExplorerPage() {
         </p>
       </header>
 
-      <LogsFilterPanel
-        draft={draft}
-        onChange={handleChange}
-        onApply={handleApply}
-        error={validationError}
-        isApplying={query.isFetching}
-      />
+      <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
+        <SavedViewsPanel currentParams={params} onApply={applySavedView} />
 
-      {params ? (
-        <div className="space-y-4">
-          {query.isError ? (
-            <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6">
-              <h2 className="font-display text-lg font-semibold text-red-200">Could not load logs</h2>
-              <p className="mt-2 text-sm text-slate-400">
-                {query.error instanceof ApiError ? query.error.message : 'Something went wrong while loading logs.'}
-              </p>
-              <Button type="button" variant="outline" className="mt-4" onClick={() => query.refetch()} disabled={query.isFetching}>
-                {query.isFetching ? 'Retrying…' : 'Retry'}
-              </Button>
+        <div className="min-w-0 space-y-6">
+          <LogsFilterPanel
+            draft={draft}
+            onChange={handleChange}
+            onApply={handleApply}
+            error={validationError}
+            isApplying={query.isFetching}
+          />
+
+          {params ? (
+            <div className="space-y-4">
+              {query.isError ? (
+                <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6">
+                  <h2 className="font-display text-lg font-semibold text-red-200">Could not load logs</h2>
+                  <p className="mt-2 text-sm text-slate-400">
+                    {query.error instanceof ApiError ? query.error.message : 'Something went wrong while loading logs.'}
+                  </p>
+                  <Button type="button" variant="outline" className="mt-4" onClick={() => query.refetch()} disabled={query.isFetching}>
+                    {query.isFetching ? 'Retrying…' : 'Retry'}
+                  </Button>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-white/10 bg-panel/60">
+                  <div className={isRefreshing ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
+                    <LogTable logs={logs} isLoading={query.isLoading} onRowClick={setSelectedLog} />
+                  </div>
+                  <LogPagination
+                    page={query.data?.page ?? params.page}
+                    totalPages={query.data?.totalPages ?? 0}
+                    totalElements={query.data?.totalElements ?? 0}
+                    size={query.data?.size ?? params.size}
+                    disabled={query.isFetching}
+                    onPageChange={goToPage}
+                    onSizeChange={changePageSize}
+                  />
+                </div>
+              )}
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b101b]/60">
-              <div className={isRefreshing ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
-                <LogTable logs={logs} isLoading={query.isLoading} onRowClick={setSelectedLog} />
-              </div>
-              <LogPagination
-                page={query.data?.page ?? params.page}
-                totalPages={query.data?.totalPages ?? 0}
-                totalElements={query.data?.totalElements ?? 0}
-                size={query.data?.size ?? params.size}
-                disabled={query.isFetching}
-                onPageChange={goToPage}
-                onSizeChange={changePageSize}
-              />
+            <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-panel/40">
+              <p className="text-sm text-slate-400">
+                {validationError ?? 'Choose an application and a time range, then search to load logs.'}
+              </p>
             </div>
           )}
         </div>
-      ) : (
-        <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-[#0b101b]/40">
-          <p className="text-sm text-slate-400">
-            {validationError ?? 'Choose an application and a time range, then search to load logs.'}
-          </p>
-        </div>
-      )}
+      </div>
 
       <LogDetailModal
         log={selectedLog}
