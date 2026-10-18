@@ -9,7 +9,7 @@ export type NotificationChannelType = 'WEBHOOK'
 
 export interface AlertRule {
   id: number
-  userId: number
+  organizationId: number
   applicationId: number | null
   name: string
   type: AlertRuleType
@@ -24,7 +24,7 @@ export interface AlertRule {
 
 export interface NotificationChannel {
   id: number
-  userId: number
+  organizationId: number
   type: NotificationChannelType
   url: string
   isActive: boolean

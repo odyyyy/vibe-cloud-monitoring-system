@@ -126,7 +126,7 @@ export default function AuditLogPage() {
               </Button>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b101b]/60">
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-panel/60">
               <div className={isRefreshing ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
                 <AuditEventsTable events={events} isLoading={query.isLoading} />
               </div>
@@ -143,7 +143,7 @@ export default function AuditLogPage() {
           )}
         </div>
       ) : (
-        <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-[#0b101b]/40">
+        <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-panel/40">
           <p className="text-sm text-slate-400">
             {validationError ?? 'Adjust the filters and apply them to load audit events.'}
           </p>

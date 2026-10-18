@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, LogOut, Menu, Settings as SettingsIcon, X } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { Building2, ChevronDown, HelpCircle, LogOut, Menu, Settings as SettingsIcon, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom'
+import { useOrganizationsQuery } from '../../api/organizations'
 import { useProfile } from '../../features/auth/useProfile'
 import { cn } from '../../lib/utils'
 import { useAuthStore } from '../../store/authStore'
+import { useOnboardingStore } from '../../store/onboardingStore'
+import { OnboardingWizard } from '../onboarding/OnboardingWizard'
 import { Logo } from '../shared/icons'
 import { UserAvatar } from '../shared/UserAvatar'
 import { Button } from '../ui/button'
@@ -15,6 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { NAV_ITEMS, isPathActive } from './nav'
 
 function Brand() {
@@ -34,8 +39,14 @@ export function AppLayout() {
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
+  const currentOrganizationId = useAuthStore((state) => state.currentOrganizationId)
+  const setActiveOrganization = useAuthStore((state) => state.setActiveOrganization)
+  const clearActiveOrganization = useAuthStore((state) => state.clearActiveOrganization)
+  const openOnboarding = useOnboardingStore((state) => state.openWizard)
+  const queryClient = useQueryClient()
 
   const { data: profile } = useProfile()
+  const { data: organizations = [], isFetched: organizationsFetched } = useOrganizationsQuery()
 
   const username = profile?.username ?? user?.username ?? 'Account'
   const email = profile?.email ?? user?.email ?? null
@@ -44,8 +55,40 @@ export function AppLayout() {
     setMobileNavOpen(false)
   }, [pathname])
 
+  useEffect(() => {
+    if (!organizationsFetched) {
+      return
+    }
+    if (organizations.length === 0) {
+      if (currentOrganizationId !== null) {
+        clearActiveOrganization()
+      }
+      return
+    }
+    const active =
+      organizations.find((organization) => organization.id === currentOrganizationId) ?? organizations[0]
+    if (active.id !== currentOrganizationId) {
+      setActiveOrganization(active.id, active.role)
+      if (currentOrganizationId !== null) {
+        void queryClient.invalidateQueries()
+      }
+    } else if (useAuthStore.getState().currentRole !== active.role) {
+      setActiveOrganization(active.id, active.role)
+    }
+  }, [organizations, organizationsFetched, currentOrganizationId, setActiveOrganization, clearActiveOrganization, queryClient])
+
+  const handleOrganizationChange = (value: string) => {
+    const organization = organizations.find((candidate) => String(candidate.id) === value)
+    if (!organization || organization.id === currentOrganizationId) {
+      return
+    }
+    setActiveOrganization(organization.id, organization.role)
+    void queryClient.invalidateQueries()
+  }
+
   const handleLogout = () => {
     logout()
+    queryClient.clear()
     navigate('/login', { replace: true })
   }
 
@@ -82,12 +125,29 @@ export function AppLayout() {
     </div>
   )
 
+  const sidebarFooter = (
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => {
+          setMobileNavOpen(false)
+          openOnboarding()
+        }}
+        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+      >
+        <HelpCircle className="h-4 w-4 text-slate-500" aria-hidden="true" />
+        Setup guide
+      </button>
+      {accountFooter}
+    </div>
+  )
+
   return (
-    <div className="noise min-h-screen bg-[#05070d] text-slate-100">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/5 bg-[#080b14] px-4 py-5 lg:flex">
+    <div className="noise min-h-screen bg-canvas text-slate-100">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/5 bg-canvas-2 px-4 py-5 lg:flex">
         <Brand />
         <div className="mt-8 flex-1">{navigation}</div>
-        {accountFooter}
+        {sidebarFooter}
       </aside>
 
       {mobileNavOpen ? (
@@ -97,7 +157,7 @@ export function AppLayout() {
             aria-hidden="true"
             onClick={() => setMobileNavOpen(false)}
           />
-          <aside className="absolute inset-y-0 left-0 flex w-64 flex-col border-r border-white/10 bg-[#080b14] px-4 py-5">
+          <aside className="absolute inset-y-0 left-0 flex w-64 flex-col border-r border-white/10 bg-canvas-2 px-4 py-5">
             <div className="flex items-center justify-between">
               <Link to="/">
               <Brand />
@@ -112,13 +172,13 @@ export function AppLayout() {
               </button>
             </div>
             <div className="mt-8 flex-1">{navigation}</div>
-            {accountFooter}
+            {sidebarFooter}
           </aside>
         </div>
       ) : null}
 
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 border-b border-white/5 bg-[#05070d]/80 backdrop-blur-xl">
+        <header className="sticky top-0 z-30 border-b border-white/5 bg-canvas/80 backdrop-blur-xl">
           <div className="flex h-16 items-center justify-between gap-3 px-4 sm:px-6">
             <div className="flex items-center gap-3">
               <Button
@@ -134,6 +194,30 @@ export function AppLayout() {
               <span className="font-display text-sm font-semibold uppercase tracking-wide text-slate-400">
                 Console
               </span>
+              {organizations.length > 0 ? (
+                <Select
+                  value={currentOrganizationId === null ? undefined : String(currentOrganizationId)}
+                  onValueChange={handleOrganizationChange}
+                >
+                  <SelectTrigger
+                    aria-label="Active organization"
+                    className="h-9 w-[11rem] gap-2 rounded-full bg-white/[0.04] text-sm sm:w-[14rem]"
+                  >
+                    <Building2 className="h-4 w-4 shrink-0 text-cyan-300" aria-hidden="true" />
+                    <SelectValue placeholder="Select organization" />
+                  </SelectTrigger>
+                  <SelectContent align="start">
+                    {organizations.map((organization) => (
+                      <SelectItem key={organization.id} value={String(organization.id)}>
+                        <span className="flex items-center gap-2">
+                          <span className="truncate">{organization.name}</span>
+                          <span className="text-xs text-slate-500">{organization.role}</span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
             </div>
 
             <DropdownMenu>
@@ -174,6 +258,8 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      <OnboardingWizard />
     </div>
   )
 }

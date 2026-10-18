@@ -9,9 +9,11 @@ import { DeleteDashboardDialog } from '../../components/dashboards/DeleteDashboa
 import { Button } from '../../components/ui/button'
 import { Skeleton } from '../../components/ui/skeleton'
 import { formatDateTime } from '../../lib/datetime'
+import { useCanManage } from '../../features/organizations/useCanManage'
 
 export default function DashboardsPage() {
   const { data, isLoading, isError, error, isFetching, refetch } = useDashboardsQuery()
+  const canManage = useCanManage()
 
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Dashboard | null>(null)
@@ -37,10 +39,12 @@ export default function DashboardsPage() {
           <h1 className="font-display text-2xl font-semibold text-slate-100">Dashboards</h1>
           <p className="text-sm text-slate-400">Compose metrics and logs into shareable views.</p>
         </div>
-        <Button type="button" onClick={openCreate}>
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Create Dashboard
-        </Button>
+        {canManage ? (
+          <Button type="button" onClick={openCreate}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Create Dashboard
+          </Button>
+        ) : null}
       </header>
 
       {isLoading ? (
@@ -56,12 +60,16 @@ export default function DashboardsPage() {
           </Button>
         </div>
       ) : dashboards.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 bg-[#0b101b]/40 p-10 text-center">
-          <p className="text-sm text-slate-300">No dashboards yet. Create your first dashboard.</p>
-          <Button type="button" variant="secondary" className="mt-4" onClick={openCreate}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Create Dashboard
-          </Button>
+        <div className="rounded-2xl border border-dashed border-white/10 bg-panel/40 p-10 text-center">
+          <p className="text-sm text-slate-300">
+            {canManage ? 'No dashboards yet. Create your first dashboard.' : 'No dashboards in this organization yet.'}
+          </p>
+          {canManage ? (
+            <Button type="button" variant="secondary" className="mt-4" onClick={openCreate}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Create Dashboard
+            </Button>
+          ) : null}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -69,6 +77,7 @@ export default function DashboardsPage() {
             <DashboardCard
               key={dashboard.id}
               dashboard={dashboard}
+              canManage={canManage}
               onRename={() => openRename(dashboard)}
               onDelete={() => setDeleteTarget(dashboard)}
             />
@@ -92,13 +101,14 @@ export default function DashboardsPage() {
 
 interface DashboardCardProps {
   dashboard: Dashboard
+  canManage: boolean
   onRename: () => void
   onDelete: () => void
 }
 
-function DashboardCard({ dashboard, onRename, onDelete }: DashboardCardProps) {
+function DashboardCard({ dashboard, canManage, onRename, onDelete }: DashboardCardProps) {
   return (
-    <article className="flex flex-col rounded-2xl border border-white/10 bg-[#0b101b]/60 p-4">
+    <article className="flex flex-col rounded-2xl border border-white/10 bg-panel/60 p-4">
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03]">
           <LayoutGrid className="h-5 w-5 text-cyan-300" aria-hidden="true" />
@@ -117,19 +127,23 @@ function DashboardCard({ dashboard, onRename, onDelete }: DashboardCardProps) {
         <Button asChild type="button" size="sm" className="flex-1">
           <Link to={`/app/dashboards/${dashboard.id}`}>Open</Link>
         </Button>
-        <Button type="button" variant="ghost" size="icon" aria-label="Rename dashboard" onClick={onRename}>
-          <Pencil className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="text-red-300 hover:text-red-200"
-          aria-label="Delete dashboard"
-          onClick={onDelete}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        {canManage ? (
+          <>
+            <Button type="button" variant="ghost" size="icon" aria-label="Rename dashboard" onClick={onRename}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-red-300 hover:text-red-200"
+              aria-label="Delete dashboard"
+              onClick={onDelete}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </>
+        ) : null}
       </div>
     </article>
   )
@@ -139,7 +153,7 @@ function DashboardGridSkeleton() {
   return (
     <div aria-busy="true" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {[0, 1, 2].map((card) => (
-        <div key={card} className="rounded-2xl border border-white/10 bg-[#0b101b]/60 p-4">
+        <div key={card} className="rounded-2xl border border-white/10 bg-panel/60 p-4">
           <div className="flex items-center gap-3">
             <Skeleton className="h-10 w-10 rounded-xl" />
             <div className="flex-1 space-y-2">

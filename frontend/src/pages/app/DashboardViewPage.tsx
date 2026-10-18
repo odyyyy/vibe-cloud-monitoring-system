@@ -42,8 +42,10 @@ import {
   DEFAULT_WIDGET_WIDTH,
   MAX_WIDGETS_PER_DASHBOARD,
 } from '../../features/dashboards/schemas'
+import { useCanManage } from '../../features/organizations/useCanManage'
 
 export default function DashboardViewPage() {
+  const canManage = useCanManage()
   const params = useParams<{ id: string }>()
   const dashboardId = params.id && /^\d+$/.test(params.id) ? Number(params.id) : null
   const queryClient = useQueryClient()
@@ -213,7 +215,7 @@ export default function DashboardViewPage() {
     node: (
       <DashboardWidget
         widget={widget}
-        showActions
+        showActions={canManage}
         refetchInterval={pollInterval}
         onEdit={handleEditClick}
         onDelete={setDeleteTarget}
@@ -266,10 +268,12 @@ export default function DashboardViewPage() {
             </Select>
           </div>
 
-          <Button type="button" variant="secondary" onClick={handleAddClick} disabled={atWidgetLimit}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add widget
-          </Button>
+          {canManage ? (
+            <Button type="button" variant="secondary" onClick={handleAddClick} disabled={atWidgetLimit}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Add widget
+            </Button>
+          ) : null}
         </div>
       </header>
 
@@ -280,18 +284,20 @@ export default function DashboardViewPage() {
       ) : null}
 
       {dashboard.widgets.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 bg-[#0b101b]/40 p-10 text-center">
+        <div className="rounded-2xl border border-dashed border-white/10 bg-panel/40 p-10 text-center">
           <p className="text-sm text-slate-300">This dashboard has no widgets yet.</p>
-          <Button type="button" variant="secondary" className="mt-4" onClick={handleAddClick}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add your first widget
-          </Button>
+          {canManage ? (
+            <Button type="button" variant="secondary" className="mt-4" onClick={handleAddClick}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Add your first widget
+            </Button>
+          ) : null}
         </div>
       ) : (
         <DashboardGrid
           items={items}
           layout={gridLayout}
-          interactive
+          interactive={canManage}
           onLayoutChange={handleLayoutChange}
           onLayoutCommit={(next) => void handleLayoutCommit(next)}
         />

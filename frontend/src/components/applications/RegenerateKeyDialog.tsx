@@ -7,14 +7,22 @@ import { useRegenerateApiKeyMutation } from '../../api/useApplications'
 import { copyText } from '../../lib/clipboard'
 import { Button } from '../ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'
+import { HoldToConfirmButton } from '../ui/hold-to-confirm-button'
 
 interface RegenerateKeyDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   application: Application | null
+  /** Notified with the new plaintext key so callers (e.g. the onboarding wizard) can use it. */
+  onRegenerated?: (apiKey: string) => void
 }
 
-export function RegenerateKeyDialog({ open, onOpenChange, application }: RegenerateKeyDialogProps) {
+export function RegenerateKeyDialog({
+  open,
+  onOpenChange,
+  application,
+  onRegenerated,
+}: RegenerateKeyDialogProps) {
   const regenerateMutation = useRegenerateApiKeyMutation()
   const [newKey, setNewKey] = useState<string | null>(null)
 
@@ -31,6 +39,7 @@ export function RegenerateKeyDialog({ open, onOpenChange, application }: Regener
     try {
       const result = await regenerateMutation.mutateAsync(application.id)
       setNewKey(result.apiKey)
+      onRegenerated?.(result.apiKey)
       toast.success('A new API key has been generated.')
     } catch (error) {
       const message =
@@ -84,7 +93,8 @@ export function RegenerateKeyDialog({ open, onOpenChange, application }: Regener
               </DialogTitle>
               <DialogDescription>
                 The current key for <span className="text-slate-200">{application?.name}</span> will stop working
-                immediately. Any agent using it must be reconfigured with the new key before it can send data again.
+                immediately. All agents using it will disconnect and stop sending telemetry until they are
+                reconfigured with the new key.
               </DialogDescription>
             </DialogHeader>
 
@@ -102,10 +112,21 @@ export function RegenerateKeyDialog({ open, onOpenChange, application }: Regener
               >
                 Cancel
               </Button>
-              <Button type="button" onClick={handleConfirm} disabled={regenerateMutation.isPending}>
+              <HoldToConfirmButton
+                aria-describedby="regenerate-hold-hint"
+                disabled={regenerateMutation.isPending}
+                fillClassName="bg-amber-400/25"
+                onConfirm={() => {
+                  void handleConfirm()
+                }}
+              >
                 {regenerateMutation.isPending ? 'Regenerating…' : 'Regenerate key'}
-              </Button>
+              </HoldToConfirmButton>
             </DialogFooter>
+            <p id="regenerate-hold-hint" className="mt-3 text-center text-xs text-slate-500">
+              Press and hold <span className="text-slate-400">Regenerate key</span> to confirm — the new key is shown
+              only once, so you must copy it immediately.
+            </p>
           </>
         )}
       </DialogContent>

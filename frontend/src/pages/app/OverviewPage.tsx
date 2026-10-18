@@ -85,7 +85,7 @@ export default function OverviewPage() {
             </Button>
           </div>
         ) : orderedDashboards.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-[#0b101b]/40 p-8 text-center">
+          <div className="rounded-2xl border border-dashed border-white/10 bg-panel/40 p-8 text-center">
             <p className="text-sm text-slate-300">No dashboards yet.</p>
             <Button asChild variant="secondary" className="mt-4">
               <Link to="/app/dashboards">Create your first dashboard</Link>

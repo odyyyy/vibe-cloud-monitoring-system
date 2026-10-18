@@ -18,7 +18,7 @@ export interface Widget {
 export interface Dashboard {
   id: number
   name: string
-  userId: number
+  organizationId: number
   createdAt: string
   widgets: Widget[]
 }

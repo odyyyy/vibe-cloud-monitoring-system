@@ -158,7 +158,7 @@ export function ApiKeyRevealDialog({ open, onOpenChange, apiKey, applicationName
           >
             <span
               aria-hidden="true"
-              className="absolute inset-y-0 left-0 bg-[#05070d]/50"
+              className="absolute inset-y-0 left-0 bg-canvas/50"
               style={{ width: `${progress * 100}%` }}
             />
             <span className="relative z-10">{holding ? 'Keep holding…' : 'Done'}</span>

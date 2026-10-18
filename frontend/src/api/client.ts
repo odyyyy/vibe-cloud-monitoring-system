@@ -1,3 +1,5 @@
+import { useAuthStore } from '../store/authStore'
+
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export const DEFAULT_ERROR_MESSAGE = 'Request failed. Please try again.'
@@ -55,6 +57,10 @@ export async function apiRequest<TResponse>(path: string, options: RequestOption
   }
   if (token) {
     headers.Authorization = `Bearer ${token}`
+  }
+  const organizationId = useAuthStore.getState().currentOrganizationId
+  if (organizationId !== null) {
+    headers['X-Organization-Id'] = String(organizationId)
   }
 
   let response: Response

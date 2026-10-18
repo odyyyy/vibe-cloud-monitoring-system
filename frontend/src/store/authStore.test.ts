@@ -65,6 +65,45 @@ describe('authStore', () => {
     })
   })
 
+  it('persists the active organization and clears it on logout', () => {
+    const token = tokenWithClaims({ sub: 'ada', uid: 7 })
+    useAuthStore.getState().login(token)
+
+    useAuthStore.getState().setActiveOrganization(42, 'ADMIN')
+
+    expect(window.localStorage.getItem('auth_organization')).toBe('42')
+    expect(useAuthStore.getState().currentOrganizationId).toBe(42)
+    expect(useAuthStore.getState().currentRole).toBe('ADMIN')
+
+    useAuthStore.getState().logout()
+
+    expect(window.localStorage.getItem('auth_organization')).toBeNull()
+    expect(useAuthStore.getState().currentOrganizationId).toBeNull()
+    expect(useAuthStore.getState().currentRole).toBeNull()
+  })
+
+  it('clears a previously selected organization on login', () => {
+    useAuthStore.getState().login(tokenWithClaims({ sub: 'ada', uid: 7 }))
+    useAuthStore.getState().setActiveOrganization(42, 'OWNER')
+
+    useAuthStore.getState().login(tokenWithClaims({ sub: 'grace', uid: 8 }))
+
+    expect(window.localStorage.getItem('auth_organization')).toBeNull()
+    expect(useAuthStore.getState().currentOrganizationId).toBeNull()
+    expect(useAuthStore.getState().currentRole).toBeNull()
+  })
+
+  it('rehydrates a stored active organization id', async () => {
+    vi.resetModules()
+    window.localStorage.setItem('token', tokenWithClaims({ sub: 'ada', uid: 7 }))
+    window.localStorage.setItem('auth_organization', '42')
+
+    const { useAuthStore: freshStore } = await import('./authStore')
+
+    expect(freshStore.getState().currentOrganizationId).toBe(42)
+    expect(freshStore.getState().currentRole).toBeNull()
+  })
+
   it('clears the session on logout', () => {
     const token = tokenWithClaims({ sub: 'ada', uid: 7 })
     useAuthStore.getState().login(token)

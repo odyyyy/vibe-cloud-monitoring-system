@@ -27,12 +27,14 @@ import { Skeleton } from '../../components/ui/skeleton'
 import { Switch } from '../../components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
 import { summarizeHealthChecks } from '../../features/health/status'
+import { useCanManage } from '../../features/organizations/useCanManage'
 import { formatDateTime } from '../../lib/datetime'
 import { useDocumentVisible } from '../../lib/useDocumentVisible'
 
 const REFRESH_INTERVAL_MS = 30_000
 
 export default function HealthChecksPage() {
+  const canManage = useCanManage()
   const isVisible = useDocumentVisible()
   const refetchInterval = isVisible ? REFRESH_INTERVAL_MS : false
   const { data, isLoading, isError, error, refetch, isFetching } = useHealthChecksOverviewQuery(refetchInterval)
@@ -90,10 +92,12 @@ export default function HealthChecksPage() {
             Synthetic HTTP checks the platform runs against your endpoints.
           </p>
         </div>
-        <Button type="button" onClick={openCreate}>
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Create check
-        </Button>
+        {canManage ? (
+          <Button type="button" onClick={openCreate}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Create check
+          </Button>
+        ) : null}
       </header>
 
       {isLoading ? (
@@ -109,12 +113,16 @@ export default function HealthChecksPage() {
           </Button>
         </div>
       ) : overview.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 bg-[#0b101b]/40 p-10 text-center">
-          <p className="text-sm text-slate-300">No health checks yet. Create your first check.</p>
-          <Button type="button" variant="secondary" className="mt-4" onClick={openCreate}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Create check
-          </Button>
+        <div className="rounded-2xl border border-dashed border-white/10 bg-panel/40 p-10 text-center">
+          <p className="text-sm text-slate-300">
+            {canManage ? 'No health checks yet. Create your first check.' : 'No health checks in this organization yet.'}
+          </p>
+          {canManage ? (
+            <Button type="button" variant="secondary" className="mt-4" onClick={openCreate}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Create check
+            </Button>
+          ) : null}
         </div>
       ) : (
         <>
@@ -128,7 +136,7 @@ export default function HealthChecksPage() {
             </span>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-[#0b101b]/40 p-1">
+          <div className="rounded-2xl border border-white/10 bg-panel/40 p-1">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -162,12 +170,18 @@ export default function HealthChecksPage() {
                       {latest ? `${latest.responseTimeMs} ms` : '—'}
                     </TableCell>
                     <TableCell onClick={(event) => event.stopPropagation()}>
-                      <Switch
-                        checked={check.isActive}
-                        onCheckedChange={(next) => void handleToggle(check, next)}
-                        disabled={updateMutation.isPending}
-                        aria-label={check.isActive ? `Pause ${check.name}` : `Enable ${check.name}`}
-                      />
+                      {canManage ? (
+                        <Switch
+                          checked={check.isActive}
+                          onCheckedChange={(next) => void handleToggle(check, next)}
+                          disabled={updateMutation.isPending}
+                          aria-label={check.isActive ? `Pause ${check.name}` : `Enable ${check.name}`}
+                        />
+                      ) : (
+                        <Badge variant={check.isActive ? 'success' : 'muted'}>
+                          {check.isActive ? 'Active' : 'Paused'}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell onClick={(event) => event.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
@@ -180,25 +194,29 @@ export default function HealthChecksPage() {
                         >
                           <History className="h-4 w-4" />
                         </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Edit ${check.name}`}
-                          onClick={() => openEdit(check)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="text-red-300 hover:text-red-200"
-                          aria-label={`Delete ${check.name}`}
-                          onClick={() => setDeleteTarget(check)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {canManage ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Edit ${check.name}`}
+                              onClick={() => openEdit(check)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="text-red-300 hover:text-red-200"
+                              aria-label={`Delete ${check.name}`}
+                              onClick={() => setDeleteTarget(check)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -261,7 +279,7 @@ function HealthChecksSkeleton() {
         <Skeleton className="h-6 w-16 rounded-full" />
         <Skeleton className="h-6 w-20 rounded-full" />
       </div>
-      <div className="space-y-2 rounded-2xl border border-white/10 bg-[#0b101b]/40 p-4">
+      <div className="space-y-2 rounded-2xl border border-white/10 bg-panel/40 p-4">
         {[0, 1, 2].map((row) => (
           <div key={row} className="flex items-center gap-4">
             <Activity className="h-4 w-4 text-slate-600" aria-hidden="true" />

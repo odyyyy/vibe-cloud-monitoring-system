@@ -3,6 +3,9 @@ import { decodeJwt } from '../lib/jwt'
 
 const TOKEN_STORAGE_KEY = 'token'
 const USER_STORAGE_KEY = 'auth_user'
+const ORGANIZATION_STORAGE_KEY = 'auth_organization'
+
+export type MembershipRole = 'OWNER' | 'ADMIN' | 'VIEWER'
 
 export interface AuthUser {
   id: number | null
@@ -14,8 +17,12 @@ export interface AuthUser {
 interface AuthState {
   user: AuthUser | null
   token: string | null
+  currentOrganizationId: number | null
+  currentRole: MembershipRole | null
   login: (token: string) => void
   setUser: (user: AuthUser) => void
+  setActiveOrganization: (organizationId: number, role: MembershipRole) => void
+  clearActiveOrganization: () => void
   logout: () => void
 }
 
@@ -83,11 +90,41 @@ function persistUser(user: AuthUser | null): void {
   }
 }
 
+function readStoredOrganization(token: string | null): number | null {
+  if (!token) {
+    return null
+  }
+  try {
+    const raw = window.localStorage.getItem(ORGANIZATION_STORAGE_KEY)
+    if (!raw) {
+      return null
+    }
+    const parsed = Number(raw)
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function persistOrganization(organizationId: number | null): void {
+  try {
+    if (organizationId === null) {
+      window.localStorage.removeItem(ORGANIZATION_STORAGE_KEY)
+    } else {
+      window.localStorage.setItem(ORGANIZATION_STORAGE_KEY, String(organizationId))
+    }
+  } catch {
+    void 0
+  }
+}
+
 const initialToken = readStoredToken()
 
 export const useAuthStore = create<AuthState>((set) => ({
   token: initialToken,
   user: readStoredUser(initialToken),
+  currentOrganizationId: readStoredOrganization(initialToken),
+  currentRole: null,
   login: (token) => {
     const user = toUser(token)
     try {
@@ -96,11 +133,20 @@ export const useAuthStore = create<AuthState>((set) => ({
       void 0
     }
     persistUser(user)
-    set({ token, user })
+    persistOrganization(null)
+    set({ token, user, currentOrganizationId: null, currentRole: null })
   },
   setUser: (user) => {
     persistUser(user)
     set({ user })
+  },
+  setActiveOrganization: (organizationId, role) => {
+    persistOrganization(organizationId)
+    set({ currentOrganizationId: organizationId, currentRole: role })
+  },
+  clearActiveOrganization: () => {
+    persistOrganization(null)
+    set({ currentOrganizationId: null, currentRole: null })
   },
   logout: () => {
     try {
@@ -109,6 +155,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       void 0
     }
     persistUser(null)
-    set({ token: null, user: null })
+    persistOrganization(null)
+    set({ token: null, user: null, currentOrganizationId: null, currentRole: null })
   },
 }))

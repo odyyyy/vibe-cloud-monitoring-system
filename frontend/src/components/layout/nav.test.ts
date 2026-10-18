@@ -6,6 +6,7 @@ describe('NAV_ITEMS', () => {
     expect(NAV_ITEMS.map((item) => item.label)).toEqual([
       'Overview',
       'Applications',
+      'Agents',
       'Metrics',
       'Logs',
       'Health',
@@ -13,6 +14,7 @@ describe('NAV_ITEMS', () => {
       'Incidents',
       'Dashboards',
       'Audit log',
+      'Organization',
       'Settings',
     ])
   })

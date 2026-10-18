@@ -4,11 +4,13 @@ import { RequireAuth } from './components/auth/RequireAuth'
 import { AppLayout } from './components/layout/AppLayout'
 import LandingPage from './pages/LandingPage'
 import CheckEmailPage from './pages/auth/CheckEmailPage'
+import ConfirmEmailChangePage from './pages/auth/ConfirmEmailChangePage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import LoginPage from './pages/auth/LoginPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import VerifyEmailPage from './pages/auth/VerifyEmailPage'
 import AlertsPage from './pages/app/AlertsPage'
+import AgentFleetPage from './pages/app/AgentFleetPage'
 import ApplicationsPage from './pages/app/ApplicationsPage'
 import AuditLogPage from './pages/app/AuditLogPage'
 import DashboardsPage from './pages/app/DashboardsPage'
@@ -18,6 +20,7 @@ import IncidentsPage from './pages/app/IncidentsPage'
 import LogExplorerPage from './pages/app/LogExplorerPage'
 import MetricsExplorerPage from './pages/app/MetricsExplorerPage'
 import OverviewPage from './pages/app/OverviewPage'
+import OrganizationSettingsPage from './pages/app/OrganizationSettingsPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import SettingsPage from './pages/app/SettingsPage'
 
@@ -59,6 +62,10 @@ const router = createBrowserRouter([
     element: <ResetPasswordPage />,
   },
   {
+    path: '/confirm-email-change',
+    element: <ConfirmEmailChangePage />,
+  },
+  {
     path: '/app',
     element: (
       <RequireAuth>
@@ -69,6 +76,7 @@ const router = createBrowserRouter([
       { index: true, element: <Navigate to="/app/overview" replace /> },
       { path: 'overview', element: <OverviewPage /> },
       { path: 'applications', element: <ApplicationsPage /> },
+      { path: 'agents', element: <AgentFleetPage /> },
       { path: 'metrics', element: <MetricsExplorerPage /> },
       { path: 'logs', element: <LogExplorerPage /> },
       { path: 'health', element: <HealthChecksPage /> },
@@ -77,6 +85,7 @@ const router = createBrowserRouter([
       { path: 'dashboards', element: <DashboardsPage /> },
       { path: 'dashboards/:id', element: <DashboardViewPage /> },
       { path: 'audit', element: <AuditLogPage /> },
+      { path: 'organization', element: <OrganizationSettingsPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

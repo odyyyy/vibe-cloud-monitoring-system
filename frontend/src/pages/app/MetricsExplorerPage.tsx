@@ -100,7 +100,7 @@ export default function MetricsExplorerPage() {
           error={query.error instanceof ApiError ? query.error : null}
         />
       ) : (
-        <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-[#0b101b]/40">
+        <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-panel/40">
           <p className="text-sm text-slate-400">
             {validationError ?? 'Choose an application, enter a metric name and apply filters to load data.'}
           </p>

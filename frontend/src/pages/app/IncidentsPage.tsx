@@ -49,7 +49,7 @@ export default function IncidentsPage() {
           </Button>
         </div>
       ) : incidents.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 bg-[#0b101b]/40 p-10 text-center">
+        <div className="rounded-2xl border border-dashed border-white/10 bg-panel/40 p-10 text-center">
           <p className="text-sm text-slate-300">No incidents recorded yet.</p>
         </div>
       ) : (
@@ -57,7 +57,7 @@ export default function IncidentsPage() {
           <p className="text-xs text-slate-500">
             {isVisible ? 'Auto-refreshes every 30 seconds.' : 'Auto-refresh paused while this tab is hidden.'}
           </p>
-          <div className="rounded-2xl border border-white/10 bg-[#0b101b]/40 p-1">
+          <div className="rounded-2xl border border-white/10 bg-panel/40 p-1">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -93,7 +93,7 @@ export default function IncidentsPage() {
 
 function IncidentsSkeleton() {
   return (
-    <div className="space-y-2 rounded-2xl border border-white/10 bg-[#0b101b]/40 p-4" aria-busy="true">
+    <div className="space-y-2 rounded-2xl border border-white/10 bg-panel/40 p-4" aria-busy="true">
       {[0, 1, 2].map((row) => (
         <div key={row} className="flex items-center gap-4">
           <Siren className="h-4 w-4 text-slate-600" aria-hidden="true" />

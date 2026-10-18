@@ -25,8 +25,10 @@ import { Switch } from '../../components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
 import { alertConditionSymbol, alertRuleTypeLabel } from '../../features/alerts/labels'
 import { metricLabel } from '../../features/metrics/catalog'
+import { useCanManage } from '../../features/organizations/useCanManage'
 
 export default function AlertsPage() {
+  const canManage = useCanManage()
   const rulesQuery = useAlertRulesQuery()
   const applicationsQuery = useApplicationsQuery()
   const healthChecksQuery = useHealthChecksListQuery()
@@ -108,14 +110,18 @@ export default function AlertsPage() {
           <p className="text-sm text-slate-400">Rules that open an incident when a metric or health check breaches.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" onClick={() => setChannelsOpen(true)}>
-            <Webhook className="h-4 w-4" aria-hidden="true" />
-            Notification channels
-          </Button>
-          <Button type="button" onClick={openCreate}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Create rule
-          </Button>
+          {canManage ? (
+            <>
+              <Button type="button" variant="secondary" onClick={() => setChannelsOpen(true)}>
+                <Webhook className="h-4 w-4" aria-hidden="true" />
+                Notification channels
+              </Button>
+              <Button type="button" onClick={openCreate}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Create rule
+              </Button>
+            </>
+          ) : null}
         </div>
       </header>
 
@@ -138,12 +144,16 @@ export default function AlertsPage() {
           </Button>
         </div>
       ) : rules.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 bg-[#0b101b]/40 p-10 text-center">
-          <p className="text-sm text-slate-300">No alert rules yet. Create your first rule.</p>
-          <Button type="button" variant="secondary" className="mt-4" onClick={openCreate}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Create rule
-          </Button>
+        <div className="rounded-2xl border border-dashed border-white/10 bg-panel/40 p-10 text-center">
+          <p className="text-sm text-slate-300">
+            {canManage ? 'No alert rules yet. Create your first rule.' : 'No alert rules in this organization yet.'}
+          </p>
+          {canManage ? (
+            <Button type="button" variant="secondary" className="mt-4" onClick={openCreate}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Create rule
+            </Button>
+          ) : null}
         </div>
       ) : (
         <>
@@ -152,7 +162,7 @@ export default function AlertsPage() {
             <Badge variant="muted">{rules.length - activeCount} paused</Badge>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-[#0b101b]/40 p-1">
+          <div className="rounded-2xl border border-white/10 bg-panel/40 p-1">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -162,7 +172,7 @@ export default function AlertsPage() {
                   <TableHead>Condition</TableHead>
                   <TableHead>Duration</TableHead>
                   <TableHead>Active</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  {canManage ? <TableHead className="text-right">Actions</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -180,36 +190,44 @@ export default function AlertsPage() {
                     </TableCell>
                     <TableCell className="whitespace-nowrap">{`${rule.durationMinutes} min`}</TableCell>
                     <TableCell>
-                      <Switch
-                        checked={rule.isActive}
-                        onCheckedChange={(next) => void handleToggle(rule, next)}
-                        disabled={updateMutation.isPending}
-                        aria-label={rule.isActive ? `Pause ${rule.name}` : `Enable ${rule.name}`}
-                      />
+                      {canManage ? (
+                        <Switch
+                          checked={rule.isActive}
+                          onCheckedChange={(next) => void handleToggle(rule, next)}
+                          disabled={updateMutation.isPending}
+                          aria-label={rule.isActive ? `Pause ${rule.name}` : `Enable ${rule.name}`}
+                        />
+                      ) : (
+                        <Badge variant={rule.isActive ? 'success' : 'muted'}>
+                          {rule.isActive ? 'Active' : 'Paused'}
+                        </Badge>
+                      )}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Edit ${rule.name}`}
-                          onClick={() => openEdit(rule)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="text-red-300 hover:text-red-200"
-                          aria-label={`Delete ${rule.name}`}
-                          onClick={() => setDeleteTarget(rule)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    {canManage ? (
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Edit ${rule.name}`}
+                            onClick={() => openEdit(rule)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="text-red-300 hover:text-red-200"
+                            aria-label={`Delete ${rule.name}`}
+                            onClick={() => setDeleteTarget(rule)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>
@@ -261,7 +279,7 @@ function AlertsSkeleton() {
         <Skeleton className="h-6 w-20 rounded-full" />
         <Skeleton className="h-6 w-20 rounded-full" />
       </div>
-      <div className="space-y-2 rounded-2xl border border-white/10 bg-[#0b101b]/40 p-4">
+      <div className="space-y-2 rounded-2xl border border-white/10 bg-panel/40 p-4">
         {[0, 1, 2].map((row) => (
           <div key={row} className="flex items-center gap-4">
             <Bell className="h-4 w-4 text-slate-600" aria-hidden="true" />

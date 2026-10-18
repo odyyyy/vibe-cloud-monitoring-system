@@ -10,9 +10,11 @@ import { DeleteApplicationDialog } from '../../components/applications/DeleteApp
 import { RegenerateKeyDialog } from '../../components/applications/RegenerateKeyDialog'
 import { Button } from '../../components/ui/button'
 import { Skeleton } from '../../components/ui/skeleton'
+import { useCanManage } from '../../features/organizations/useCanManage'
 
 export default function ApplicationsPage() {
   const { data, isLoading, isError, error, isFetching, refetch } = useApplicationsQuery()
+  const canManage = useCanManage()
 
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Application | null>(null)
@@ -46,10 +48,12 @@ export default function ApplicationsPage() {
             Create and manage the applications your agents send telemetry for.
           </p>
         </div>
-        <Button type="button" onClick={openCreate}>
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Create Application
-        </Button>
+        {canManage ? (
+          <Button type="button" onClick={openCreate}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Create Application
+          </Button>
+        ) : null}
       </header>
 
       {isLoading ? (
@@ -57,11 +61,12 @@ export default function ApplicationsPage() {
       ) : isError ? (
         <ErrorState error={error} onRetry={() => refetch()} isRetrying={isFetching} />
       ) : applications.length === 0 ? (
-        <EmptyState onCreate={openCreate} />
+        <EmptyState onCreate={openCreate} canManage={canManage} />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b101b]/60">
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-panel/60">
           <ApplicationsTable
             applications={applications}
+            canManage={canManage}
             onEdit={openEdit}
             onRegenerate={setRegenerateTarget}
             onDelete={setDeleteTarget}
@@ -134,21 +139,25 @@ function ErrorState({
   )
 }
 
-function EmptyState({ onCreate }: { onCreate: () => void }) {
+function EmptyState({ onCreate, canManage }: { onCreate: () => void; canManage: boolean }) {
   return (
-    <div className="rounded-2xl border border-dashed border-white/10 bg-[#0b101b]/40 p-10 text-center">
-      <p className="text-sm text-slate-300">No applications yet. Create your first application.</p>
-      <Button type="button" variant="secondary" className="mt-4" onClick={onCreate}>
-        <Plus className="h-4 w-4" aria-hidden="true" />
-        Create Application
-      </Button>
+    <div className="rounded-2xl border border-dashed border-white/10 bg-panel/40 p-10 text-center">
+      <p className="text-sm text-slate-300">
+        {canManage ? 'No applications yet. Create your first application.' : 'No applications in this organization yet.'}
+      </p>
+      {canManage ? (
+        <Button type="button" variant="secondary" className="mt-4" onClick={onCreate}>
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          Create Application
+        </Button>
+      ) : null}
     </div>
   )
 }
 
 function ApplicationsTableSkeleton() {
   return (
-    <div aria-busy="true" className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b101b]/60 p-4">
+    <div aria-busy="true" className="overflow-hidden rounded-2xl border border-white/10 bg-panel/60 p-4">
       <div className="space-y-3">
         {[0, 1, 2, 3, 4].map((row) => (
           <div key={row} className="flex items-center gap-4">

@@ -8,7 +8,7 @@ export type HealthCheckMethod = 'GET' | 'POST'
 
 export interface HealthCheckConfig {
   id: number
-  userId: number
+  organizationId: number
   name: string
   targetUrl: string
   method: HealthCheckMethod
@@ -26,8 +26,8 @@ export interface HealthCheckResult {
   checkedAt: string
 }
 
-export type CreateHealthCheckRequest = Omit<HealthCheckConfig, 'id' | 'userId'>
-export type UpdateHealthCheckRequest = Partial<Omit<HealthCheckConfig, 'id' | 'userId'>>
+export type CreateHealthCheckRequest = Omit<HealthCheckConfig, 'id' | 'organizationId'>
+export type UpdateHealthCheckRequest = Partial<Omit<HealthCheckConfig, 'id' | 'organizationId'>>
 
 /** A check together with its most recent result (null when it has never run). */
 export interface HealthCheckOverview {

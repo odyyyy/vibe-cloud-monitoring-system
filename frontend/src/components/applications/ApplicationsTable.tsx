@@ -13,19 +13,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 
 interface ApplicationsTableProps {
   applications: Application[]
+  canManage: boolean
   onEdit: (application: Application) => void
   onRegenerate: (application: Application) => void
   onDelete: (application: Application) => void
 }
 
-export function ApplicationsTable({ applications, onEdit, onRegenerate, onDelete }: ApplicationsTableProps) {
+export function ApplicationsTable({ applications, canManage, onEdit, onRegenerate, onDelete }: ApplicationsTableProps) {
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
           <TableHead>Created At</TableHead>
-          <TableHead className="w-16 text-right">Actions</TableHead>
+          {canManage ? <TableHead className="w-16 text-right">Actions</TableHead> : null}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -35,32 +36,34 @@ export function ApplicationsTable({ applications, onEdit, onRegenerate, onDelete
             <TableCell className="whitespace-nowrap text-slate-400">
               {formatDateTime(application.createdAt)}
             </TableCell>
-            <TableCell className="text-right">
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Actions for ${application.name}`}
-                    className="h-8 w-8"
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => onEdit(application)}>Edit</DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => onRegenerate(application)}>Regenerate Key</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onSelect={() => onDelete(application)}
-                    className="text-red-300 focus:text-red-200"
-                  >
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </TableCell>
+            {canManage ? (
+              <TableCell className="text-right">
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Actions for ${application.name}`}
+                      className="h-8 w-8"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => onEdit(application)}>Edit</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onRegenerate(application)}>Regenerate Key</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={() => onDelete(application)}
+                      className="text-red-300 focus:text-red-200"
+                    >
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
+            ) : null}
           </TableRow>
         ))}
       </TableBody>
