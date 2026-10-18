@@ -1,8 +1,8 @@
 package com.monitoring.collector.controller;
 
-import com.monitoring.collector.dto.CreateSavedLogViewRequest;
-import com.monitoring.collector.dto.SavedLogViewResponse;
-import com.monitoring.collector.dto.UpdateSavedLogViewRequest;
+import com.monitoring.collector.dto.request.CreateSavedLogViewRequest;
+import com.monitoring.collector.dto.response.SavedLogViewResponse;
+import com.monitoring.collector.dto.request.UpdateSavedLogViewRequest;
 import com.monitoring.collector.service.SavedLogViewService;
 import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;

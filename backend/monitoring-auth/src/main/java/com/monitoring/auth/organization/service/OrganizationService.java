@@ -1,8 +1,8 @@
 package com.monitoring.auth.organization.service;
 
 import com.monitoring.auth.entity.User;
-import com.monitoring.auth.organization.dto.MemberResponse;
-import com.monitoring.auth.organization.dto.OrganizationResponse;
+import com.monitoring.auth.organization.dto.response.MemberResponse;
+import com.monitoring.auth.organization.dto.response.OrganizationResponse;
 import com.monitoring.auth.organization.entity.Membership;
 import com.monitoring.auth.organization.entity.MembershipRole;
 import com.monitoring.auth.organization.entity.Organization;

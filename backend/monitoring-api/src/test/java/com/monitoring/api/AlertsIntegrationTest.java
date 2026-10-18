@@ -1,9 +1,9 @@
 package com.monitoring.api;
 
-import com.monitoring.alerts.dto.AlertIncidentResponse;
-import com.monitoring.alerts.dto.AlertRuleResponse;
-import com.monitoring.alerts.dto.CreateAlertRuleRequest;
-import com.monitoring.alerts.dto.CreateNotificationChannelRequest;
+import com.monitoring.alerts.dto.response.AlertIncidentResponse;
+import com.monitoring.alerts.dto.response.AlertRuleResponse;
+import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
+import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.IncidentStatus;
@@ -17,16 +17,16 @@ import com.monitoring.alerts.service.AlertEvaluationService;
 import com.monitoring.alerts.service.AlertService;
 import com.monitoring.collector.entity.MetricSample;
 import com.monitoring.collector.repository.MetricSampleRepository;
-import com.monitoring.healthcheck.dto.CreateHealthCheckRequest;
-import com.monitoring.healthcheck.dto.HealthCheckResponse;
+import com.monitoring.healthcheck.dto.request.CreateHealthCheckRequest;
+import com.monitoring.healthcheck.dto.response.HealthCheckResponse;
 import com.monitoring.healthcheck.entity.HealthCheckMethod;
 import com.monitoring.healthcheck.entity.HealthStatus;
 import com.monitoring.healthcheck.repository.HealthCheckConfigRepository;
 import com.monitoring.healthcheck.repository.HealthCheckResultRepository;
 import com.monitoring.healthcheck.service.HealthCheckOutcome;
 import com.monitoring.healthcheck.service.HealthCheckService;
-import com.monitoring.apps.dto.ApplicationCreateRequest;
-import com.monitoring.apps.dto.ApplicationWithKeyResponse;
+import com.monitoring.apps.dto.request.ApplicationCreateRequest;
+import com.monitoring.apps.dto.response.ApplicationWithKeyResponse;
 import com.monitoring.apps.entity.Application;
 import com.monitoring.apps.repository.ApplicationRepository;
 import com.monitoring.apps.service.ApplicationService;
@@ -190,7 +190,7 @@ class AlertsIntegrationTest {
         assertEquals(0, alertService.listRules(OTHER_ID).size());
         assertThrows(AlertRuleAccessDeniedException.class,
                 () -> alertService.updateRule(OTHER_ID, rule.getId(),
-                        com.monitoring.alerts.dto.UpdateAlertRuleRequest.builder().name("x").build()));
+                        com.monitoring.alerts.dto.request.UpdateAlertRuleRequest.builder().name("x").build()));
         assertThrows(AlertRuleAccessDeniedException.class,
                 () -> alertService.deleteRule(OTHER_ID, rule.getId()));
     }

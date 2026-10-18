@@ -1,8 +1,8 @@
 package com.monitoring.alerts.controller;
 
-import com.monitoring.alerts.dto.AlertRuleResponse;
-import com.monitoring.alerts.dto.CreateAlertRuleRequest;
-import com.monitoring.alerts.dto.UpdateAlertRuleRequest;
+import com.monitoring.alerts.dto.response.AlertRuleResponse;
+import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
+import com.monitoring.alerts.dto.request.UpdateAlertRuleRequest;
 import com.monitoring.alerts.service.AlertService;
 import com.monitoring.auth.organization.entity.MembershipRole;
 import com.monitoring.auth.organization.security.RequireRole;

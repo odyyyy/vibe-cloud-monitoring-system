@@ -1,9 +1,9 @@
 package com.monitoring.collector.integration;
 
-import com.monitoring.collector.dto.CreateSavedLogViewRequest;
-import com.monitoring.collector.dto.SavedLogViewQuery;
-import com.monitoring.collector.dto.SavedLogViewResponse;
-import com.monitoring.collector.dto.UpdateSavedLogViewRequest;
+import com.monitoring.collector.dto.request.CreateSavedLogViewRequest;
+import com.monitoring.collector.dto.request.SavedLogViewQuery;
+import com.monitoring.collector.dto.response.SavedLogViewResponse;
+import com.monitoring.collector.dto.request.UpdateSavedLogViewRequest;
 import com.monitoring.collector.entity.LogLevel;
 import com.monitoring.collector.repository.SavedLogViewRepository;
 import com.monitoring.collector.service.SavedLogViewService;

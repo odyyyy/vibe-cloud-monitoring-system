@@ -2,10 +2,10 @@ package com.monitoring.collector.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.monitoring.collector.dto.CreateSavedLogViewRequest;
-import com.monitoring.collector.dto.SavedLogViewQuery;
-import com.monitoring.collector.dto.SavedLogViewResponse;
-import com.monitoring.collector.dto.UpdateSavedLogViewRequest;
+import com.monitoring.collector.dto.request.CreateSavedLogViewRequest;
+import com.monitoring.collector.dto.request.SavedLogViewQuery;
+import com.monitoring.collector.dto.response.SavedLogViewResponse;
+import com.monitoring.collector.dto.request.UpdateSavedLogViewRequest;
 import com.monitoring.collector.entity.SavedLogView;
 import com.monitoring.collector.exception.SavedLogViewAccessDeniedException;
 import com.monitoring.collector.exception.SavedLogViewLimitExceededException;

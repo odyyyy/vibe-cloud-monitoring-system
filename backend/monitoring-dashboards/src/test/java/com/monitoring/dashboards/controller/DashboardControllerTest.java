@@ -1,10 +1,10 @@
 package com.monitoring.dashboards.controller;
 
 import com.monitoring.auth.organization.tenant.CurrentTenantService;
-import com.monitoring.dashboards.dto.CreateDashboardRequest;
-import com.monitoring.dashboards.dto.DashboardResponse;
-import com.monitoring.dashboards.dto.UpdateWidgetRequest;
-import com.monitoring.dashboards.dto.WidgetResponse;
+import com.monitoring.dashboards.dto.request.CreateDashboardRequest;
+import com.monitoring.dashboards.dto.response.DashboardResponse;
+import com.monitoring.dashboards.dto.request.UpdateWidgetRequest;
+import com.monitoring.dashboards.dto.response.WidgetResponse;
 import com.monitoring.dashboards.entity.WidgetType;
 import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
 import com.monitoring.dashboards.exception.DashboardNotFoundException;

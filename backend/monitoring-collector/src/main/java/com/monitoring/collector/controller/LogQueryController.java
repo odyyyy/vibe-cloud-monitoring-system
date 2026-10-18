@@ -1,7 +1,7 @@
 package com.monitoring.collector.controller;
 
-import com.monitoring.collector.dto.LogEventResponse;
-import com.monitoring.collector.dto.LogsQueryRequest;
+import com.monitoring.collector.dto.response.LogEventResponse;
+import com.monitoring.collector.dto.request.LogsQueryRequest;
 import com.monitoring.common.dto.PageResponse;
 import com.monitoring.collector.service.LogQueryService;
 import com.monitoring.auth.organization.tenant.CurrentTenantService;

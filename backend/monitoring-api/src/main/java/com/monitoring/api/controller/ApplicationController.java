@@ -1,9 +1,9 @@
 package com.monitoring.api.controller;
 
-import com.monitoring.apps.dto.ApplicationCreateRequest;
-import com.monitoring.apps.dto.ApplicationResponse;
-import com.monitoring.apps.dto.ApplicationUpdateRequest;
-import com.monitoring.apps.dto.ApplicationWithKeyResponse;
+import com.monitoring.apps.dto.request.ApplicationCreateRequest;
+import com.monitoring.apps.dto.response.ApplicationResponse;
+import com.monitoring.apps.dto.request.ApplicationUpdateRequest;
+import com.monitoring.apps.dto.response.ApplicationWithKeyResponse;
 import com.monitoring.apps.entity.Application;
 import com.monitoring.apps.service.ApplicationService;
 import com.monitoring.audit.annotation.AuditLog;

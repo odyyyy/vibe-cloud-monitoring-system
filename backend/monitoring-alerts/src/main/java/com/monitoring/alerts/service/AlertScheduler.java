@@ -1,5 +1,6 @@
 package com.monitoring.alerts.service;
 
+import com.monitoring.alerts.event.AlertEvent;
 import com.monitoring.alerts.entity.AlertRule;
 import com.monitoring.alerts.repository.AlertRuleRepository;
 import lombok.extern.slf4j.Slf4j;

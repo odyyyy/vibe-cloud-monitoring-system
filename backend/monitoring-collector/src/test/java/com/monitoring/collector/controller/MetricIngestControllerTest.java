@@ -1,6 +1,6 @@
 package com.monitoring.collector.controller;
 
-import com.monitoring.collector.dto.MetricIngestRequest;
+import com.monitoring.collector.dto.request.MetricIngestRequest;
 import com.monitoring.collector.service.MetricIngestService;
 import com.monitoring.apps.entity.Application;
 import org.junit.jupiter.api.AfterEach;

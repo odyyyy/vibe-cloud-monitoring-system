@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import com.monitoring.api.exception.ApiExceptionHandler;
-import com.monitoring.apps.dto.AgentNodeResponse;
+import com.monitoring.apps.dto.response.AgentNodeResponse;
 import com.monitoring.apps.exception.ApplicationAccessDeniedException;
 import com.monitoring.apps.service.AgentService;
 import org.junit.jupiter.api.AfterEach;

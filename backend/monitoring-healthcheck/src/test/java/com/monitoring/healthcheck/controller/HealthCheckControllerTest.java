@@ -1,9 +1,9 @@
 package com.monitoring.healthcheck.controller;
 
 import com.monitoring.auth.organization.tenant.CurrentTenantService;
-import com.monitoring.healthcheck.dto.CreateHealthCheckRequest;
-import com.monitoring.healthcheck.dto.HealthCheckResponse;
-import com.monitoring.healthcheck.dto.HealthCheckResultResponse;
+import com.monitoring.healthcheck.dto.request.CreateHealthCheckRequest;
+import com.monitoring.healthcheck.dto.response.HealthCheckResponse;
+import com.monitoring.healthcheck.dto.response.HealthCheckResultResponse;
 import com.monitoring.healthcheck.entity.HealthCheckMethod;
 import com.monitoring.healthcheck.entity.HealthStatus;
 import com.monitoring.healthcheck.exception.HealthCheckAccessDeniedException;

@@ -1,8 +1,8 @@
 package com.monitoring.alerts.controller;
 
 import com.monitoring.auth.organization.tenant.CurrentTenantService;
-import com.monitoring.alerts.dto.AlertRuleResponse;
-import com.monitoring.alerts.dto.CreateAlertRuleRequest;
+import com.monitoring.alerts.dto.response.AlertRuleResponse;
+import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;

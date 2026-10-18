@@ -1,6 +1,6 @@
 package com.monitoring.api;
 
-import com.monitoring.api.dto.WorkspaceSummaryResponse;
+import com.monitoring.api.dto.response.WorkspaceSummaryResponse;
 import com.monitoring.api.service.WorkspaceSummaryService;
 import com.monitoring.collector.entity.LogEvent;
 import com.monitoring.collector.entity.LogLevel;

@@ -1,7 +1,7 @@
 package com.monitoring.collector.service;
 
-import com.monitoring.collector.dto.AggregatedMetricResponse;
-import com.monitoring.collector.dto.MetricsQueryRequest;
+import com.monitoring.collector.dto.response.AggregatedMetricResponse;
+import com.monitoring.collector.dto.request.MetricsQueryRequest;
 import com.monitoring.collector.repository.MetricBucketProjection;
 import com.monitoring.collector.repository.MetricSampleRepository;
 import com.monitoring.apps.service.ApplicationService;

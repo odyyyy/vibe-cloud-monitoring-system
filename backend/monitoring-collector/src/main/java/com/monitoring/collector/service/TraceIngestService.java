@@ -1,7 +1,7 @@
 package com.monitoring.collector.service;
 
-import com.monitoring.collector.dto.SpanPayload;
-import com.monitoring.collector.dto.TraceIngestRequest;
+import com.monitoring.collector.dto.request.SpanPayload;
+import com.monitoring.collector.dto.request.TraceIngestRequest;
 import com.monitoring.collector.entity.TraceSpan;
 import com.monitoring.collector.exception.InvalidTraceException;
 import com.monitoring.collector.repository.TraceSpanRepository;

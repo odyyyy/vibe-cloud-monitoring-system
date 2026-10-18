@@ -1,11 +1,11 @@
 package com.monitoring.alerts.service;
 
-import com.monitoring.alerts.dto.AlertIncidentResponse;
-import com.monitoring.alerts.dto.AlertRuleResponse;
-import com.monitoring.alerts.dto.CreateAlertRuleRequest;
-import com.monitoring.alerts.dto.CreateNotificationChannelRequest;
-import com.monitoring.alerts.dto.NotificationChannelResponse;
-import com.monitoring.alerts.dto.UpdateAlertRuleRequest;
+import com.monitoring.alerts.dto.response.AlertIncidentResponse;
+import com.monitoring.alerts.dto.response.AlertRuleResponse;
+import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
+import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
+import com.monitoring.alerts.dto.response.NotificationChannelResponse;
+import com.monitoring.alerts.dto.request.UpdateAlertRuleRequest;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertIncident;
 import com.monitoring.alerts.entity.AlertRule;
@@ -20,7 +20,7 @@ import com.monitoring.alerts.exception.InvalidWebhookUrlException;
 import com.monitoring.alerts.repository.AlertIncidentRepository;
 import com.monitoring.alerts.repository.AlertRuleRepository;
 import com.monitoring.alerts.repository.NotificationChannelRepository;
-import com.monitoring.healthcheck.dto.HealthCheckResultResponse;
+import com.monitoring.healthcheck.dto.response.HealthCheckResultResponse;
 import com.monitoring.healthcheck.entity.HealthStatus;
 import com.monitoring.healthcheck.service.HealthCheckService;
 import com.monitoring.healthcheck.service.SsrfGuard;

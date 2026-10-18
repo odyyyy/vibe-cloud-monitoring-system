@@ -1,7 +1,7 @@
 package com.monitoring.audit.service;
 
-import com.monitoring.audit.dto.AuditEventQuery;
-import com.monitoring.audit.dto.AuditEventResponse;
+import com.monitoring.audit.dto.request.AuditEventQuery;
+import com.monitoring.audit.dto.response.AuditEventResponse;
 import com.monitoring.common.dto.PageResponse;
 import com.monitoring.audit.entity.AuditEvent;
 import com.monitoring.audit.repository.AuditEventRepository;

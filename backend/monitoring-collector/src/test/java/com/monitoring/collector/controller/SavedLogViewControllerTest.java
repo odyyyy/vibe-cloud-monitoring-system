@@ -1,8 +1,8 @@
 package com.monitoring.collector.controller;
 
 import com.monitoring.auth.organization.tenant.CurrentTenantService;
-import com.monitoring.collector.dto.SavedLogViewQuery;
-import com.monitoring.collector.dto.SavedLogViewResponse;
+import com.monitoring.collector.dto.request.SavedLogViewQuery;
+import com.monitoring.collector.dto.response.SavedLogViewResponse;
 import com.monitoring.collector.entity.LogLevel;
 import com.monitoring.collector.exception.SavedLogViewAccessDeniedException;
 import com.monitoring.collector.exception.SavedLogViewLimitExceededException;

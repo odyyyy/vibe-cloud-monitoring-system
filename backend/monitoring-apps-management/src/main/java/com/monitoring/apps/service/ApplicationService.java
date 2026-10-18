@@ -1,7 +1,7 @@
 package com.monitoring.apps.service;
 
-import com.monitoring.apps.dto.ApplicationCreateRequest;
-import com.monitoring.apps.dto.ApplicationWithKeyResponse;
+import com.monitoring.apps.dto.request.ApplicationCreateRequest;
+import com.monitoring.apps.dto.response.ApplicationWithKeyResponse;
 import com.monitoring.apps.entity.Application;
 import com.monitoring.apps.exception.ApplicationAccessDeniedException;
 import com.monitoring.apps.exception.ApplicationNameConflictException;

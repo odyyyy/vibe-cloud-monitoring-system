@@ -1,9 +1,9 @@
 package com.monitoring.collector.controller;
 
 import com.monitoring.common.dto.PageResponse;
-import com.monitoring.collector.dto.TraceDetailResponse;
-import com.monitoring.collector.dto.TraceSummaryResponse;
-import com.monitoring.collector.dto.TracesQueryRequest;
+import com.monitoring.collector.dto.response.TraceDetailResponse;
+import com.monitoring.collector.dto.response.TraceSummaryResponse;
+import com.monitoring.collector.dto.request.TracesQueryRequest;
 import com.monitoring.collector.service.TraceQueryService;
 import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;

@@ -1,14 +1,14 @@
 package com.monitoring.auth.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.monitoring.auth.dto.AuthResponse;
-import com.monitoring.auth.dto.ForgotPasswordRequest;
-import com.monitoring.auth.dto.LoginRequest;
-import com.monitoring.auth.dto.MessageResponse;
-import com.monitoring.auth.dto.RegisterRequest;
-import com.monitoring.auth.dto.ResendVerificationRequest;
-import com.monitoring.auth.dto.ResetPasswordRequest;
-import com.monitoring.auth.dto.VerifyEmailRequest;
+import com.monitoring.auth.dto.response.AuthResponse;
+import com.monitoring.auth.dto.request.ForgotPasswordRequest;
+import com.monitoring.auth.dto.request.LoginRequest;
+import com.monitoring.auth.dto.response.MessageResponse;
+import com.monitoring.auth.dto.request.RegisterRequest;
+import com.monitoring.auth.dto.request.ResendVerificationRequest;
+import com.monitoring.auth.dto.request.ResetPasswordRequest;
+import com.monitoring.auth.dto.request.VerifyEmailRequest;
 import com.monitoring.auth.exception.EmailAlreadyUsedException;
 import com.monitoring.auth.exception.EmailNotVerifiedException;
 import com.monitoring.auth.exception.InvalidCredentialsException;

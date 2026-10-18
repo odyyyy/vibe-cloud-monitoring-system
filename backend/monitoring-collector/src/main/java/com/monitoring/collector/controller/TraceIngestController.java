@@ -1,6 +1,6 @@
 package com.monitoring.collector.controller;
 
-import com.monitoring.collector.dto.TraceIngestRequest;
+import com.monitoring.collector.dto.request.TraceIngestRequest;
 import com.monitoring.collector.service.TraceIngestService;
 import com.monitoring.apps.entity.Application;
 import jakarta.validation.Valid;

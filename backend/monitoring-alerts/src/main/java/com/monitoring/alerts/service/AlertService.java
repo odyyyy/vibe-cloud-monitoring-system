@@ -1,12 +1,12 @@
 package com.monitoring.alerts.service;
 
-import com.monitoring.alerts.dto.AlertIncidentResponse;
-import com.monitoring.alerts.dto.AlertRuleResponse;
-import com.monitoring.alerts.dto.CreateAlertRuleRequest;
-import com.monitoring.alerts.dto.CreateNotificationChannelRequest;
-import com.monitoring.alerts.dto.NotificationChannelResponse;
-import com.monitoring.alerts.dto.UpdateAlertRuleRequest;
-import com.monitoring.alerts.dto.UpdateNotificationChannelRequest;
+import com.monitoring.alerts.dto.response.AlertIncidentResponse;
+import com.monitoring.alerts.dto.response.AlertRuleResponse;
+import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
+import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
+import com.monitoring.alerts.dto.response.NotificationChannelResponse;
+import com.monitoring.alerts.dto.request.UpdateAlertRuleRequest;
+import com.monitoring.alerts.dto.request.UpdateNotificationChannelRequest;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertIncident;
 import com.monitoring.alerts.entity.AlertRule;

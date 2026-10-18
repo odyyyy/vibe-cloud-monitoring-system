@@ -1,6 +1,6 @@
 package com.monitoring.api;
 
-import com.monitoring.collector.dto.LogEventPayload;
+import com.monitoring.collector.dto.request.LogEventPayload;
 import com.monitoring.collector.repository.LogEventRepository;
 import com.monitoring.apps.entity.Application;
 import com.monitoring.apps.repository.ApplicationRepository;

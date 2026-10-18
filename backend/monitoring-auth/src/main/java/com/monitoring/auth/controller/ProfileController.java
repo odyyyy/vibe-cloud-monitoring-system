@@ -1,10 +1,10 @@
 package com.monitoring.auth.controller;
 
-import com.monitoring.auth.dto.MessageResponse;
-import com.monitoring.auth.dto.UpdateEmailRequest;
-import com.monitoring.auth.dto.UpdateUsernameRequest;
-import com.monitoring.auth.dto.UserProfileResponse;
-import com.monitoring.auth.dto.UsernameAvailabilityResponse;
+import com.monitoring.auth.dto.response.MessageResponse;
+import com.monitoring.auth.dto.request.UpdateEmailRequest;
+import com.monitoring.auth.dto.request.UpdateUsernameRequest;
+import com.monitoring.auth.dto.response.UserProfileResponse;
+import com.monitoring.auth.dto.response.UsernameAvailabilityResponse;
 import com.monitoring.auth.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

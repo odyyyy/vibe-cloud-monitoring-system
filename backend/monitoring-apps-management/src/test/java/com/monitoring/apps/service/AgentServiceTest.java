@@ -1,6 +1,6 @@
 package com.monitoring.apps.service;
 
-import com.monitoring.apps.dto.AgentNodeResponse;
+import com.monitoring.apps.dto.response.AgentNodeResponse;
 import com.monitoring.apps.entity.AgentNode;
 import com.monitoring.apps.entity.Application;
 import com.monitoring.apps.exception.ApplicationAccessDeniedException;

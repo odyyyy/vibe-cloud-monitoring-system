@@ -3,7 +3,7 @@ package com.monitoring.alerts.dto;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.IncidentStatus;
-import com.monitoring.alerts.service.AlertEvent;
+import com.monitoring.alerts.event.AlertEvent;
 
 import java.time.Instant;
 

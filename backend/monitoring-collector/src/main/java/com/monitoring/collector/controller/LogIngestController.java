@@ -1,6 +1,6 @@
 package com.monitoring.collector.controller;
 
-import com.monitoring.collector.dto.LogIngestRequest;
+import com.monitoring.collector.dto.request.LogIngestRequest;
 import com.monitoring.collector.service.LogIngestService;
 import com.monitoring.apps.entity.Application;
 import jakarta.validation.Valid;

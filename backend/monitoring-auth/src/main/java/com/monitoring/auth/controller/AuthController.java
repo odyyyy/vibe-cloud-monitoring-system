@@ -1,6 +1,7 @@
 package com.monitoring.auth.controller;
 
-import com.monitoring.auth.dto.*;
+import com.monitoring.auth.dto.request.*;
+import com.monitoring.auth.dto.response.*;
 import com.monitoring.auth.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

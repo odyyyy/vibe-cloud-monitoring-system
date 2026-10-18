@@ -3,7 +3,7 @@ package com.monitoring.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.monitoring.auth.entity.User;
 import com.monitoring.auth.jwt.JwtTokenProvider;
-import com.monitoring.auth.organization.dto.OrganizationResponse;
+import com.monitoring.auth.organization.dto.response.OrganizationResponse;
 import com.monitoring.auth.organization.repository.MembershipRepository;
 import com.monitoring.auth.organization.repository.OrganizationRepository;
 import com.monitoring.auth.organization.service.OrganizationService;

@@ -48,7 +48,7 @@ public class SavedLogView {
 
     /**
      * Canonical JSON of a validated
-     * {@link com.monitoring.collector.dto.SavedLogViewQuery}. Stored as text and never
+     * {@link com.monitoring.collector.dto.request.SavedLogViewQuery}. Stored as text and never
      * concatenated into queries or interpreted as an instruction.
      */
     @Column(name = "query_params", nullable = false, columnDefinition = "TEXT")

@@ -1,10 +1,10 @@
 package com.monitoring.auth.organization.controller;
 
-import com.monitoring.auth.organization.dto.CreateOrganizationRequest;
-import com.monitoring.auth.organization.dto.InviteMemberRequest;
-import com.monitoring.auth.organization.dto.MemberResponse;
-import com.monitoring.auth.organization.dto.OrganizationResponse;
-import com.monitoring.auth.organization.dto.UpdateMemberRoleRequest;
+import com.monitoring.auth.organization.dto.request.CreateOrganizationRequest;
+import com.monitoring.auth.organization.dto.request.InviteMemberRequest;
+import com.monitoring.auth.organization.dto.response.MemberResponse;
+import com.monitoring.auth.organization.dto.response.OrganizationResponse;
+import com.monitoring.auth.organization.dto.request.UpdateMemberRoleRequest;
 import com.monitoring.auth.organization.service.OrganizationService;
 import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;

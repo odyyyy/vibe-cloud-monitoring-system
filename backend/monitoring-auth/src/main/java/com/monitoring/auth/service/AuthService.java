@@ -1,7 +1,8 @@
 package com.monitoring.auth.service;
 
 import com.monitoring.auth.config.AuthProperties;
-import com.monitoring.auth.dto.*;
+import com.monitoring.auth.dto.request.*;
+import com.monitoring.auth.dto.response.*;
 import com.monitoring.auth.entity.AuthToken;
 import com.monitoring.auth.entity.AuthTokenType;
 import com.monitoring.auth.entity.User;

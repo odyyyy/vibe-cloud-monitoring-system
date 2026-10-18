@@ -1,7 +1,7 @@
 package com.monitoring.collector.service;
 
-import com.monitoring.collector.dto.LogEventPayload;
-import com.monitoring.collector.dto.LogIngestRequest;
+import com.monitoring.collector.dto.request.LogEventPayload;
+import com.monitoring.collector.dto.request.LogIngestRequest;
 import com.monitoring.collector.entity.LogEvent;
 import com.monitoring.collector.repository.LogEventRepository;
 import com.monitoring.apps.entity.Application;

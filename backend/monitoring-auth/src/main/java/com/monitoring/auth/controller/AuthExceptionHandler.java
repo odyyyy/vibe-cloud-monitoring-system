@@ -1,6 +1,6 @@
 package com.monitoring.auth.controller;
 
-import com.monitoring.auth.dto.MessageResponse;
+import com.monitoring.auth.dto.response.MessageResponse;
 import com.monitoring.auth.exception.EmailAlreadyUsedException;
 import com.monitoring.auth.exception.EmailNotVerifiedException;
 import com.monitoring.auth.exception.InvalidCredentialsException;

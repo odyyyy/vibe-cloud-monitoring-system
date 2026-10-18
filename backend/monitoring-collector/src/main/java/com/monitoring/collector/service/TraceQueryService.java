@@ -1,10 +1,10 @@
 package com.monitoring.collector.service;
 
 import com.monitoring.common.dto.PageResponse;
-import com.monitoring.collector.dto.TraceDetailResponse;
-import com.monitoring.collector.dto.TraceSpanResponse;
-import com.monitoring.collector.dto.TraceSummaryResponse;
-import com.monitoring.collector.dto.TracesQueryRequest;
+import com.monitoring.collector.dto.response.TraceDetailResponse;
+import com.monitoring.collector.dto.response.TraceSpanResponse;
+import com.monitoring.collector.dto.response.TraceSummaryResponse;
+import com.monitoring.collector.dto.request.TracesQueryRequest;
 import com.monitoring.collector.entity.SpanStatus;
 import com.monitoring.collector.entity.TraceSpan;
 import com.monitoring.collector.exception.TraceNotFoundException;

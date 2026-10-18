@@ -1,5 +1,6 @@
 package com.monitoring.alerts.service;
 
+import com.monitoring.alerts.event.AlertEvent;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertIncident;
 import com.monitoring.alerts.entity.AlertRule;
@@ -8,7 +9,7 @@ import com.monitoring.alerts.entity.IncidentStatus;
 import com.monitoring.alerts.repository.AlertIncidentRepository;
 import com.monitoring.alerts.repository.AlertRuleRepository;
 import com.monitoring.collector.service.MetricQueryService;
-import com.monitoring.healthcheck.dto.HealthCheckResultResponse;
+import com.monitoring.healthcheck.dto.response.HealthCheckResultResponse;
 import com.monitoring.healthcheck.entity.HealthStatus;
 import com.monitoring.healthcheck.exception.HealthCheckAccessDeniedException;
 import com.monitoring.healthcheck.exception.HealthCheckNotFoundException;

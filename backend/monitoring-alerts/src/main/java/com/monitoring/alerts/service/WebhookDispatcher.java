@@ -1,5 +1,6 @@
 package com.monitoring.alerts.service;
 
+import com.monitoring.alerts.event.AlertEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.monitoring.alerts.dto.AlertNotificationPayload;

@@ -1,11 +1,11 @@
 package com.monitoring.auth.service;
 
 import com.monitoring.auth.config.AuthProperties;
-import com.monitoring.auth.dto.AuthResponse;
-import com.monitoring.auth.dto.LoginRequest;
-import com.monitoring.auth.dto.MessageResponse;
-import com.monitoring.auth.dto.RegisterRequest;
-import com.monitoring.auth.dto.UserProfileResponse;
+import com.monitoring.auth.dto.response.AuthResponse;
+import com.monitoring.auth.dto.request.LoginRequest;
+import com.monitoring.auth.dto.response.MessageResponse;
+import com.monitoring.auth.dto.request.RegisterRequest;
+import com.monitoring.auth.dto.response.UserProfileResponse;
 import com.monitoring.auth.entity.AuthToken;
 import com.monitoring.auth.entity.AuthTokenType;
 import com.monitoring.auth.entity.User;

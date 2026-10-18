@@ -1,11 +1,11 @@
 package com.monitoring.dashboards.controller;
 
-import com.monitoring.dashboards.dto.CreateDashboardRequest;
-import com.monitoring.dashboards.dto.CreateWidgetRequest;
-import com.monitoring.dashboards.dto.DashboardResponse;
-import com.monitoring.dashboards.dto.UpdateDashboardRequest;
-import com.monitoring.dashboards.dto.UpdateWidgetRequest;
-import com.monitoring.dashboards.dto.WidgetResponse;
+import com.monitoring.dashboards.dto.request.CreateDashboardRequest;
+import com.monitoring.dashboards.dto.request.CreateWidgetRequest;
+import com.monitoring.dashboards.dto.response.DashboardResponse;
+import com.monitoring.dashboards.dto.request.UpdateDashboardRequest;
+import com.monitoring.dashboards.dto.request.UpdateWidgetRequest;
+import com.monitoring.dashboards.dto.response.WidgetResponse;
 import com.monitoring.dashboards.service.DashboardService;
 import com.monitoring.audit.annotation.AuditLog;
 import com.monitoring.auth.organization.entity.MembershipRole;

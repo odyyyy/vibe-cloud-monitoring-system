@@ -1,8 +1,8 @@
 package com.monitoring.alerts.controller;
 
-import com.monitoring.alerts.dto.CreateNotificationChannelRequest;
-import com.monitoring.alerts.dto.NotificationChannelResponse;
-import com.monitoring.alerts.dto.UpdateNotificationChannelRequest;
+import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
+import com.monitoring.alerts.dto.response.NotificationChannelResponse;
+import com.monitoring.alerts.dto.request.UpdateNotificationChannelRequest;
 import com.monitoring.alerts.service.AlertService;
 import com.monitoring.auth.organization.entity.MembershipRole;
 import com.monitoring.auth.organization.security.RequireRole;

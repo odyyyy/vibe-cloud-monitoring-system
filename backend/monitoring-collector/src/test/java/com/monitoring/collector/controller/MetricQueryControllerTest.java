@@ -1,7 +1,7 @@
 package com.monitoring.collector.controller;
 
-import com.monitoring.collector.dto.AggregatedMetricResponse;
-import com.monitoring.collector.dto.MetricsQueryRequest;
+import com.monitoring.collector.dto.response.AggregatedMetricResponse;
+import com.monitoring.collector.dto.request.MetricsQueryRequest;
 import com.monitoring.collector.service.MetricQueryService;
 import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import com.monitoring.apps.exception.ApplicationAccessDeniedException;

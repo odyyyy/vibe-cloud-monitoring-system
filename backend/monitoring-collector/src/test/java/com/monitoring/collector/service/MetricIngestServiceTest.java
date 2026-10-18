@@ -1,7 +1,7 @@
 package com.monitoring.collector.service;
 
-import com.monitoring.collector.dto.MetricIngestRequest;
-import com.monitoring.collector.dto.MetricPoint;
+import com.monitoring.collector.dto.request.MetricIngestRequest;
+import com.monitoring.collector.dto.request.MetricPoint;
 import com.monitoring.collector.entity.MetricSample;
 import com.monitoring.collector.repository.MetricSampleRepository;
 import com.monitoring.apps.entity.Application;
