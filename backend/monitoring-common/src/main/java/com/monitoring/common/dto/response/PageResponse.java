@@ -1,4 +1,4 @@
-package com.monitoring.common.dto;
+package com.monitoring.common.dto.response;
 
 import java.util.List;
 import java.util.function.Function;

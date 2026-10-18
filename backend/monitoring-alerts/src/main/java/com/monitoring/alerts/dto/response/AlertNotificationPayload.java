@@ -1,4 +1,4 @@
-package com.monitoring.alerts.dto;
+package com.monitoring.alerts.dto.response;
 
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertRuleType;

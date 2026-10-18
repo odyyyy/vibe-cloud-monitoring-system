@@ -2,7 +2,7 @@ package com.monitoring.api;
 
 import com.monitoring.collector.dto.response.LogEventResponse;
 import com.monitoring.collector.dto.request.LogsQueryRequest;
-import com.monitoring.common.dto.PageResponse;
+import com.monitoring.common.dto.response.PageResponse;
 import com.monitoring.collector.entity.LogEvent;
 import com.monitoring.collector.entity.LogLevel;
 import com.monitoring.collector.repository.LogEventRepository;

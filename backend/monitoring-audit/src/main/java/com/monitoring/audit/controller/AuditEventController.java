@@ -2,7 +2,7 @@ package com.monitoring.audit.controller;
 
 import com.monitoring.audit.dto.request.AuditEventQuery;
 import com.monitoring.audit.dto.response.AuditEventResponse;
-import com.monitoring.common.dto.PageResponse;
+import com.monitoring.common.dto.response.PageResponse;
 import com.monitoring.audit.service.AuditEventService;
 import com.monitoring.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;

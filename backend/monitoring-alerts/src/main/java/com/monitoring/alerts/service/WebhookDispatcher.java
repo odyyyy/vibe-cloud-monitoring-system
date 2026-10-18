@@ -3,7 +3,7 @@ package com.monitoring.alerts.service;
 import com.monitoring.alerts.event.AlertEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.monitoring.alerts.dto.AlertNotificationPayload;
+import com.monitoring.alerts.dto.response.AlertNotificationPayload;
 import com.monitoring.alerts.entity.NotificationChannel;
 import com.monitoring.alerts.repository.NotificationChannelRepository;
 import com.monitoring.healthcheck.service.SsrfGuard;

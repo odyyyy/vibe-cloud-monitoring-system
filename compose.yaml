@@ -34,6 +34,10 @@ services:
       watch:
         - path: ./backend/pom.xml
           action: rebuild
+        - path: ./backend/monitoring-common/src
+          action: rebuild
+        - path: ./backend/monitoring-common/pom.xml
+          action: rebuild
         - path: ./backend/monitoring-api/src
           action: rebuild
         - path: ./backend/monitoring-api/pom.xml

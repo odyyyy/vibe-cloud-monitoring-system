@@ -1,6 +1,6 @@
 package com.monitoring.collector.controller;
 
-import com.monitoring.common.dto.PageResponse;
+import com.monitoring.common.dto.response.PageResponse;
 import com.monitoring.collector.dto.response.TraceDetailResponse;
 import com.monitoring.collector.dto.response.TraceSummaryResponse;
 import com.monitoring.collector.dto.request.TracesQueryRequest;

@@ -9,6 +9,7 @@ WORKDIR /app
 COPY pom.xml .
 
 # Copy the module pom.xml files (paths are relative to the context: ./backend)
+COPY monitoring-common/pom.xml ./monitoring-common/pom.xml
 COPY monitoring-api/pom.xml ./monitoring-api/pom.xml
 COPY monitoring-auth/pom.xml ./monitoring-auth/pom.xml
 COPY monitoring-apps-management/pom.xml ./monitoring-apps-management/pom.xml
