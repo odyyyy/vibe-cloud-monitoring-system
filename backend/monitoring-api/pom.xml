@@ -14,6 +14,12 @@
     <artifactId>monitoring-api</artifactId>
 
     <dependencies>
+        <!-- Shared PageResponse / ApiError DTOs. -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-common</artifactId>
+        </dependency>
+
         <!-- Application management module -->
         <dependency>
             <groupId>com.monitoring</groupId>

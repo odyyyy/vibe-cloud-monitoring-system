@@ -16,6 +16,12 @@
     <!-- groupId and version are inherited from the parent -->
 
     <dependencies>
+        <!-- Shared PageResponse / ApiError DTOs. -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-common</artifactId>
+        </dependency>
+
         <!-- Resolves the acting user's display name (read-only viewer). -->
         <dependency>
             <groupId>com.monitoring</groupId>

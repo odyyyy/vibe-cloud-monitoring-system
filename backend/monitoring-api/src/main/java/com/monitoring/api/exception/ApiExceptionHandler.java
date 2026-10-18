@@ -1,5 +1,6 @@
 package com.monitoring.api.exception;
 
+import com.monitoring.common.error.ApiError;
 import com.monitoring.auth.organization.exception.InviteTargetNotFoundException;
 import com.monitoring.auth.organization.exception.LastOwnerException;
 import com.monitoring.auth.organization.exception.MemberAlreadyExistsException;

@@ -15,6 +15,12 @@
     <artifactId>monitoring-collector</artifactId>
 
     <dependencies>
+        <!-- Shared PageResponse / ApiError DTOs. -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-common</artifactId>
+        </dependency>
+
         <!-- Applications/API keys: the agent auth filter looks up an Application by key -->
         <dependency>
             <groupId>com.monitoring</groupId>

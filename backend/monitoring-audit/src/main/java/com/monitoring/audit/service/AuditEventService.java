@@ -2,7 +2,7 @@ package com.monitoring.audit.service;
 
 import com.monitoring.audit.dto.AuditEventQuery;
 import com.monitoring.audit.dto.AuditEventResponse;
-import com.monitoring.audit.dto.PageResponse;
+import com.monitoring.common.dto.PageResponse;
 import com.monitoring.audit.entity.AuditEvent;
 import com.monitoring.audit.repository.AuditEventRepository;
 import com.monitoring.auth.entity.User;

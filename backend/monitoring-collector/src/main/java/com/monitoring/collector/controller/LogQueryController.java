@@ -2,7 +2,7 @@ package com.monitoring.collector.controller;
 
 import com.monitoring.collector.dto.LogEventResponse;
 import com.monitoring.collector.dto.LogsQueryRequest;
-import com.monitoring.collector.dto.PageResponse;
+import com.monitoring.common.dto.PageResponse;
 import com.monitoring.collector.service.LogQueryService;
 import com.monitoring.auth.organization.tenant.CurrentTenantService;
 import jakarta.validation.Valid;

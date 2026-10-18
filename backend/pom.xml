@@ -17,6 +17,7 @@
     <packaging>pom</packaging>
 
     <modules>
+        <module>monitoring-common</module>
         <module>monitoring-auth</module>
         <module>monitoring-apps-management</module>
         <module>monitoring-collector</module>
@@ -36,6 +37,11 @@
     <dependencyManagement>
         <dependencies>
             <!-- Internal modules -->
+            <dependency>
+                <groupId>com.monitoring</groupId>
+                <artifactId>monitoring-common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.monitoring</groupId>
                 <artifactId>monitoring-auth</artifactId>

@@ -1,7 +1,8 @@
-package com.monitoring.collector.dto;
+package com.monitoring.common.dto;
 
 import java.util.List;
 import java.util.function.Function;
+import org.springframework.data.domain.Page;
 
 /**
  * Stable pagination envelope for list endpoints.
@@ -18,7 +19,7 @@ public record PageResponse<T>(
         int size
 ) {
 
-    public static <E, T> PageResponse<T> of(org.springframework.data.domain.Page<E> page, Function<E, T> mapper) {
+    public static <E, T> PageResponse<T> of(Page<E> page, Function<E, T> mapper) {
         return new PageResponse<>(
                 page.getContent().stream().map(mapper).toList(),
                 page.getTotalElements(),
