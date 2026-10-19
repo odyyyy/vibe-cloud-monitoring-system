@@ -1,5 +1,6 @@
 package com.monitoring.api;
 
+import com.monitoring.dashboards.dto.DashboardVariable;
 import com.monitoring.dashboards.dto.request.CreateDashboardRequest;
 import com.monitoring.dashboards.dto.request.CreateWidgetRequest;
 import com.monitoring.dashboards.dto.response.DashboardResponse;
@@ -8,6 +9,7 @@ import com.monitoring.dashboards.dto.request.UpdateWidgetRequest;
 import com.monitoring.dashboards.dto.response.WidgetResponse;
 import com.monitoring.dashboards.entity.WidgetType;
 import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
+import com.monitoring.dashboards.exception.InvalidDashboardVariableException;
 import com.monitoring.dashboards.exception.InvalidWidgetConfigException;
 import com.monitoring.dashboards.exception.WidgetLimitExceededException;
 import com.monitoring.dashboards.repository.DashboardRepository;
@@ -183,5 +185,96 @@ class DashboardsIntegrationTest {
         dashboardService.deleteDashboard(OWNER_ID, dashboard.getId());
 
         assertEquals(0, widgetRepository.count());
+    }
+
+    @Test
+    void variablesArePersistedAndReturned() {
+        DashboardResponse dashboard = dashboardService.createDashboard(
+                OWNER_ID, CreateDashboardRequest.builder().name("Prod").build());
+
+        DashboardResponse updated = dashboardService.updateDashboard(OWNER_ID, dashboard.getId(),
+                UpdateDashboardRequest.builder()
+                        .name("Prod")
+                        .variables(List.of(variable("env", "custom", List.of("prod", "staging"), "prod")))
+                        .build());
+
+        assertEquals(1, updated.getVariables().size());
+        assertEquals("env", updated.getVariables().get(0).getName());
+        assertEquals(List.of("prod", "staging"), updated.getVariables().get(0).getOptions());
+
+        DashboardResponse fetched = dashboardService.getDashboard(OWNER_ID, dashboard.getId());
+        assertEquals(1, fetched.getVariables().size());
+        assertEquals("prod", fetched.getVariables().get(0).getDefaultValue());
+    }
+
+    @Test
+    void renameWithoutVariablesKeepsDefinitions() {
+        DashboardResponse dashboard = dashboardService.createDashboard(
+                OWNER_ID, CreateDashboardRequest.builder().name("Prod").build());
+        dashboardService.updateDashboard(OWNER_ID, dashboard.getId(),
+                UpdateDashboardRequest.builder()
+                        .name("Prod")
+                        .variables(List.of(variable("env", "custom", List.of("prod"), "prod")))
+                        .build());
+
+        DashboardResponse renamed = dashboardService.updateDashboard(OWNER_ID, dashboard.getId(),
+                UpdateDashboardRequest.builder().name("Staging").build());
+
+        assertEquals("Staging", renamed.getName());
+        assertEquals(1, renamed.getVariables().size());
+        assertEquals("env", renamed.getVariables().get(0).getName());
+    }
+
+    @Test
+    void emptyVariableListClearsDefinitions() {
+        DashboardResponse dashboard = dashboardService.createDashboard(
+                OWNER_ID, CreateDashboardRequest.builder().name("Prod").build());
+        dashboardService.updateDashboard(OWNER_ID, dashboard.getId(),
+                UpdateDashboardRequest.builder()
+                        .name("Prod")
+                        .variables(List.of(variable("env", "custom", List.of("prod"), "prod")))
+                        .build());
+
+        DashboardResponse cleared = dashboardService.updateDashboard(OWNER_ID, dashboard.getId(),
+                UpdateDashboardRequest.builder().name("Prod").variables(List.of()).build());
+
+        assertTrue(cleared.getVariables().isEmpty());
+    }
+
+    @Test
+    void duplicateVariableNamesAreRejected() {
+        DashboardResponse dashboard = dashboardService.createDashboard(
+                OWNER_ID, CreateDashboardRequest.builder().name("Prod").build());
+        UpdateDashboardRequest request = UpdateDashboardRequest.builder()
+                .name("Prod")
+                .variables(List.of(
+                        variable("env", "custom", List.of("prod"), "prod"),
+                        variable("env", "custom", List.of("staging"), "staging")))
+                .build();
+
+        assertThrows(InvalidDashboardVariableException.class,
+                () -> dashboardService.updateDashboard(OWNER_ID, dashboard.getId(), request));
+    }
+
+    @Test
+    void defaultValueOutsideOptionsIsRejected() {
+        DashboardResponse dashboard = dashboardService.createDashboard(
+                OWNER_ID, CreateDashboardRequest.builder().name("Prod").build());
+        UpdateDashboardRequest request = UpdateDashboardRequest.builder()
+                .name("Prod")
+                .variables(List.of(variable("env", "custom", List.of("prod"), "staging")))
+                .build();
+
+        assertThrows(InvalidDashboardVariableException.class,
+                () -> dashboardService.updateDashboard(OWNER_ID, dashboard.getId(), request));
+    }
+
+    private DashboardVariable variable(String name, String type, List<String> options, String defaultValue) {
+        return DashboardVariable.builder()
+                .name(name)
+                .type(type)
+                .options(options)
+                .defaultValue(defaultValue)
+                .build();
     }
 }

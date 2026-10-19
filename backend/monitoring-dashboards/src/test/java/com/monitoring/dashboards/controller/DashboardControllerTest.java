@@ -1,7 +1,9 @@
 package com.monitoring.dashboards.controller;
 
 import com.monitoring.organization.tenant.CurrentTenantService;
+import com.monitoring.dashboards.dto.DashboardVariable;
 import com.monitoring.dashboards.dto.request.CreateDashboardRequest;
+import com.monitoring.dashboards.dto.request.UpdateDashboardRequest;
 import com.monitoring.dashboards.dto.response.DashboardResponse;
 import com.monitoring.dashboards.dto.request.UpdateWidgetRequest;
 import com.monitoring.dashboards.dto.response.WidgetResponse;
@@ -121,6 +123,63 @@ class DashboardControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors.name").exists());
         verify(dashboardService, Mockito.never()).createDashboard(any(), any());
+    }
+
+    @Test
+    void updateDashboard_returnsVariableDefinitions() throws Exception {
+        DashboardResponse withVariables = DashboardResponse.builder()
+                .id(5L)
+                .name("Prod")
+                .organizationId(USER_ID)
+                .createdAt(Instant.parse("2026-10-09T10:00:00Z"))
+                .variables(List.of(DashboardVariable.builder()
+                        .name("env")
+                        .type("custom")
+                        .options(List.of("prod", "staging"))
+                        .defaultValue("prod")
+                        .build()))
+                .widgets(List.of())
+                .build();
+        when(dashboardService.updateDashboard(eq(USER_ID), eq(5L), any(UpdateDashboardRequest.class)))
+                .thenReturn(withVariables);
+
+        mockMvc.perform(put("/api/v1/dashboards/5")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Prod\",\"variables\":[{\"name\":\"env\",\"type\":\"custom\","
+                                + "\"options\":[\"prod\",\"staging\"],\"defaultValue\":\"prod\"}]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.variables[0].name").value("env"))
+                .andExpect(jsonPath("$.variables[0].options[1]").value("staging"));
+    }
+
+    @Test
+    void updateDashboard_invalidVariableName_returnsBadRequest() throws Exception {
+        mockMvc.perform(put("/api/v1/dashboards/5")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Prod\",\"variables\":[{\"name\":\"env name\",\"type\":\"custom\","
+                                + "\"options\":[\"prod\"],\"defaultValue\":\"prod\"}]}"))
+                .andExpect(status().isBadRequest());
+        verify(dashboardService, Mockito.never()).updateDashboard(any(), any(), any());
+    }
+
+    @Test
+    void updateDashboard_unknownVariableType_returnsBadRequest() throws Exception {
+        mockMvc.perform(put("/api/v1/dashboards/5")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Prod\",\"variables\":[{\"name\":\"env\",\"type\":\"sql\","
+                                + "\"options\":[\"prod\"],\"defaultValue\":\"prod\"}]}"))
+                .andExpect(status().isBadRequest());
+        verify(dashboardService, Mockito.never()).updateDashboard(any(), any(), any());
+    }
+
+    @Test
+    void updateDashboard_variableWithoutOptions_returnsBadRequest() throws Exception {
+        mockMvc.perform(put("/api/v1/dashboards/5")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Prod\",\"variables\":[{\"name\":\"env\",\"type\":\"custom\","
+                                + "\"options\":[],\"defaultValue\":\"\"}]}"))
+                .andExpect(status().isBadRequest());
+        verify(dashboardService, Mockito.never()).updateDashboard(any(), any(), any());
     }
 
     @Test

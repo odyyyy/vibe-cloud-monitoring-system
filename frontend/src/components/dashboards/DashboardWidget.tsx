@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import type { Widget, WidgetType } from '../../api/dashboards'
+import { useDashboardVariableValues } from '../../features/dashboards/DashboardVariablesContext'
 import { parseWidgetConfig } from '../../features/dashboards/schemas'
+import { interpolateWidgetConfig } from '../../features/dashboards/variables'
 import { metricColor } from '../../features/metrics/catalog'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
@@ -25,18 +27,24 @@ interface DashboardWidgetProps {
 }
 
 export function DashboardWidget({ widget, showActions, refetchInterval, onEdit, onDelete }: DashboardWidgetProps) {
+  const variableValues = useDashboardVariableValues()
   const parsed = useMemo(() => parseWidgetConfig(widget.type, widget.config), [widget.type, widget.config])
+  // Resolve `${var}` placeholders before the widget runs its query; without a variables
+  // provider (e.g. the overview page) the values map is empty and the config passes through.
+  const resolved = useMemo(
+    () => (parsed.success ? interpolateWidgetConfig(parsed.data, variableValues) : null),
+    [parsed, variableValues],
+  )
 
-  const title = parsed.success
-    ? parsed.data.type === 'METRIC_CHART'
-      ? parsed.data.config.metricName
-      : parsed.data.type === 'LOG_TABLE'
+  const title = resolved
+    ? resolved.type === 'METRIC_CHART'
+      ? resolved.config.metricName
+      : resolved.type === 'LOG_TABLE'
         ? 'Logs'
         : 'Status'
     : TYPE_LABELS[widget.type]
 
-  const accent =
-    parsed.success && parsed.data.type === 'METRIC_CHART' ? metricColor(parsed.data.config.metricName) : null
+  const accent = resolved && resolved.type === 'METRIC_CHART' ? metricColor(resolved.config.metricName) : null
 
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-panel/60">
@@ -86,12 +94,12 @@ export function DashboardWidget({ widget, showActions, refetchInterval, onEdit, 
             <div role="alert" className="flex h-full items-center justify-center rounded-xl border border-red-500/20 bg-red-500/5 p-4">
               <p className="text-center text-sm text-red-300">{parsed.error}</p>
             </div>
-          ) : parsed.data.type === 'METRIC_CHART' ? (
-            <MetricChartWidget widgetId={widget.id} config={parsed.data.config} refetchInterval={refetchInterval} />
-          ) : parsed.data.type === 'LOG_TABLE' ? (
-            <LogTableWidget widgetId={widget.id} config={parsed.data.config} refetchInterval={refetchInterval} />
+          ) : resolved === null ? null : resolved.type === 'METRIC_CHART' ? (
+            <MetricChartWidget widgetId={widget.id} config={resolved.config} refetchInterval={refetchInterval} />
+          ) : resolved.type === 'LOG_TABLE' ? (
+            <LogTableWidget widgetId={widget.id} config={resolved.config} refetchInterval={refetchInterval} />
           ) : (
-            <StatusWidget applicationId={parsed.data.config.applicationId} />
+            <StatusWidget applicationId={resolved.config.applicationId} />
           )}
         </WidgetErrorBoundary>
       </div>

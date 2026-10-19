@@ -14,6 +14,7 @@ import com.monitoring.collector.exception.InvalidTraceException;
 import com.monitoring.collector.exception.TraceNotFoundException;
 import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
 import com.monitoring.dashboards.exception.DashboardNotFoundException;
+import com.monitoring.dashboards.exception.InvalidDashboardVariableException;
 import com.monitoring.dashboards.exception.InvalidWidgetConfigException;
 import com.monitoring.dashboards.exception.WidgetLimitExceededException;
 import com.monitoring.dashboards.exception.WidgetNotFoundException;
@@ -88,6 +89,12 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(InvalidWidgetConfigException.class)
     public ResponseEntity<ApiError> handleInvalidWidgetConfig(InvalidWidgetConfigException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidDashboardVariableException.class)
+    public ResponseEntity<ApiError> handleInvalidDashboardVariable(InvalidDashboardVariableException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
     }

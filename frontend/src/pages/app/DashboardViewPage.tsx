@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus } from 'lucide-react'
+import { ArrowLeft, Plus, Settings2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Layout } from 'react-grid-layout'
 import { ApiError } from '../../api/client'
@@ -15,6 +15,8 @@ import {
   useUpdateWidgetMutation,
 } from '../../api/dashboards'
 import { DashboardGrid, type DashboardGridItem } from '../../components/dashboards/DashboardGrid'
+import { DashboardVariablesBar } from '../../components/dashboards/DashboardVariablesBar'
+import { DashboardVariablesDialog } from '../../components/dashboards/DashboardVariablesDialog'
 import { DashboardWidget } from '../../components/dashboards/DashboardWidget'
 import { WidgetFormDialog, type WidgetFormSubmit } from '../../components/dashboards/WidgetFormDialog'
 import {
@@ -31,12 +33,13 @@ import { Button } from '../../components/ui/button'
 import { Label } from '../../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import { Skeleton } from '../../components/ui/skeleton'
+import { DashboardVariablesProvider } from '../../features/dashboards/DashboardVariablesContext'
+import { widgetToLayout, resolveGridLayout } from '../../features/dashboards/layout'
 import {
   DEFAULT_POLLING_INTERVAL_MS,
   POLLING_OPTIONS,
   sanitizePollingInterval,
 } from '../../features/dashboards/polling'
-import { widgetToLayout, resolveGridLayout } from '../../features/dashboards/layout'
 import {
   DEFAULT_WIDGET_HEIGHT,
   DEFAULT_WIDGET_WIDTH,
@@ -62,6 +65,7 @@ export default function DashboardViewPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Widget | null>(null)
+  const [variablesOpen, setVariablesOpen] = useState(false)
 
   const serverLayout = useMemo<Layout[]>(() => (dashboard?.widgets ?? []).map(widgetToLayout), [dashboard])
   const serverSignature = useMemo(() => JSON.stringify(serverLayout), [serverLayout])
@@ -210,6 +214,7 @@ export default function DashboardViewPage() {
   }
 
   const atWidgetLimit = dashboard.widgets.length >= MAX_WIDGETS_PER_DASHBOARD
+  const variables = dashboard.variables ?? []
   const items: DashboardGridItem[] = dashboard.widgets.map((widget) => ({
     id: widget.id,
     node: (
@@ -269,45 +274,63 @@ export default function DashboardViewPage() {
           </div>
 
           {canManage ? (
-            <Button type="button" variant="secondary" onClick={handleAddClick} disabled={atWidgetLimit}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Add widget
-            </Button>
+            <>
+              <Button type="button" variant="secondary" onClick={() => setVariablesOpen(true)}>
+                <Settings2 className="h-4 w-4" aria-hidden="true" />
+                Variables
+              </Button>
+              <Button type="button" variant="secondary" onClick={handleAddClick} disabled={atWidgetLimit}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Add widget
+              </Button>
+            </>
           ) : null}
         </div>
       </header>
 
-      {atWidgetLimit ? (
-        <p className="text-xs text-slate-500">
-          This dashboard has reached the limit of {MAX_WIDGETS_PER_DASHBOARD} widgets.
-        </p>
-      ) : null}
+      <DashboardVariablesProvider variables={variables}>
+        {variables.length > 0 ? <DashboardVariablesBar variables={variables} /> : null}
 
-      {dashboard.widgets.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 bg-panel/40 p-10 text-center">
-          <p className="text-sm text-slate-300">This dashboard has no widgets yet.</p>
-          {canManage ? (
-            <Button type="button" variant="secondary" className="mt-4" onClick={handleAddClick}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Add your first widget
-            </Button>
-          ) : null}
-        </div>
-      ) : (
-        <DashboardGrid
-          items={items}
-          layout={gridLayout}
-          interactive={canManage}
-          onLayoutChange={handleLayoutChange}
-          onLayoutCommit={(next) => void handleLayoutCommit(next)}
-        />
-      )}
+        {atWidgetLimit ? (
+          <p className="text-xs text-slate-500">
+            This dashboard has reached the limit of {MAX_WIDGETS_PER_DASHBOARD} widgets.
+          </p>
+        ) : null}
+
+        {dashboard.widgets.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-panel/40 p-10 text-center">
+            <p className="text-sm text-slate-300">This dashboard has no widgets yet.</p>
+            {canManage ? (
+              <Button type="button" variant="secondary" className="mt-4" onClick={handleAddClick}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Add your first widget
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          <DashboardGrid
+            items={items}
+            layout={gridLayout}
+            interactive={canManage}
+            onLayoutChange={handleLayoutChange}
+            onLayoutCommit={(next) => void handleLayoutCommit(next)}
+          />
+        )}
+      </DashboardVariablesProvider>
 
       <WidgetFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
         widget={editingWidget}
         onSubmit={handleSubmitWidget}
+      />
+
+      <DashboardVariablesDialog
+        open={variablesOpen}
+        onOpenChange={setVariablesOpen}
+        dashboardId={dashboard.id}
+        dashboardName={dashboard.name}
+        variables={variables}
       />
 
       <AlertDialog

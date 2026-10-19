@@ -1,8 +1,10 @@
 package com.monitoring.dashboards.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.monitoring.dashboards.dto.DashboardVariable;
 import com.monitoring.dashboards.dto.request.CreateDashboardRequest;
 import com.monitoring.dashboards.dto.request.CreateWidgetRequest;
 import com.monitoring.dashboards.dto.response.DashboardResponse;
@@ -13,16 +15,21 @@ import com.monitoring.dashboards.entity.Dashboard;
 import com.monitoring.dashboards.entity.Widget;
 import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
 import com.monitoring.dashboards.exception.DashboardNotFoundException;
+import com.monitoring.dashboards.exception.InvalidDashboardVariableException;
 import com.monitoring.dashboards.exception.InvalidWidgetConfigException;
 import com.monitoring.dashboards.exception.WidgetLimitExceededException;
 import com.monitoring.dashboards.exception.WidgetNotFoundException;
 import com.monitoring.dashboards.repository.DashboardRepository;
 import com.monitoring.dashboards.repository.WidgetRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Application service for dashboards and their widgets.
@@ -31,14 +38,20 @@ import java.util.List;
  * but belongs to another user raises {@link DashboardAccessDeniedException} (HTTP 403), while
  * a missing one raises {@link DashboardNotFoundException} (HTTP 404).
  *
- * <p>Widget config is treated as an opaque JSON document: it is checked for being a valid
- * JSON object and never interpreted or executed.
+ * <p>Widget config and template variable definitions are treated as opaque JSON documents: they
+ * are checked for being valid JSON and are never interpreted or executed.
  */
 @Service
 @RequiredArgsConstructor
 public class DashboardService {
 
+    private static final Logger log = LoggerFactory.getLogger(DashboardService.class);
+
     public static final int MAX_WIDGETS_PER_DASHBOARD = 20;
+    public static final int MAX_VARIABLES_PER_DASHBOARD = 20;
+
+    private static final TypeReference<List<DashboardVariable>> VARIABLE_LIST_TYPE = new TypeReference<>() {
+    };
 
     private final DashboardRepository dashboardRepository;
     private final WidgetRepository widgetRepository;
@@ -47,13 +60,13 @@ public class DashboardService {
     @Transactional(readOnly = true)
     public List<DashboardResponse> listDashboards(Long organizationId) {
         return dashboardRepository.findAllWithWidgetsByOrganizationId(organizationId).stream()
-                .map(DashboardResponse::fromEntity)
+                .map(this::toResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public DashboardResponse getDashboard(Long organizationId, Long dashboardId) {
-        return DashboardResponse.fromEntity(getOwnedDashboard(organizationId, dashboardId));
+        return toResponse(getOwnedDashboard(organizationId, dashboardId));
     }
 
     @Transactional
@@ -62,14 +75,17 @@ public class DashboardService {
                 .name(request.getName().trim())
                 .organizationId(organizationId)
                 .build();
-        return DashboardResponse.fromEntity(dashboardRepository.save(dashboard));
+        return toResponse(dashboardRepository.save(dashboard));
     }
 
     @Transactional
     public DashboardResponse updateDashboard(Long organizationId, Long dashboardId, UpdateDashboardRequest request) {
         Dashboard dashboard = getOwnedDashboard(organizationId, dashboardId);
         dashboard.setName(request.getName().trim());
-        return DashboardResponse.fromEntity(dashboardRepository.save(dashboard));
+        if (request.getVariables() != null) {
+            dashboard.setVariables(validateAndSerializeVariables(request.getVariables()));
+        }
+        return toResponse(dashboardRepository.save(dashboard));
     }
 
     @Transactional
@@ -143,6 +159,53 @@ public class DashboardService {
             throw new DashboardAccessDeniedException();
         }
         return dashboard;
+    }
+
+    private DashboardResponse toResponse(Dashboard dashboard) {
+        return DashboardResponse.fromEntity(dashboard, parseVariables(dashboard.getVariables()));
+    }
+
+    /** Parses stored definitions; a corrupted document degrades to no variables instead of failing reads. */
+    private List<DashboardVariable> parseVariables(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            List<DashboardVariable> variables = objectMapper.readValue(json, VARIABLE_LIST_TYPE);
+            return variables == null ? List.of() : variables;
+        } catch (JsonProcessingException e) {
+            log.warn("Ignoring unreadable dashboard variables document");
+            return List.of();
+        }
+    }
+
+    /**
+     * Validates variable definitions and serializes them to a JSON array. Bean Validation has
+     * already checked field shapes; this enforces the cross-field rules and duplicate names.
+     */
+    private String validateAndSerializeVariables(List<DashboardVariable> variables) {
+        if (variables.size() > MAX_VARIABLES_PER_DASHBOARD) {
+            throw new InvalidDashboardVariableException(
+                    "a dashboard may define at most " + MAX_VARIABLES_PER_DASHBOARD + " variables");
+        }
+
+        Set<String> names = new HashSet<>();
+        for (DashboardVariable variable : variables) {
+            if (!names.add(variable.getName())) {
+                throw new InvalidDashboardVariableException("duplicate variable name: " + variable.getName());
+            }
+            String defaultValue = variable.getDefaultValue();
+            if (defaultValue != null && !defaultValue.isEmpty() && !variable.getOptions().contains(defaultValue)) {
+                throw new InvalidDashboardVariableException(
+                        "default value for '" + variable.getName() + "' must be one of its options");
+            }
+        }
+
+        try {
+            return objectMapper.writeValueAsString(variables);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize dashboard variables", e);
+        }
     }
 
     private String validateAndNormalizeConfig(String config) {

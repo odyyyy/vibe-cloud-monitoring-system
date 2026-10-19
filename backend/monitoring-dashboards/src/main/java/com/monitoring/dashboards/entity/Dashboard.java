@@ -51,6 +51,13 @@ public class Dashboard {
     @Column(name = "organization_id", nullable = false)
     private Long organizationId;
 
+    /**
+     * Template variable definitions serialized as a JSON array. Opaque to persistence: it is
+     * validated and (de)serialized in the service layer, mirroring widget config handling.
+     */
+    @Column(name = "variables", columnDefinition = "TEXT")
+    private String variables;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

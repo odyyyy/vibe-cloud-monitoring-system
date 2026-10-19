@@ -15,11 +15,21 @@ export interface Widget {
   height: number
 }
 
+export type DashboardVariableType = 'custom' | 'query'
+
+export interface DashboardVariable {
+  name: string
+  type: DashboardVariableType
+  options: string[]
+  defaultValue: string
+}
+
 export interface Dashboard {
   id: number
   name: string
   organizationId: number
   createdAt: string
+  variables: DashboardVariable[]
   widgets: Widget[]
 }
 
@@ -38,6 +48,11 @@ export interface CreateWidgetRequest extends DashboardLayout {
 export interface UpdateWidgetRequest extends Partial<DashboardLayout> {
   type?: WidgetType
   config?: string
+}
+
+export interface UpdateDashboardRequest {
+  name: string
+  variables?: DashboardVariable[]
 }
 
 const BASE_PATH = '/v1/dashboards'
@@ -60,6 +75,10 @@ export function createDashboard(name: string): Promise<Dashboard> {
 
 export function renameDashboard(id: number, name: string): Promise<Dashboard> {
   return apiRequest<Dashboard>(`${BASE_PATH}/${id}`, { method: 'PUT', body: { name }, token: authToken() })
+}
+
+export function updateDashboard(id: number, data: UpdateDashboardRequest): Promise<Dashboard> {
+  return apiRequest<Dashboard>(`${BASE_PATH}/${id}`, { method: 'PUT', body: data, token: authToken() })
 }
 
 export function deleteDashboard(id: number): Promise<void> {
@@ -129,6 +148,14 @@ export function useRenameDashboardMutation(dashboardId: number | null) {
   const invalidate = useDashboardInvalidation(dashboardId)
   return useMutation({
     mutationFn: ({ id, name }: { id: number; name: string }) => renameDashboard(id, name),
+    onSuccess: invalidate,
+  })
+}
+
+export function useUpdateDashboardMutation(dashboardId: number | null) {
+  const invalidate = useDashboardInvalidation(dashboardId)
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: UpdateDashboardRequest }) => updateDashboard(id, data),
     onSuccess: invalidate,
   })
 }
