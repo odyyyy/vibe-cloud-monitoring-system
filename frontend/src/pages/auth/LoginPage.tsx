@@ -1,8 +1,9 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
-import { User } from 'lucide-react'
+import { KeyRound, User } from 'lucide-react'
+import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { login } from '../../api/auth'
 import { FormField, PasswordField } from '../../components/auth/FormField'
@@ -11,11 +12,25 @@ import { Logo } from '../../components/shared/icons'
 import { Button } from '../../components/ui/button'
 import { getAuthErrorMessage } from '../../features/auth/errors'
 import { loginSchema, type LoginFormValues } from '../../features/auth/schemas'
+import { getSsoLoginUrl } from '../../features/auth/sso'
 import { useAuthStore } from '../../store/authStore'
 
 export default function LoginPage() {
   const navigate = useNavigate()
   const signIn = useAuthStore((state) => state.login)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  useEffect(() => {
+    if (searchParams.get('error') !== 'sso') {
+      return
+    }
+    toast.error('Single sign-on failed', {
+      description: 'We could not complete the sign-in. Please try again or use your password.',
+    })
+    const next = new URLSearchParams(searchParams)
+    next.delete('error')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
 
   const {
     register,
@@ -91,6 +106,16 @@ export default function LoginPage() {
             </div>
 
             <OAuthButtons mode="sign-in" />
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => window.location.assign(getSsoLoginUrl())}
+            >
+              <KeyRound className="h-4 w-4" aria-hidden="true" />
+              Sign in with SSO
+            </Button>
 
             <Button type="submit" className="w-full" disabled={mutation.isLoading}>
               {mutation.isLoading ? 'Signing in…' : 'Sign in'}

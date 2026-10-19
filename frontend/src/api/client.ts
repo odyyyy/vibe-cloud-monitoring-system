@@ -4,6 +4,10 @@ const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export const DEFAULT_ERROR_MESSAGE = 'Request failed. Please try again.'
 
+export function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path}`
+}
+
 interface ErrorBody {
   message?: string
   detail?: string
@@ -65,7 +69,7 @@ export async function apiRequest<TResponse>(path: string, options: RequestOption
 
   let response: Response
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(apiUrl(path), {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),

@@ -8,6 +8,7 @@ import ConfirmEmailChangePage from './pages/auth/ConfirmEmailChangePage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import LoginPage from './pages/auth/LoginPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
+import SsoCallbackPage from './pages/auth/SsoCallbackPage'
 import VerifyEmailPage from './pages/auth/VerifyEmailPage'
 import AlertsPage from './pages/app/AlertsPage'
 import AgentFleetPage from './pages/app/AgentFleetPage'
@@ -60,6 +61,10 @@ const router = createBrowserRouter([
   {
     path: '/reset-password',
     element: <ResetPasswordPage />,
+  },
+  {
+    path: '/sso/callback',
+    element: <SsoCallbackPage />,
   },
   {
     path: '/confirm-email-change',

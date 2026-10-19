@@ -16,6 +16,7 @@ import com.monitoring.organization.repository.MembershipRepository;
 import com.monitoring.organization.repository.OrganizationRepository;
 import com.monitoring.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +34,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrganizationService {
 
     private static final int MAX_NAME_LENGTH = 100;
@@ -53,13 +55,17 @@ public class OrganizationService {
 
     @Transactional
     public OrganizationResponse createForUser(Long userId, String name) {
+        return createForUser(userId, name, MembershipRole.OWNER);
+    }
+
+    private OrganizationResponse createForUser(Long userId, String name, MembershipRole role) {
         Organization organization = organizationRepository.save(Organization.builder()
                 .name(normalizeName(name))
                 .build());
         Membership membership = membershipRepository.save(Membership.builder()
                 .organizationId(organization.getId())
                 .userId(userId)
-                .role(MembershipRole.OWNER)
+                .role(role)
                 .build());
         return new OrganizationResponse(organization.getId(), organization.getName(), membership.getRole());
     }
@@ -70,9 +76,40 @@ public class OrganizationService {
      */
     @Transactional
     public OrganizationResponse createPersonal(Long userId, String username) {
-        String base = username == null || username.isBlank() ? "My" : username;
-        String name = truncate(base + " organization", MAX_NAME_LENGTH);
-        return createForUser(userId, name);
+        return createForUser(userId, personalName(username), MembershipRole.OWNER);
+    }
+
+    /**
+     * Ensures the user owns a membership with the given role, used by SSO (just-in-time)
+     * provisioning. When the user belongs to no organization yet, a personal organization is
+     * created; otherwise the mapped role is re-applied to the user's first organization.
+     *
+     * <p>The last-owner invariant is preserved: a user who is the only OWNER of their
+     * organization is never downgraded, so role mapping can never leave an organization
+     * ownerless.
+     */
+    @Transactional
+    public void ensurePersonalMembership(Long userId, String username, MembershipRole role) {
+        List<Membership> memberships = membershipRepository.findByUserIdOrderByIdAsc(userId);
+        if (memberships.isEmpty()) {
+            createForUser(userId, personalName(username), role);
+            return;
+        }
+
+        Membership personal = memberships.get(0);
+        if (personal.getRole() == role) {
+            return;
+        }
+        if (personal.getRole() == MembershipRole.OWNER && role != MembershipRole.OWNER
+                && membershipRepository.countByOrganizationIdAndRole(
+                        personal.getOrganizationId(), MembershipRole.OWNER) <= 1) {
+            log.warn("SSO role mapping would remove the last owner of organization {}; keeping OWNER",
+                    personal.getOrganizationId());
+            return;
+        }
+
+        personal.setRole(role);
+        membershipRepository.save(personal);
     }
 
     @Transactional(readOnly = true)
@@ -203,6 +240,11 @@ public class OrganizationService {
             throw new IllegalArgumentException("Organization name is required");
         }
         return truncate(trimmed, MAX_NAME_LENGTH);
+    }
+
+    private String personalName(String username) {
+        String base = username == null || username.isBlank() ? "My" : username;
+        return truncate(base + " organization", MAX_NAME_LENGTH);
     }
 
     private String truncate(String value, int maxLength) {

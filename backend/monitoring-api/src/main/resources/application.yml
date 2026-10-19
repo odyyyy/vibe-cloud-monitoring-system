@@ -42,6 +42,31 @@ app:
     verification-url: ${APP_AUTH_VERIFICATION_URL:http://localhost:3000/verify-email}
     reset-url: ${APP_AUTH_RESET_URL:http://localhost:3000/reset-password}
     log-emails: ${APP_AUTH_LOG_EMAILS:false}
+    # Brute-force protection for password sign-in. Failed attempts are counted per identifier
+    # and client IP; after max-attempts the pair is locked for lockout-base, doubling on each
+    # consecutive lockout up to lockout-max. Set login-protection.enabled=false to disable.
+    login-protection:
+      enabled: ${APP_AUTH_LOGIN_PROTECTION_ENABLED:true}
+      max-attempts: ${APP_AUTH_LOGIN_PROTECTION_MAX_ATTEMPTS:5}
+      failure-window: ${APP_AUTH_LOGIN_PROTECTION_FAILURE_WINDOW:PT15M}
+      lockout-base: ${APP_AUTH_LOGIN_PROTECTION_LOCKOUT_BASE:PT1M}
+      lockout-max: ${APP_AUTH_LOGIN_PROTECTION_LOCKOUT_MAX:PT15M}
+      max-tracked-keys: ${APP_AUTH_LOGIN_PROTECTION_MAX_TRACKED_KEYS:100000}
+  # Single sign-on through an OpenID Connect provider. Disabled by default: the platform then
+  # depends on no external identity provider and local password login is the only option.
+  # Enabling it requires an HTTPS issuer (http is only accepted for a localhost issuer).
+  sso:
+    enabled: ${APP_SSO_ENABLED:false}
+    registration-id: ${APP_SSO_REGISTRATION_ID:sso}
+    issuer-uri: ${APP_SSO_ISSUER_URI:}
+    client-id: ${APP_SSO_CLIENT_ID:}
+    client-secret: ${APP_SSO_CLIENT_SECRET:}
+    role-claim: ${APP_SSO_ROLE_CLAIM:groups}
+    # Claim value -> platform role (OWNER, ADMIN, VIEWER). Values not listed default to VIEWER.
+    role-mapping: {}
+    default-role: ${APP_SSO_DEFAULT_ROLE:VIEWER}
+    success-redirect-url: ${APP_SSO_SUCCESS_REDIRECT_URL:http://localhost:3000/sso/callback}
+    failure-redirect-url: ${APP_SSO_FAILURE_REDIRECT_URL:http://localhost:3000/login}
 
 # Background telemetry maintenance (downsampling of raw metrics and retention).
 # Each job can be disabled independently; retention windows are in days.

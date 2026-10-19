@@ -42,6 +42,23 @@
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
 
+        <!-- SSO / OIDC login (opt-in, see app.sso.* configuration) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-client</artifactId>
+        </dependency>
+
+        <!--
+            Micrometer: used by the login brute-force guard to expose a blocked-attempts
+            counter (auth.login.blocked_total). The registry itself is provided by the
+            actuator in monitoring-api; auth only needs the API, mirroring the collector's
+            ingestion rate limiter.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
+
         <!-- JWT -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

@@ -300,6 +300,14 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `APP_AUTH_RESET_TTL` | TTL токена сброса пароля (ISO-8601 Duration) | `PT1H` |
 | `APP_AUTH_EMAIL_CHANGE_TTL` | TTL токена смены email (ISO-8601 Duration) | `PT1H` |
 | `APP_AUTH_LOG_EMAILS` | Писать письма (со ссылками) в лог вместо SMTP | `false` (в профиле `dev` — `true`) |
+| `APP_SSO_ENABLED` | Включить вход через OIDC-провайдера | `false` |
+| `APP_SSO_ISSUER_URI` | Issuer OIDC-провайдера (HTTPS; `http` допускается только для localhost) | |
+| `APP_SSO_CLIENT_ID` / `APP_SSO_CLIENT_SECRET` | Учётные данные OIDC-клиента | |
+| `APP_SSO_REGISTRATION_ID` | Идентификатор регистрации (часть URL входа) | `sso` |
+| `APP_SSO_ROLE_CLAIM` | Claim с группами пользователя | `groups` |
+| `APP_SSO_DEFAULT_ROLE` | Роль при отсутствии совпадения групп | `VIEWER` |
+| `APP_SSO_SUCCESS_REDIRECT_URL` | Куда вернуть пользователя после успешного входа | `http://localhost:3000/sso/callback` |
+| `APP_SSO_FAILURE_REDIRECT_URL` | Куда вернуть пользователя при ошибке входа | `http://localhost:3000/login` |
 | `MONITORING_DOWNSAMPLE_ENABLED` | Включить job сворачивания старых метрик в часовые агрегаты | `true` |
 | `MONITORING_DOWNSAMPLE_CRON` | Расписание downsampling (Spring cron) | `0 5 * * * *` |
 | `MONITORING_DOWNSAMPLE_RAW_RETENTION_HOURS` | Возраст сырых метрик, после которого их сворачивают, часы | `24` |
@@ -505,6 +513,7 @@ backend. API-ключ в ConfigMap — только placeholder; фактиче�
 | `POST` | `/api/auth/email-change/confirm` | Подтвердить новый email по одноразовому токену | публичный |
 | `POST` | `/api/auth/login` | Логин по username или email, возвращает JWT (только для подтверждённых аккаунтов) | публичный |
 | `GET` | `/api/auth/me` | Текущий профиль | JWT |
+| `GET` | `/api/auth/sso/login` | Начать вход через OIDC-провайдера (`302`) | публичный |
 
 Поток подтверждения email: `register` создаёт пользователя с `emailVerified=false` и
 отправляет одноразовую ссылку; до подтверждения `login` отвечает `403`. Ссылки строятся
@@ -518,6 +527,32 @@ backend. API-ключ в ConfigMap — только placeholder; фактиче�
 лог приложения только когда включён `app.auth.log-emails` (по умолчанию выключено,
 в профиле `dev` — включено). SMTP-провайдер ещё не подключён
 (см. [Текущие ограничения](#текущие-ограничения)).
+
+#### SSO / OIDC
+
+Вход через внешний identity provider (Keycloak, Okta, Auth0 и т.п.) выключен по умолчанию:
+при `APP_SSO_ENABLED=false` эндпоинт `GET /api/auth/sso/login` отвечает `404`, а платформа
+не зависит от внешнего провайдера. При включении задайте `issuer-uri`, `client-id`,
+`client-secret`; issuer должен использовать HTTPS (исключение — localhost для разработки).
+
+Поток входа:
+
+1. Фронтенд (`Sign in with SSO` на странице логина) переходит на `GET /api/auth/sso/login`.
+2. Backend отвечает `302` на `/oauth2/authorization/{registration-id}` и далее на провайдера.
+3. После аутентификации backend находит или создаёт пользователя по email (JIT-provisioning),
+   отмечает email подтверждённым и сопоставляет группы из claim `role-claim` с ролью
+   платформы. Маппинг строгий и задаётся в конфигурации (`app.sso.role-mapping`), при
+   отсутствии совпадения применяется `default-role` (`VIEWER`); при нескольких совпадениях
+   выигрывает более привилегированная роль.
+4. Роль применяется к личной организации пользователя (единственный `OWNER` не понижается).
+5. Backend выпускает обычный внутренний JWT и перенаправляет браузер на
+   `success-redirect-url` со токеном во фрагменте URL (`#token=...`); сессия OAuth2
+   инвалидируется. Фронтенд-страница `/sso/callback` читает токен, сохраняет его в
+   `authStore` и переходит на `/app`.
+
+IDP-токены не сохраняются — используются только для извлечения идентичности и групп.
+Локальный вход по паролю продолжает работать для остальных пользователей. SAML 2.0 и
+UI для управления маппингом ролей вне scope.
 
 ### Profile — `/api/profile`
 
