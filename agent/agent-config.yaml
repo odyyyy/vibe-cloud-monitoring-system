@@ -16,3 +16,12 @@ logs:
 log_batch_size: 500
 log_flush_seconds: 5
 state_file: "/app/.agent_state.json"
+
+# Pod log discovery. Not used by the plain `docker run` quick-start; the
+# Kubernetes DaemonSet sets AGENT_KUBERNETES_ENABLED=true (see k8s/daemonset.yaml
+# and the "Kubernetes" section in README.md). Namespace and selector can also be
+# set with AGENT_KUBERNETES_NAMESPACE and AGENT_KUBERNETES_LABEL_SELECTOR.
+kubernetes:
+  enabled: false
+  namespace: ""
+  label_selector: ""

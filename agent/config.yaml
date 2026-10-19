@@ -20,3 +20,19 @@ logs: []
 log_batch_size: 500
 log_flush_seconds: 5
 state_file: ".agent_state.json"
+
+# Kubernetes pod log discovery (optional). When enabled the agent watches pods
+# and tails /var/log/containers/<pod>_<namespace>_<container>-<id>.log, adding
+# k8s.pod.name, k8s.namespace and k8s.container.name to every event.
+#
+# Requires get/list/watch on pods (see k8s/rbac.yaml) and read-only access to
+# /var/log/containers plus /var/log/pods (the log files are symlinks).
+#
+#   kubernetes:
+#     enabled: true
+#     namespace: ""                # empty or "all" = every namespace
+#     label_selector: "app=api"    # optional; labelSelector also accepted
+kubernetes:
+  enabled: false
+  namespace: ""
+  label_selector: ""

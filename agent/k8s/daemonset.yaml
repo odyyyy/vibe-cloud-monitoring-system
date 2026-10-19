@@ -1,0 +1,108 @@
+# DaemonSet that runs one agent per node and tails the container logs the kubelet
+# writes for every pod on that node.
+#
+# The container log files in /var/log/containers are symlinks into
+# /var/log/pods, so both directories are mounted read-only. The agent itself
+# only opens files under /var/log/containers.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vibemonitoring-agent
+  namespace: vibemonitoring
+data:
+  config.yaml: |
+    backend_url: "http://localhost:8080"
+    api_key: "REPLACE_WITH_YOUR_API_KEY"
+    interval_seconds: 15
+    logs: []
+    log_batch_size: 500
+    log_flush_seconds: 5
+    state_file: "/app/.agent_state.json"
+    kubernetes:
+      enabled: false
+---
+# The DaemonSet reads the API key from the Secret below. Create it before
+# applying this file (never commit a real key):
+#   kubectl -n vibemonitoring create secret generic vibemonitoring-agent \
+#     --from-literal=api-key="$AGENT_API_KEY"
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vibemonitoring-agent
+  namespace: vibemonitoring
+spec:
+  selector:
+    matchLabels:
+      app: vibemonitoring-agent
+  template:
+    metadata:
+      labels:
+        app: vibemonitoring-agent
+    spec:
+      serviceAccountName: vibemonitoring-agent
+      initContainers:
+        # hostPath directories are created as root; give the non-root agent
+        # user ownership of its state directory.
+        - name: init-state
+          image: alpine:3.20
+          command: ["sh", "-c", "chown -R 1001:1001 /app"]
+          volumeMounts:
+            - name: state
+              mountPath: /app
+      containers:
+        - name: agent
+          image: vibemonitoring/agent:latest
+          args: ["-config", "/app/config.yaml"]
+          env:
+            - name: AGENT_BACKEND_URL
+              value: "https://your-cloud.example.com"
+            - name: AGENT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vibemonitoring-agent
+                  key: api-key
+            # These override the values in the ConfigMap above.
+            - name: AGENT_KUBERNETES_ENABLED
+              value: "true"
+            - name: AGENT_KUBERNETES_NAMESPACE
+              value: "all" # or a single namespace, e.g. "payments"
+            # - name: AGENT_KUBERNETES_LABEL_SELECTOR
+            #   value: "app=api"
+            # Restricts the watch to pods scheduled on this node. The agent also
+            # accepts NODE_NAME from the environment outside this manifest.
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+            - name: state
+              mountPath: /app
+            - name: container-logs
+              mountPath: /var/log/containers
+              readOnly: true
+            - name: pod-logs
+              mountPath: /var/log/pods
+              readOnly: true
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1001
+      volumes:
+        - name: config
+          configMap:
+            name: vibemonitoring-agent
+        - name: state
+          hostPath:
+            path: /var/lib/vibemonitoring-agent
+            type: DirectoryOrCreate
+        - name: container-logs
+          hostPath:
+            path: /var/log/containers
+            type: Directory
+        - name: pod-logs
+          hostPath:
+            path: /var/log/pods
+            type: Directory

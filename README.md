@@ -332,6 +332,10 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `config.yaml` / `AGENT_LOG_BATCH_SIZE` | `log_batch_size` | Размер батча логов, 1..1000 (по умолчанию 500) |
 | `config.yaml` / `AGENT_LOG_FLUSH_SECONDS` | `log_flush_seconds` | Интервал принудительной отправки логов (по умолчанию 5с) |
 | `config.yaml` / `AGENT_STATE_FILE` | `state_file` | Файл с offset'ами чтения логов (по умолчанию `.agent_state.json`) |
+| `config.yaml` / `AGENT_KUBERNETES_ENABLED` | `kubernetes.enabled` | Включить автообнаружение логов подов (по умолчанию `false`) |
+| `config.yaml` / `AGENT_KUBERNETES_NAMESPACE` | `kubernetes.namespace` | Namespace или `all`; пусто — все namespace |
+| `config.yaml` / `AGENT_KUBERNETES_LABEL_SELECTOR` | `kubernetes.label_selector` | Селектор подов, например `app=api` |
+| env `NODE_NAME` | — | Ограничить discovery подами этого узла; DaemonSet задаёт автоматически |
 
 ---
 
@@ -412,6 +416,64 @@ docker run -d \
 
 > Каталог логов монтируется только для чтения. Для state-файла нужен writable volume на
 > `/app` (каталог по умолчанию) либо задайте `AGENT_STATE_FILE` в доступный путь.
+
+### 5. Kubernetes: автообнаружение логов подов (опционально)
+
+В Kubernetes агент запускается как DaemonSet, сам находит поды на своём узле и
+tail-ит их контейнерные логи из `/var/log/containers`. В контекст каждой строки
+добавляются `k8s.pod.name`, `k8s.namespace` и `k8s.container.name`.
+
+```yaml
+kubernetes:
+  enabled: true
+  namespace: ""                # пусто или "all" — все namespace
+  label_selector: "app=api"    # необязательно; labelSelector тоже принимается
+```
+
+Что делает агент:
+
+- Следит за подами через Kubernetes API (informer) и реагирует на появление,
+  рестарт и удаление контейнеров.
+- Если задан `NODE_NAME` (DaemonSet передаёт его через Downward API), watch
+  ограничивается только подами этого узла (`spec.nodeName`).
+- Строит путь `/var/log/containers/<pod>_<namespace>_<container>-<containerID>.log`
+  и проверяет, что он не выходит за пределы `/var/log/containers`; другие файлы
+  агент не читает.
+- При удалении пода прекращает tail-ить его файлы и удаляет offset из state-файла.
+  Если runtime ещё не назначил `containerID`, источник добавится при следующем
+  обновлении пода.
+- Требуются только `get`, `list`, `watch` на `pods` — без доступа к секретам,
+  ConfigMap и без выполнения команд в подах.
+
+Готовые манифесты: `agent/k8s/rbac.yaml` (Namespace, ServiceAccount, ClusterRole,
+ClusterRoleBinding) и `agent/k8s/daemonset.yaml` (ConfigMap и DaemonSet; Secret
+создаётся отдельно). Оба файла также входят в образ в каталоге `/app/k8s`.
+
+```bash
+cd agent
+docker build -t vibemonitoring/agent:latest .
+kubectl apply -f k8s/rbac.yaml
+
+# До применения DaemonSet: реальный ключ только в Secret, не в манифесте.
+kubectl -n vibemonitoring create secret generic vibemonitoring-agent \
+  --from-literal=api-key="$AGENT_API_KEY"
+
+kubectl apply -f k8s/daemonset.yaml
+```
+
+Перед применением замените `AGENT_BACKEND_URL` в `daemonset.yaml` на адрес вашего
+backend. API-ключ в ConfigMap — только placeholder; фактическое значение приходит
+из Secret через `AGENT_API_KEY`.
+
+Важно:
+
+- API-ключ передаётся только через `AGENT_API_KEY` из Secret и не хранится в образе.
+- Файлы в `/var/log/containers` — symlink'и в `/var/log/pods`, поэтому оба каталога
+  монтируются read-only. Код агента при этом открывает только пути внутри
+  `/var/log/containers`.
+- Для одного namespace замените `ClusterRole`/`ClusterRoleBinding` на
+  `Role`/`RoleBinding` в этом namespace.
+- Вне кластера (локально) агент использует `KUBECONFIG` или `~/.kube/config`.
 
 ### Поведение при сбоях
 

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/vibemonitoring/agent/internal/config"
+	"github.com/vibemonitoring/agent/internal/k8s"
 	"github.com/vibemonitoring/agent/internal/logs"
 	"github.com/vibemonitoring/agent/internal/metrics"
 	"github.com/vibemonitoring/agent/internal/transport"
@@ -42,17 +43,38 @@ func main() {
 		cfg.BackendURL, cfg.Interval(), config.MaskKey(cfg.APIKey))
 
 	var wg sync.WaitGroup
-	if len(cfg.Logs) > 0 {
+	// Pod discovery needs the pipeline even when no static log sources are
+	// configured, because sources are added at runtime.
+	if len(cfg.Logs) > 0 || cfg.Kubernetes.Enabled {
 		logsClient := logs.NewClient(httpClient)
 		pipeline, err := logs.NewPipeline(cfg, logsClient, logger)
 		if err != nil {
 			logger.Fatalf("log pipeline error: %v", err)
 		}
+
+		var discoverer *k8s.Discoverer
+		if cfg.Kubernetes.Enabled {
+			discoverer, err = k8s.New(cfg.Kubernetes, pipeline, logger)
+			if err != nil {
+				logger.Fatalf("kubernetes discovery error: %v", err)
+			}
+		}
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			pipeline.Run(ctx)
 		}()
+
+		if discoverer != nil {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := discoverer.Run(ctx); err != nil {
+					logger.Printf("kubernetes discovery stopped: %v", err)
+				}
+			}()
+		}
 	}
 
 	run(ctx, logger, cfg, collector, metricsClient)

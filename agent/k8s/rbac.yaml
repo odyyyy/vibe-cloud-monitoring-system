@@ -1,0 +1,35 @@
+# Minimal RBAC for Kubernetes pod log discovery. The agent only needs to read
+# pod metadata; it never reads Secrets, ConfigMaps or executes anything in the
+# cluster. Adjust the namespace name if you deploy somewhere else.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vibemonitoring
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vibemonitoring-agent
+  namespace: vibemonitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vibemonitoring-agent
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vibemonitoring-agent
+subjects:
+  - kind: ServiceAccount
+    name: vibemonitoring-agent
+    namespace: vibemonitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vibemonitoring-agent
