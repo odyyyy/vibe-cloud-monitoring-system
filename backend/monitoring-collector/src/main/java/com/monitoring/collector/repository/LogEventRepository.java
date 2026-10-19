@@ -20,6 +20,18 @@ import java.util.List;
 public interface LogEventRepository extends JpaRepository<LogEvent, Long>, JpaSpecificationExecutor<LogEvent> {
 
     /**
+     * Number of log events with an event time in {@code [from, to)} for the given applications.
+     * Scoped by application ids (tenant ownership); an empty id collection must be handled by
+     * the caller (an empty {@code IN} clause is not valid SQL).
+     */
+    @Query("SELECT COUNT(l) FROM LogEvent l"
+            + " WHERE l.application.id IN :applicationIds"
+            + " AND l.timestamp >= :from AND l.timestamp < :to")
+    long countByApplicationsAndTimeRange(@Param("applicationIds") Collection<Long> applicationIds,
+                                         @Param("from") Instant from,
+                                         @Param("to") Instant to);
+
+    /**
      * Number of log events recorded for the given applications since {@code since}.
      *
      * <p>Scoped by application ids so a tenant can only count its own events; an empty id

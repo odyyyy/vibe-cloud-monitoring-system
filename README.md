@@ -55,10 +55,10 @@ Backend собран как Maven multi-module проект:
 | --- | --- |
 | `monitoring-auth` | Пользователи (identity), регистрация/логин, JWT, Spring Security; организации, членство и роли, tenant isolation |
 | `monitoring-apps-management` | CRUD приложений и управление API-ключами |
-| `monitoring-collector` | Приём метрик/логов (`/api/v1/ingest`) и запросы метрик/логов (`/api/v1/metrics/query`, `/api/v1/metrics/names`, `/api/v1/logs`), сохранённые представления логов (`/api/v1/saved-log-views`) |
+| `monitoring-collector` | Приём метрик/логов (`/api/v1/ingest`) и запросы метрик/логов (`/api/v1/metrics/query`, `/api/v1/metrics/names`, `/api/v1/logs`), сохранённые представления логов (`/api/v1/saved-log-views`), учёт потребления и квот (`/api/v1/usage`) |
 | `monitoring-dashboards` | CRUD дашбордов и виджетов (`/api/v1/dashboards`) |
 | `monitoring-healthcheck` | Синтетические HTTP health-checks: CRUD, scheduler, SSRF-защита, история результатов (`/api/v1/health-checks`) |
-| `monitoring-alerts` | Правила алертов (метрики/health-checks), плановый evaluator, webhook-уведомления (SSRF-защита) и инциденты (`/api/v1/alert-rules`, `/api/v1/notification-channels`, `/api/v1/alert-incidents`) |
+| `monitoring-alerts` | Правила алертов (метрики/health-checks) с составными условиями AND/OR, плановый evaluator, уведомления webhook/Slack/email (SSRF-защита, rate limit) и инциденты (`/api/v1/alert-rules`, `/api/v1/notification-channels`, `/api/v1/alert-incidents`) |
 | `monitoring-audit` | Аудит-лог: запись событий через AOP (`@AuditLog`) и read-only API (`/api/v1/audit-events`) |
 | `monitoring-common` | Общие типы без домена: пагинация (`PageResponse`), тело ошибки (`ApiError`) |
 | `monitoring-api` | Точка входа, конфигурация, композиция модулей, Actuator, OpenAPI |
@@ -719,6 +719,25 @@ range в форме виджета, по умолчанию 1 час) до те�
 логов. Счётчики считаются только по приложениям вызывающего пользователя (tenant scope) тремя
 агрегатными запросами, без отдельного запроса по каждому приложению. Используется карточками на
 странице **Overview** (`/app/overview`).
+
+### Usage — `/api/v1/usage`
+
+| Метод | Путь | Описание | Доступ |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/usage/current-month` | Текущее потребление и лимиты за календарный месяц (UTC) | JWT |
+| `GET` | `/api/v1/usage/daily` | Дневное потребление за окно (`days`, по умолчанию 30, максимум 90) | JWT |
+
+Область (organization) берётся из активного тенанта (`X-Organization-Id` + членство), поэтому
+чужое потребление через этот эндпоинт получить нельзя. Потребление считается фоновым rollup-джобом
+(`UsageRollupScheduler`, ежечасно по умолчанию): он пересчитывает абсолютные значения за сутки по
+каждой организации в таблице `daily_usage` с уникальным ключом `(organization_id, usage_date)`,
+поэтому повторный запуск идемпотентен и не может задвоить счётчики. Метрики считаются как сырые
+`metric_samples` за сутки плюс сохранённый объём (`sample_count`) агрегатов, логи — по
+`log_events`, трейсы — по `trace_spans`; границы суток — UTC. Лимиты задаются в
+`monitoring.usage.*` (метрики/логи/трейсы в месяц) и отдаются в поле `limit`; `percentage`
+рассчитывается на бэкенде. Используется страницей **Usage** (`/app/usage`), где прогресс-бары
+подсвечиваются по порогам (зелёный < 70%, жёлтый 70–90%, красный ≥ 90%) и рисуется график
+дневного потребления.
 
 ### Dashboards — `/api/v1/dashboards`
 

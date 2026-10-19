@@ -100,6 +100,9 @@ public class SecurityConfig {
                 // Workspace summary (Overview page) requires an authenticated user; the
                 // counters are computed only across the user's own applications.
                 .requestMatchers("/api/v1/overview", "/api/v1/overview/**").authenticated()
+                // Usage and quota visualization requires an authenticated user; the scope is
+                // taken from the active organization in UsageController.
+                .requestMatchers("/api/v1/usage", "/api/v1/usage/**").authenticated()
                 // Deny by default: any endpoint not explicitly listed above is not reachable.
                 // Public endpoints must be added to `endpoints` deliberately.
                 .anyRequest().denyAll()

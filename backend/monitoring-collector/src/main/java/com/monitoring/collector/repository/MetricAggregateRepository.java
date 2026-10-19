@@ -24,6 +24,21 @@ import java.util.List;
 public interface MetricAggregateRepository extends JpaRepository<MetricAggregate, Long> {
 
     /**
+     * Total number of raw samples represented by the aggregates whose bucket falls into
+     * {@code [fromEpoch, toEpoch)} (epoch seconds) for the given applications.
+     *
+     * <p>Used by the usage rollup to count metrics that have already been downsampled (their
+     * raw rows are gone); {@code sample_count} preserves the original volume. Scoped by
+     * application ids (tenant ownership); an empty id collection must be handled by the caller.
+     */
+    @Query("SELECT COALESCE(SUM(a.sampleCount), 0) FROM MetricAggregate a"
+            + " WHERE a.application.id IN :applicationIds"
+            + " AND a.bucketEpoch >= :fromEpoch AND a.bucketEpoch < :toEpoch")
+    long sumSampleCountByApplicationsAndBucketRange(@Param("applicationIds") Collection<Long> applicationIds,
+                                                    @Param("fromEpoch") long fromEpoch,
+                                                    @Param("toEpoch") long toEpoch);
+
+    /**
      * Groups raw metric samples older than {@code cutoffEpoch} into time buckets of
      * {@code bucketSeconds} seconds and inserts the AVG/MAX/MIN aggregates.
      *

@@ -24,6 +24,7 @@ import OverviewPage from './pages/app/OverviewPage'
 import OrganizationSettingsPage from './pages/app/OrganizationSettingsPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import SettingsPage from './pages/app/SettingsPage'
+import UsagePage from './pages/app/UsagePage'
 
 const router = createBrowserRouter([
   {
@@ -91,6 +92,7 @@ const router = createBrowserRouter([
       { path: 'dashboards/:id', element: <DashboardViewPage /> },
       { path: 'audit', element: <AuditLogPage /> },
       { path: 'organization', element: <OrganizationSettingsPage /> },
+      { path: 'usage', element: <UsagePage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

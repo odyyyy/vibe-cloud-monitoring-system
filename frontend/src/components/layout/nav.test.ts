@@ -15,6 +15,7 @@ describe('NAV_ITEMS', () => {
       'Dashboards',
       'Audit log',
       'Organization',
+      'Usage',
       'Settings',
     ])
   })

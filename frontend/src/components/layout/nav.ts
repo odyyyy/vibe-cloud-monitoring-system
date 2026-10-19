@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Activity, Bell, Building2, History, LayoutDashboard, LayoutGrid, Layers, ScrollText, Server, Settings, ShieldCheck, Siren } from 'lucide-react'
+import { Activity, Bell, Building2, Gauge, History, LayoutDashboard, LayoutGrid, Layers, ScrollText, Server, Settings, ShieldCheck, Siren } from 'lucide-react'
 
 export interface NavItem {
   to: string
@@ -19,6 +19,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/app/dashboards', label: 'Dashboards', icon: LayoutGrid },
   { to: '/app/audit', label: 'Audit log', icon: History },
   { to: '/app/organization', label: 'Organization', icon: Building2 },
+  { to: '/app/usage', label: 'Usage', icon: Gauge },
   { to: '/app/settings', label: 'Settings', icon: Settings },
 ]
 

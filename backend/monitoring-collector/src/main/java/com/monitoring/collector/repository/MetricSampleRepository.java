@@ -15,6 +15,18 @@ import java.util.List;
 public interface MetricSampleRepository extends JpaRepository<MetricSample, Long> {
 
     /**
+     * Number of metric samples with an event time in {@code [from, to)} for the given
+     * applications. Scoped by application ids (tenant ownership); an empty id collection must
+     * be handled by the caller (an empty {@code IN} clause is not valid SQL).
+     */
+    @Query("SELECT COUNT(m) FROM MetricSample m"
+            + " WHERE m.application.id IN :applicationIds"
+            + " AND m.timestamp >= :from AND m.timestamp < :to")
+    long countByApplicationsAndTimeRange(@Param("applicationIds") Collection<Long> applicationIds,
+                                         @Param("from") Instant from,
+                                         @Param("to") Instant to);
+
+    /**
      * Ids of raw samples whose event time is strictly before {@code cutoffEpoch}
      * (epoch seconds), bounded by {@code limit}.
      *
