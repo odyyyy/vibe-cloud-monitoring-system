@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '../ui/select'
 import { NAV_ITEMS, isPathActive } from './nav'
 
 function Brand() {
@@ -201,17 +201,26 @@ export function AppLayout() {
                 >
                   <SelectTrigger
                     aria-label="Active organization"
-                    className="h-9 w-[11rem] gap-2 rounded-full bg-white/[0.04] text-sm sm:w-[14rem]"
+                    className="h-9 w-[13rem] gap-1.5 rounded-full bg-white/[0.04] pl-2.5 pr-2 text-sm sm:w-[16rem]"
                   >
                     <Building2 className="h-4 w-4 shrink-0 text-cyan-300" aria-hidden="true" />
-                    <SelectValue placeholder="Select organization" />
+                    <span className="min-w-0 flex-1 truncate text-left">
+                      {currentOrganizationId !== null
+                        ? organizations.find((org) => org.id === currentOrganizationId)?.name ?? 'Select organization'
+                        : 'Select organization'}
+                    </span>
+                    {currentOrganizationId !== null ? (
+                      <span className="shrink-0 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300">
+                        {organizations.find((org) => org.id === currentOrganizationId)?.role}
+                      </span>
+                    ) : null}
                   </SelectTrigger>
                   <SelectContent align="start">
                     {organizations.map((organization) => (
                       <SelectItem key={organization.id} value={String(organization.id)}>
-                        <span className="flex items-center gap-2">
+                        <span className="flex w-full items-center justify-between gap-3">
                           <span className="truncate">{organization.name}</span>
-                          <span className="text-xs text-slate-500">{organization.role}</span>
+                          <span className="shrink-0 text-xs text-slate-500">{organization.role}</span>
                         </span>
                       </SelectItem>
                     ))}
