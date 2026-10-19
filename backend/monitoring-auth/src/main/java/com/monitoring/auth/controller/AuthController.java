@@ -3,6 +3,8 @@ package com.monitoring.auth.controller;
 import com.monitoring.auth.dto.request.*;
 import com.monitoring.auth.dto.response.*;
 import com.monitoring.auth.service.AuthService;
+import com.monitoring.auth.web.ClientIpResolver;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -24,8 +26,9 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        return ResponseEntity.ok(authService.login(request));
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request,
+                                              HttpServletRequest httpRequest) {
+        return ResponseEntity.ok(authService.login(request, ClientIpResolver.resolve(httpRequest)));
     }
 
     @PostMapping("/verify-email")

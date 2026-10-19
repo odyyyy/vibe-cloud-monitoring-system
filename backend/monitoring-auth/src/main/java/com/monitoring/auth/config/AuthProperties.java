@@ -45,4 +45,38 @@ public class AuthProperties {
      * end up in production logs. The {@code dev} profile enables it explicitly.
      */
     private boolean logEmails = false;
+
+    /** Brute-force protection for password sign-in. */
+    private LoginProtection loginProtection = new LoginProtection();
+
+    /**
+     * Configuration for the in-memory login brute-force guard.
+     *
+     * <p>Failed attempts are counted per identifier and client IP inside {@code failureWindow}.
+     * Once {@code maxAttempts} is reached the pair is locked for {@code lockoutBase}, doubling
+     * on each consecutive lockout up to {@code lockoutMax}. Set {@code enabled=false} to turn
+     * throttling off (for example in tests or local development).
+     */
+    @Getter
+    @Setter
+    public static class LoginProtection {
+
+        /** When false, failed attempts are never counted or blocked. */
+        private boolean enabled = true;
+
+        /** Failed attempts allowed inside the window before the key is locked. */
+        private int maxAttempts = 5;
+
+        /** How long failures are counted before the counter (and escalation) resets. */
+        private Duration failureWindow = Duration.ofMinutes(15);
+
+        /** First lockout duration; doubles with each consecutive lockout. */
+        private Duration lockoutBase = Duration.ofMinutes(1);
+
+        /** Upper bound on a single lockout duration. */
+        private Duration lockoutMax = Duration.ofMinutes(15);
+
+        /** Hard cap on tracked identifier/IP keys to bound memory use. */
+        private int maxTrackedKeys = 100_000;
+    }
 }

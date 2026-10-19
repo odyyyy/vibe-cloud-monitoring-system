@@ -17,6 +17,12 @@ describe('getAuthErrorMessage', () => {
     )
   })
 
+  it('maps 429 on login to a rate-limit message', () => {
+    expect(getAuthErrorMessage(new ApiError(429, ''), 'login')).toBe(
+      'Too many failed sign-in attempts. Please wait a few minutes and try again.',
+    )
+  })
+
   it('maps 409 to a duplicate-account message on register', () => {
     expect(getAuthErrorMessage(new ApiError(409, ''), 'register')).toBe(
       'This username or email is already in use.',

@@ -2,7 +2,7 @@ package com.monitoring.audit.aspect;
 
 import com.monitoring.audit.annotation.AuditLog;
 import com.monitoring.audit.service.AuditEventService;
-import com.monitoring.audit.service.ClientIpResolver;
+import com.monitoring.auth.web.ClientIpResolver;
 import com.monitoring.organization.exception.TenantAccessDeniedException;
 import com.monitoring.organization.tenant.CurrentTenantService;
 import com.monitoring.organization.tenant.TenantContext;

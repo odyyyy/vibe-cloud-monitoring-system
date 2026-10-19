@@ -12,6 +12,7 @@ import com.monitoring.auth.exception.InvalidCredentialsException;
 import com.monitoring.auth.exception.InvalidTokenException;
 import com.monitoring.auth.exception.UserNotFoundException;
 import com.monitoring.auth.jwt.JwtTokenProvider;
+import com.monitoring.auth.security.LoginAttemptGuard;
 import com.monitoring.organization.service.OrganizationService;
 import com.monitoring.auth.repository.AuthTokenRepository;
 import com.monitoring.auth.repository.UserRepository;
@@ -42,6 +43,7 @@ public class AuthService {
     private final EmailSender emailSender;
     private final AuthProperties authProperties;
     private final OrganizationService organizationService;
+    private final LoginAttemptGuard loginAttemptGuard;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -72,21 +74,34 @@ public class AuthService {
         return new MessageResponse("Account created. Check your email to confirm your address before signing in.");
     }
 
-    public AuthResponse login(LoginRequest request) {
+    /**
+     * Authenticates a password sign-in with brute-force protection.
+     *
+     * <p>Failed attempts are throttled per identifier and client IP. The lockout check runs
+     * before any user lookup, so a locked response is identical whether or not the account
+     * exists (no user enumeration). An unknown account and a wrong password count as the same
+     * failure; an unverified email (correct password) does not count, because the credentials
+     * were valid.
+     */
+    public AuthResponse login(LoginRequest request, String clientIp) {
+        String key = LoginAttemptGuard.key(request.getUsername(), clientIp);
+        loginAttemptGuard.ensureNotLocked(key, Instant.now());
+
         // An unknown account and a wrong password produce the same error so the response does
         // not reveal whether an account exists. The verified check runs only after the password
         // is confirmed, so verification status is not leaked to an unauthenticated caller.
-        User user = findByIdentifier(request.getUsername())
-                .orElseThrow(InvalidCredentialsException::new);
-
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+        Optional<User> candidate = findByIdentifier(request.getUsername());
+        if (candidate.isEmpty() || !passwordEncoder.matches(request.getPassword(), candidate.get().getPassword())) {
+            loginAttemptGuard.recordFailure(key, Instant.now());
             throw new InvalidCredentialsException();
         }
 
+        User user = candidate.get();
         if (!user.isEmailVerified()) {
             throw new EmailNotVerifiedException("Email not verified");
         }
 
+        loginAttemptGuard.recordSuccess(key);
         String token = jwtTokenProvider.generateToken(user.getId(), user.getUsername());
         return new AuthResponse(token);
     }

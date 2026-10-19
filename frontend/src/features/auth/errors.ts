@@ -12,6 +12,9 @@ export function getAuthErrorMessage(error: unknown, context: AuthContext): strin
   }
 
   if (context === 'login') {
+    if (error.status === 429) {
+      return 'Too many failed sign-in attempts. Please wait a few minutes and try again.'
+    }
     if (error.status === 403) {
       return 'Please confirm your email address before signing in.'
     }

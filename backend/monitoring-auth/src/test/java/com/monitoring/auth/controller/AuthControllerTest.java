@@ -13,6 +13,7 @@ import com.monitoring.auth.exception.EmailAlreadyUsedException;
 import com.monitoring.auth.exception.EmailNotVerifiedException;
 import com.monitoring.auth.exception.InvalidCredentialsException;
 import com.monitoring.auth.exception.InvalidTokenException;
+import com.monitoring.auth.exception.TooManyLoginAttemptsException;
 import com.monitoring.auth.service.AuthService;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -108,7 +109,7 @@ class AuthControllerTest {
 
     @Test
     void login_success() throws Exception {
-        BDDMockito.given(authService.login(ArgumentMatchers.any(LoginRequest.class)))
+        BDDMockito.given(authService.login(ArgumentMatchers.any(LoginRequest.class), ArgumentMatchers.any()))
                 .willReturn(mockAuthResponse);
 
         mockMvc.perform(post("/api/auth/login")
@@ -117,12 +118,13 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").value("mock-jwt-token"));
 
-        BDDMockito.then(authService).should().login(ArgumentMatchers.any(LoginRequest.class));
+        BDDMockito.then(authService).should()
+                .login(ArgumentMatchers.any(LoginRequest.class), ArgumentMatchers.any());
     }
 
     @Test
     void login_invalidPassword() throws Exception {
-        BDDMockito.given(authService.login(ArgumentMatchers.any(LoginRequest.class)))
+        BDDMockito.given(authService.login(ArgumentMatchers.any(LoginRequest.class), ArgumentMatchers.any()))
                 .willThrow(new InvalidCredentialsException());
 
         mockMvc.perform(post("/api/auth/login")
@@ -132,8 +134,21 @@ class AuthControllerTest {
     }
 
     @Test
+    void login_bruteForceLocked() throws Exception {
+        BDDMockito.given(authService.login(ArgumentMatchers.any(LoginRequest.class), ArgumentMatchers.any()))
+                .willThrow(new TooManyLoginAttemptsException(42));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validLoginRequest)))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "42"))
+                .andExpect(jsonPath("$.message").value("Too many failed sign-in attempts. Please try again later."));
+    }
+
+    @Test
     void login_emailNotVerified() throws Exception {
-        BDDMockito.given(authService.login(ArgumentMatchers.any(LoginRequest.class)))
+        BDDMockito.given(authService.login(ArgumentMatchers.any(LoginRequest.class), ArgumentMatchers.any()))
                 .willThrow(new EmailNotVerifiedException("Email not verified"));
 
         mockMvc.perform(post("/api/auth/login")

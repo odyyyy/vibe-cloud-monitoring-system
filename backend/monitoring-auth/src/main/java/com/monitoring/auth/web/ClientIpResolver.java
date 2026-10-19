@@ -1,14 +1,18 @@
-package com.monitoring.audit.service;
+package com.monitoring.auth.web;
 
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * Best-effort extraction of the client IP address for the audit trail.
+ * Best-effort extraction of the client IP address from a request.
  *
  * <p>{@code X-Forwarded-For} is a comma-separated list that proxies append to; the first
- * entry is the originating client. This value is client-controllable unless the application
- * sits behind a trusted proxy that overwrites the header, so it is recorded as reported and
- * must not be treated as a security decision input.
+ * entry is the originating client. The value is client-controllable unless the application
+ * sits behind a trusted proxy that overwrites the header, so it is used only as a coarse
+ * best-effort signal (audit trail and login throttling), never as a sole authorization input.
+ *
+ * <p>Lives in {@code monitoring-auth} because that is the lowest module both the audit trail
+ * and the login protection can share (audit already depends on auth), so the parsing logic
+ * is not duplicated.
  */
 public final class ClientIpResolver {
 

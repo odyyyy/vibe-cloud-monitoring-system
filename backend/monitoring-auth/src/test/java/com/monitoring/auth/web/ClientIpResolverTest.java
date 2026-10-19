@@ -1,4 +1,4 @@
-package com.monitoring.audit.service;
+package com.monitoring.auth.web;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;

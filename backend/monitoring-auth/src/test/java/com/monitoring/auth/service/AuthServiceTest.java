@@ -13,16 +13,20 @@ import com.monitoring.auth.exception.EmailAlreadyUsedException;
 import com.monitoring.auth.exception.EmailNotVerifiedException;
 import com.monitoring.auth.exception.InvalidCredentialsException;
 import com.monitoring.auth.exception.InvalidTokenException;
+import com.monitoring.auth.exception.TooManyLoginAttemptsException;
 import com.monitoring.auth.jwt.JwtTokenProvider;
+import com.monitoring.auth.security.LoginAttemptGuard;
 import com.monitoring.organization.service.OrganizationService;
 import com.monitoring.auth.repository.AuthTokenRepository;
 import com.monitoring.auth.repository.UserRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Instant;
@@ -37,9 +41,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
+
+    private static final String CLIENT_IP = "203.0.113.7";
 
     @Mock
     private UserRepository userRepository;
@@ -59,14 +66,18 @@ class AuthServiceTest {
     @Mock
     private OrganizationService organizationService;
 
+    @Mock
+    private ObjectProvider<MeterRegistry> meterRegistryProvider;
+
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         AuthProperties authProperties = new AuthProperties();
+        LoginAttemptGuard loginAttemptGuard = new LoginAttemptGuard(authProperties, meterRegistryProvider);
         authService = new AuthService(
                 userRepository, authTokenRepository, passwordEncoder, jwtTokenProvider, emailSender,
-                authProperties, organizationService);
+                authProperties, organizationService, loginAttemptGuard);
     }
 
     // --- profile ---
@@ -176,7 +187,7 @@ class AuthServiceTest {
         given(passwordEncoder.matches("supersecret", "hashed")).willReturn(true);
         given(jwtTokenProvider.generateToken(3L, "ada")).willReturn("jwt-token");
 
-        AuthResponse response = authService.login(loginRequest());
+        AuthResponse response = authService.login(loginRequest(), CLIENT_IP);
 
         assertThat(response.getToken()).isEqualTo("jwt-token");
     }
@@ -190,7 +201,7 @@ class AuthServiceTest {
 
         LoginRequest request = loginRequest();
         request.setUsername("ada@example.com");
-        AuthResponse response = authService.login(request);
+        AuthResponse response = authService.login(request, CLIENT_IP);
 
         assertThat(response.getToken()).isEqualTo("jwt-token");
         then(userRepository).should(never()).findByUsername(anyString());
@@ -205,7 +216,7 @@ class AuthServiceTest {
 
         LoginRequest request = loginRequest();
         request.setUsername("  ada  ");
-        AuthResponse response = authService.login(request);
+        AuthResponse response = authService.login(request, CLIENT_IP);
 
         assertThat(response.getToken()).isEqualTo("jwt-token");
     }
@@ -217,7 +228,7 @@ class AuthServiceTest {
         LoginRequest request = loginRequest();
         request.setUsername("nobody@example.com");
 
-        assertThatThrownBy(() -> authService.login(request))
+        assertThatThrownBy(() -> authService.login(request, CLIENT_IP))
                 .isInstanceOf(InvalidCredentialsException.class);
     }
 
@@ -227,7 +238,7 @@ class AuthServiceTest {
         given(userRepository.findByUsername("ada")).willReturn(Optional.of(user));
         given(passwordEncoder.matches("supersecret", "hashed")).willReturn(true);
 
-        assertThatThrownBy(() -> authService.login(loginRequest()))
+        assertThatThrownBy(() -> authService.login(loginRequest(), CLIENT_IP))
                 .isInstanceOf(EmailNotVerifiedException.class);
     }
 
@@ -237,7 +248,7 @@ class AuthServiceTest {
         given(userRepository.findByUsername("ada")).willReturn(Optional.of(user));
         given(passwordEncoder.matches("supersecret", "hashed")).willReturn(false);
 
-        assertThatThrownBy(() -> authService.login(loginRequest()))
+        assertThatThrownBy(() -> authService.login(loginRequest(), CLIENT_IP))
                 .isInstanceOf(InvalidCredentialsException.class);
     }
 
@@ -245,7 +256,87 @@ class AuthServiceTest {
     void login_rejectsUnknownUserWithSameErrorAsWrongPassword() {
         given(userRepository.findByUsername("ada")).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.login(loginRequest()))
+        assertThatThrownBy(() -> authService.login(loginRequest(), CLIENT_IP))
+                .isInstanceOf(InvalidCredentialsException.class);
+    }
+
+    // --- login brute-force protection ---
+
+    @Test
+    void login_locksOutAfterRepeatedFailures() {
+        User user = User.builder().id(3L).username("ada").password("hashed").emailVerified(true).build();
+        given(userRepository.findByUsername("ada")).willReturn(Optional.of(user));
+        given(passwordEncoder.matches("wrong", "hashed")).willReturn(false);
+
+        LoginRequest request = loginRequest();
+        request.setPassword("wrong");
+
+        for (int attempt = 0; attempt < 5; attempt++) {
+            assertThatThrownBy(() -> authService.login(request, CLIENT_IP))
+                    .isInstanceOf(InvalidCredentialsException.class);
+        }
+
+        assertThatThrownBy(() -> authService.login(request, CLIENT_IP))
+                .isInstanceOf(TooManyLoginAttemptsException.class);
+    }
+
+    @Test
+    void login_lockedAttemptSkipsUserLookup() {
+        AuthProperties shortLock = new AuthProperties();
+        shortLock.getLoginProtection().setMaxAttempts(1);
+        AuthService service = new AuthService(
+                userRepository, authTokenRepository, passwordEncoder, jwtTokenProvider, emailSender,
+                shortLock, organizationService, new LoginAttemptGuard(shortLock, meterRegistryProvider));
+        given(userRepository.findByUsername("ada")).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.login(loginRequest(), CLIENT_IP))
+                .isInstanceOf(InvalidCredentialsException.class);
+
+        assertThatThrownBy(() -> service.login(loginRequest(), CLIENT_IP))
+                .isInstanceOf(TooManyLoginAttemptsException.class);
+
+        then(userRepository).should(times(1)).findByUsername("ada");
+    }
+
+    @Test
+    void login_successResetsFailureCounter() {
+        User user = User.builder().id(3L).username("ada").password("hashed").emailVerified(true).build();
+        given(userRepository.findByUsername("ada")).willReturn(Optional.of(user));
+        given(passwordEncoder.matches("wrong", "hashed")).willReturn(false);
+        given(passwordEncoder.matches("supersecret", "hashed")).willReturn(true);
+        given(jwtTokenProvider.generateToken(3L, "ada")).willReturn("jwt-token");
+
+        LoginRequest wrong = loginRequest();
+        wrong.setPassword("wrong");
+        for (int attempt = 0; attempt < 4; attempt++) {
+            assertThatThrownBy(() -> authService.login(wrong, CLIENT_IP))
+                    .isInstanceOf(InvalidCredentialsException.class);
+        }
+
+        assertThat(authService.login(loginRequest(), CLIENT_IP).getToken()).isEqualTo("jwt-token");
+
+        for (int attempt = 0; attempt < 4; attempt++) {
+            assertThatThrownBy(() -> authService.login(wrong, CLIENT_IP))
+                    .isInstanceOf(InvalidCredentialsException.class);
+        }
+    }
+
+    @Test
+    void login_unverifiedEmailDoesNotCountAsFailure() {
+        User user = User.builder().id(3L).username("ada").password("hashed").emailVerified(false).build();
+        given(userRepository.findByUsername("ada")).willReturn(Optional.of(user));
+        given(passwordEncoder.matches("supersecret", "hashed")).willReturn(true);
+
+        for (int attempt = 0; attempt < 5; attempt++) {
+            assertThatThrownBy(() -> authService.login(loginRequest(), CLIENT_IP))
+                    .isInstanceOf(EmailNotVerifiedException.class);
+        }
+
+        given(passwordEncoder.matches("wrong", "hashed")).willReturn(false);
+        LoginRequest wrong = loginRequest();
+        wrong.setPassword("wrong");
+
+        assertThatThrownBy(() -> authService.login(wrong, CLIENT_IP))
                 .isInstanceOf(InvalidCredentialsException.class);
     }
 
