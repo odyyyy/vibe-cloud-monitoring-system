@@ -81,6 +81,114 @@ log_batch_size: 5000
 	}
 }
 
+func TestLoadConfigParsesKubernetes(t *testing.T) {
+	path := writeConfigFile(t, `
+backend_url: http://localhost:8080
+api_key: app_test
+kubernetes:
+  enabled: true
+  namespace: payments
+  label_selector: "app=api"
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if !cfg.Kubernetes.Enabled {
+		t.Error("expected kubernetes.enabled to be true")
+	}
+	if cfg.Kubernetes.Namespace != "payments" {
+		t.Errorf("namespace = %q, want payments", cfg.Kubernetes.Namespace)
+	}
+	if cfg.Kubernetes.LabelSelector != "app=api" {
+		t.Errorf("label selector = %q, want app=api", cfg.Kubernetes.LabelSelector)
+	}
+}
+
+func TestLoadConfigAcceptsCamelCaseLabelSelector(t *testing.T) {
+	path := writeConfigFile(t, `
+backend_url: http://localhost:8080
+api_key: app_test
+kubernetes:
+  enabled: true
+  labelSelector: "app=api"
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Kubernetes.LabelSelector != "app=api" {
+		t.Errorf("label selector = %q, want app=api", cfg.Kubernetes.LabelSelector)
+	}
+}
+
+func TestLoadConfigTreatsAllAsEveryNamespace(t *testing.T) {
+	path := writeConfigFile(t, `
+backend_url: http://localhost:8080
+api_key: app_test
+kubernetes:
+  enabled: true
+  namespace: all
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Kubernetes.Namespace != "" {
+		t.Errorf("namespace = %q, want empty (all namespaces)", cfg.Kubernetes.Namespace)
+	}
+}
+
+func TestLoadConfigRejectsInvalidKubernetesNamespace(t *testing.T) {
+	path := writeConfigFile(t, `
+backend_url: http://localhost:8080
+api_key: app_test
+kubernetes:
+  enabled: true
+  namespace: "Payments Team"
+`)
+	if _, err := LoadConfig(path); err == nil {
+		t.Fatal("expected error for invalid kubernetes.namespace")
+	}
+}
+
+func TestLoadConfigRejectsInvalidLabelSelector(t *testing.T) {
+	path := writeConfigFile(t, `
+backend_url: http://localhost:8080
+api_key: app_test
+kubernetes:
+  enabled: true
+  label_selector: "app in ("
+`)
+	if _, err := LoadConfig(path); err == nil {
+		t.Fatal("expected error for invalid kubernetes.label_selector")
+	}
+}
+
+func TestKubernetesEnvOverrides(t *testing.T) {
+	t.Setenv("AGENT_KUBERNETES_ENABLED", "true")
+	t.Setenv("AGENT_KUBERNETES_NAMESPACE", "all")
+	t.Setenv("AGENT_KUBERNETES_LABEL_SELECTOR", "app=api")
+
+	path := writeConfigFile(t, "backend_url: http://localhost:8080\napi_key: app_test\n")
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if !cfg.Kubernetes.Enabled {
+		t.Error("expected env to enable kubernetes discovery")
+	}
+	if cfg.Kubernetes.Namespace != "" {
+		t.Errorf("namespace = %q, want empty", cfg.Kubernetes.Namespace)
+	}
+	if cfg.Kubernetes.LabelSelector != "app=api" {
+		t.Errorf("label selector = %q, want app=api", cfg.Kubernetes.LabelSelector)
+	}
+}
+
 func TestLoadConfigRejectsMissingPath(t *testing.T) {
 	path := writeConfigFile(t, `
 backend_url: http://localhost:8080

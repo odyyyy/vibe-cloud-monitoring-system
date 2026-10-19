@@ -67,8 +67,10 @@ func (p *Pipeline) pollSource(s *source) {
 	switch {
 	case !s.initialized:
 		// First successful stat: tail from the end unless we have a saved offset, so
-		// an existing file is not re-ingested from the beginning.
-		if !s.hasState {
+		// an existing file is not re-ingested from the beginning. Runtime-discovered
+		// pod files opt into reading existing content because the container may have
+		// logged startup lines before the watch event arrived.
+		if !s.hasState && !s.cfg.FromBeginning {
 			s.offset = fi.Size()
 		}
 		s.lastInfo = fi
@@ -173,6 +175,6 @@ func (p *Pipeline) buildEvent(s *source, raw string) (Event, bool) {
 		Level:     inferLevel(s.levelRe, raw),
 		Message:   message,
 		Timestamp: timestamp.UTC(),
-		Context:   buildEventContext(s.cfg.ServiceName, s.cfg.Path, p.hostname),
+		Context:   buildEventContext(s.cfg, p.hostname),
 	}, true
 }

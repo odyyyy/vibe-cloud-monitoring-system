@@ -68,6 +68,18 @@ func (s *stateStore) set(path string, offset int64) error {
 	return s.writeLocked()
 }
 
+// remove drops the persisted offset for a source that no longer exists (for
+// example a deleted pod container) so the state file does not grow forever.
+func (s *stateStore) remove(path string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.data.Offsets[path]; !ok {
+		return nil
+	}
+	delete(s.data.Offsets, path)
+	return s.writeLocked()
+}
+
 func (s *stateStore) writeLocked() error {
 	if s.path == "" {
 		return nil

@@ -5,6 +5,8 @@ package logs
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/vibemonitoring/agent/internal/config"
 )
 
 const (
@@ -25,15 +27,25 @@ type Event struct {
 }
 
 // eventContext is serialized into Event.Context. The backend stores context
-// verbatim and does not interpret it, so service/source/host travel here.
+// verbatim and does not interpret it, so service/source/host and Kubernetes
+// metadata travel here.
 type eventContext struct {
-	Service string `json:"service"`
-	Source  string `json:"source"`
-	Host    string `json:"host"`
+	Service   string `json:"service"`
+	Source    string `json:"source"`
+	Host      string `json:"host"`
+	PodName   string `json:"k8s.pod.name,omitempty"`
+	Namespace string `json:"k8s.namespace,omitempty"`
+	Container string `json:"k8s.container.name,omitempty"`
 }
 
-func buildEventContext(service, source, host string) string {
-	b, err := json.Marshal(eventContext{Service: service, Source: source, Host: host})
+func buildEventContext(src config.LogSource, host string) string {
+	ec := eventContext{Service: src.ServiceName, Source: src.Path, Host: host}
+	if src.Kubernetes != nil {
+		ec.PodName = src.Kubernetes.Pod
+		ec.Namespace = src.Kubernetes.Namespace
+		ec.Container = src.Kubernetes.Container
+	}
+	b, err := json.Marshal(ec)
 	if err != nil {
 		return ""
 	}

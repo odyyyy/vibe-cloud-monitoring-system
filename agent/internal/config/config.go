@@ -11,7 +11,13 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/labels"
 )
+
+// namespacePattern is the DNS-1123 label format Kubernetes requires for
+// namespaces. Validating early turns a typo into a clear startup error instead
+// of an empty watch.
+var namespacePattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
 const (
 	defaultIntervalSeconds = 15
@@ -24,6 +30,14 @@ const (
 	maxLogBatchSize = 1000
 )
 
+// KubernetesMetadata identifies the pod container a log line came from. It is
+// populated by pod discovery, never read from the configuration file.
+type KubernetesMetadata struct {
+	Pod       string
+	Namespace string
+	Container string
+}
+
 // LogSource configures one tailed log file.
 type LogSource struct {
 	// Path is the exact file (not a directory) the agent is allowed to read.
@@ -33,18 +47,57 @@ type LogSource struct {
 	// LevelPattern is an optional regex used to extract the severity. When it has a
 	// capturing group, group 1 is used; otherwise the whole match is used.
 	LevelPattern string `yaml:"level_pattern"`
+	// Kubernetes is set for sources created by pod discovery.
+	Kubernetes *KubernetesMetadata `yaml:"-"`
+	// FromBeginning makes a newly discovered source read existing content instead
+	// of skipping to the end. Pod discovery sets it so startup logs written
+	// before the watch event are not lost.
+	FromBeginning bool `yaml:"-"`
+}
+
+// KubernetesConfig controls automatic discovery of pod logs from the Kubernetes
+// node the agent runs on.
+type KubernetesConfig struct {
+	// Enabled turns pod log discovery on.
+	Enabled bool
+	// Namespace restricts discovery to one namespace; empty means all namespaces.
+	Namespace string
+	// LabelSelector restricts discovery to pods matching a selector, e.g. app=api.
+	LabelSelector string
+}
+
+// UnmarshalYAML accepts both the project's snake_case convention and the
+// camelCase labelSelector spelling used in Kubernetes tooling.
+func (k *KubernetesConfig) UnmarshalYAML(value *yaml.Node) error {
+	var raw struct {
+		Enabled            bool   `yaml:"enabled"`
+		Namespace          string `yaml:"namespace"`
+		LabelSelector      string `yaml:"label_selector"`
+		LabelSelectorCamel string `yaml:"labelSelector"`
+	}
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	k.Enabled = raw.Enabled
+	k.Namespace = raw.Namespace
+	k.LabelSelector = raw.LabelSelector
+	if k.LabelSelector == "" {
+		k.LabelSelector = raw.LabelSelectorCamel
+	}
+	return nil
 }
 
 // Config holds the agent startup configuration loaded from a YAML file and
 // optionally overridden by environment variables.
 type Config struct {
-	BackendURL      string      `yaml:"backend_url"`
-	APIKey          string      `yaml:"api_key"`
-	IntervalSeconds int         `yaml:"interval_seconds"`
-	Logs            []LogSource `yaml:"logs"`
-	LogBatchSize    int         `yaml:"log_batch_size"`
-	LogFlushSeconds int         `yaml:"log_flush_seconds"`
-	StateFile       string      `yaml:"state_file"`
+	BackendURL      string           `yaml:"backend_url"`
+	APIKey          string           `yaml:"api_key"`
+	IntervalSeconds int              `yaml:"interval_seconds"`
+	Logs            []LogSource      `yaml:"logs"`
+	LogBatchSize    int              `yaml:"log_batch_size"`
+	LogFlushSeconds int              `yaml:"log_flush_seconds"`
+	StateFile       string           `yaml:"state_file"`
+	Kubernetes      KubernetesConfig `yaml:"kubernetes"`
 }
 
 // LoadConfig reads, parses, applies environment overrides and validates the
@@ -100,6 +153,17 @@ func applyEnvOverrides(cfg *Config) {
 	if v := strings.TrimSpace(os.Getenv("AGENT_STATE_FILE")); v != "" {
 		cfg.StateFile = v
 	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_KUBERNETES_ENABLED")); v != "" {
+		if enabled, err := strconv.ParseBool(v); err == nil {
+			cfg.Kubernetes.Enabled = enabled
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_KUBERNETES_NAMESPACE")); v != "" {
+		cfg.Kubernetes.Namespace = v
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_KUBERNETES_LABEL_SELECTOR")); v != "" {
+		cfg.Kubernetes.LabelSelector = v
+	}
 }
 
 func (c *Config) validate() error {
@@ -134,6 +198,22 @@ func (c *Config) validate() error {
 			if _, err := regexp.Compile(src.LevelPattern); err != nil {
 				return fmt.Errorf("logs[%d].level_pattern is not a valid regex: %w", i, err)
 			}
+		}
+	}
+
+	namespace := strings.TrimSpace(c.Kubernetes.Namespace)
+	if namespace == "" || strings.EqualFold(namespace, "all") {
+		c.Kubernetes.Namespace = ""
+	} else {
+		c.Kubernetes.Namespace = namespace
+		if !namespacePattern.MatchString(namespace) || len(namespace) > 63 {
+			return fmt.Errorf("kubernetes.namespace must be a valid DNS-1123 label or \"all\", got %q", namespace)
+		}
+	}
+	c.Kubernetes.LabelSelector = strings.TrimSpace(c.Kubernetes.LabelSelector)
+	if c.Kubernetes.LabelSelector != "" {
+		if _, err := labels.Parse(c.Kubernetes.LabelSelector); err != nil {
+			return fmt.Errorf("kubernetes.label_selector is invalid: %w", err)
 		}
 	}
 	return nil

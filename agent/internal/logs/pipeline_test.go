@@ -167,6 +167,112 @@ func TestPipelineWaitsForCompleteLine(t *testing.T) {
 	}
 }
 
+func TestPipelineDynamicSourceReadsExistingLines(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pod.log")
+	if err := os.WriteFile(path, []byte("INFO startup complete\n"), 0o600); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+
+	p := newTestPipeline(t, filepath.Join(dir, "state.json"))
+	p.applySourceUpdate(sourceUpdate{add: true, source: config.LogSource{
+		Path:          path,
+		ServiceName:   "api",
+		FromBeginning: true,
+		Kubernetes:    &config.KubernetesMetadata{Pod: "api-1", Namespace: "payments", Container: "api"},
+	}})
+
+	p.pollSource(p.sources[0])
+	if len(p.buffer) != 1 {
+		t.Fatalf("expected existing pod log line to be read, got %d events", len(p.buffer))
+	}
+	if p.buffer[0].Message != "INFO startup complete" {
+		t.Fatalf("unexpected message: %q", p.buffer[0].Message)
+	}
+}
+
+func TestPipelineDynamicSourceResumesFromSavedOffset(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pod.log")
+	if err := os.WriteFile(path, []byte("INFO old\nINFO new\n"), 0o600); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+
+	statePath := filepath.Join(dir, "state.json")
+	store, err := loadState(statePath)
+	if err != nil {
+		t.Fatalf("loadState: %v", err)
+	}
+	if err := store.set(path, int64(len("INFO old\n"))); err != nil {
+		t.Fatalf("set offset: %v", err)
+	}
+
+	p := newTestPipeline(t, statePath)
+	p.applySourceUpdate(sourceUpdate{add: true, source: config.LogSource{Path: path, FromBeginning: true}})
+	p.pollSource(p.sources[0])
+
+	if len(p.buffer) != 1 {
+		t.Fatalf("expected to resume from the saved offset, got %d events", len(p.buffer))
+	}
+	if p.buffer[0].Message != "INFO new" {
+		t.Fatalf("unexpected message: %q", p.buffer[0].Message)
+	}
+}
+
+func TestPipelineAddsAndRemovesDynamicSources(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "api-1_payments_api-aaa.log")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+
+	p := newTestPipeline(t, filepath.Join(dir, "state.json"))
+	src := config.LogSource{
+		Path:        path,
+		ServiceName: "api",
+		Kubernetes: &config.KubernetesMetadata{
+			Pod:       "api-1",
+			Namespace: "payments",
+			Container: "api",
+		},
+	}
+
+	p.applySourceUpdate(sourceUpdate{add: true, source: src})
+	// Registering the same path twice must not duplicate the source.
+	p.applySourceUpdate(sourceUpdate{add: true, source: src})
+	if len(p.sources) != 1 {
+		t.Fatalf("expected 1 source, got %d", len(p.sources))
+	}
+
+	p.pollSource(p.sources[0])
+	appendLine(t, path, "ERROR boom\n")
+	p.pollSource(p.sources[0])
+
+	if len(p.buffer) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(p.buffer))
+	}
+	for _, want := range []string{
+		`"k8s.pod.name":"api-1"`,
+		`"k8s.namespace":"payments"`,
+		`"k8s.container.name":"api"`,
+	} {
+		if !strings.Contains(p.buffer[0].Context, want) {
+			t.Errorf("context %q does not contain %q", p.buffer[0].Context, want)
+		}
+	}
+
+	if _, ok := p.state.offset(path); !ok {
+		t.Fatal("expected a persisted offset before removal")
+	}
+	p.applySourceUpdate(sourceUpdate{path: path})
+	if len(p.sources) != 0 {
+		t.Fatalf("expected no sources after removal, got %d", len(p.sources))
+	}
+	if _, ok := p.state.offset(path); ok {
+		t.Fatal("offset should be dropped when a source is removed")
+	}
+}
+
 func TestPipelineRedactsAndSetsContext(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "app.log")
