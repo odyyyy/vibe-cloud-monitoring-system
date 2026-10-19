@@ -6,22 +6,28 @@ export type AlertRuleTypeValue = (typeof ALERT_RULE_TYPES)[number]
 export const ALERT_CONDITIONS = ['GREATER_THAN', 'LESS_THAN', 'EQUAL'] as const
 export type AlertConditionValue = (typeof ALERT_CONDITIONS)[number]
 
-export const NOTIFICATION_CHANNEL_TYPES = ['WEBHOOK'] as const
+export const LOGIC_OPERATORS = ['AND', 'OR'] as const
+export type LogicOperatorValue = (typeof LOGIC_OPERATORS)[number]
+
+export const NOTIFICATION_CHANNEL_TYPES = ['WEBHOOK', 'SLACK', 'EMAIL'] as const
 export type NotificationChannelTypeValue = (typeof NOTIFICATION_CHANNEL_TYPES)[number]
 
 export const NAME_MAX_LENGTH = 100
 export const TARGET_MAX_LENGTH = 255
 export const URL_MAX_LENGTH = 2048
+export const EMAIL_MAX_LENGTH = 320
+export const MAX_CONDITIONS = 10
 export const MIN_DURATION_MINUTES = 1
 export const MAX_DURATION_MINUTES = 1440
 export const DEFAULT_DURATION_MINUTES = 5
 export const DEFAULT_THRESHOLD = 90
 export const DEFAULT_RULE_TYPE: AlertRuleTypeValue = 'METRIC_THRESHOLD'
 export const DEFAULT_CONDITION: AlertConditionValue = 'GREATER_THAN'
+export const DEFAULT_LOGIC_OPERATOR: LogicOperatorValue = 'AND'
 
 /**
- * Frontend webhook URL validation is a UX aid, not a security boundary. It only checks that the
- * URL is absolute, uses https and has a host; the backend enforces full SSRF protection.
+ * Frontend URL validation is a UX aid, not a security boundary. It only checks that the URL is
+ * absolute, uses https and has a host; the backend enforces full SSRF protection.
  */
 export function isHttpsUrl(value: string): boolean {
   let url: URL
@@ -31,6 +37,26 @@ export function isHttpsUrl(value: string): boolean {
     return false
   }
   return url.protocol === 'https:' && url.hostname.length > 0
+}
+
+/** Slack incoming webhooks live under slack.com; the backend re-validates the host. */
+export function isSlackWebhookUrl(value: string): boolean {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'https:') {
+    return false
+  }
+  const host = url.hostname.toLowerCase()
+  return host === 'slack.com' || host.endsWith('.slack.com')
+}
+
+/** Basic email format check mirroring the backend's validation. */
+export function isEmailAddress(value: string): boolean {
+  return value.length <= EMAIL_MAX_LENGTH && /^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$/.test(value)
 }
 
 const nameSchema = z
@@ -64,14 +90,22 @@ const durationMinutesSchema = requiredNumberSchema('Duration is required', 'Dura
       .max(MAX_DURATION_MINUTES, `Duration must be between ${MIN_DURATION_MINUTES} and ${MAX_DURATION_MINUTES} minutes`),
   )
 
+export const alertConditionSchema = z.object({
+  target: targetSchema,
+  operator: z.enum(ALERT_CONDITIONS),
+  threshold: thresholdSchema,
+})
+
 export const alertRuleFormSchema = z
   .object({
     name: nameSchema,
     type: z.enum(ALERT_RULE_TYPES),
     applicationId: z.number().int().positive().nullable(),
-    target: targetSchema,
-    condition: z.enum(ALERT_CONDITIONS),
-    threshold: thresholdSchema,
+    conditions: z
+      .array(alertConditionSchema)
+      .min(1, 'Add at least one condition')
+      .max(MAX_CONDITIONS, `At most ${MAX_CONDITIONS} conditions are allowed`),
+    logicOperator: z.enum(LOGIC_OPERATORS),
     durationMinutes: durationMinutesSchema,
     isActive: z.boolean(),
   })
@@ -83,19 +117,27 @@ export const alertRuleFormSchema = z
         message: 'Select an application for a metric rule',
       })
     }
-    if (values.type === 'HEALTH_CHECK' && !/^\d+$/.test(values.target)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['target'],
-        message: 'Select a health check',
-      })
+    if (values.type === 'HEALTH_CHECK') {
+      if (values.conditions.length !== 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions'],
+          message: 'A health-check rule uses a single condition',
+        })
+      } else if (!/^\d+$/.test(values.conditions[0]!.target)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['conditions', 0, 'target'],
+          message: 'Select a health check',
+        })
+      }
     }
   })
 
 export type AlertRuleFormValues = z.infer<typeof alertRuleFormSchema>
 
-export const notificationChannelFormSchema = z.object({
-  type: z.enum(NOTIFICATION_CHANNEL_TYPES),
+const webhookChannelSchema = z.object({
+  type: z.literal('WEBHOOK'),
   url: z
     .string()
     .trim()
@@ -104,5 +146,33 @@ export const notificationChannelFormSchema = z.object({
     .refine(isHttpsUrl, 'Enter an absolute https:// URL'),
   isActive: z.boolean(),
 })
+
+const slackChannelSchema = z.object({
+  type: z.literal('SLACK'),
+  slackWebhookUrl: z
+    .string()
+    .trim()
+    .min(1, 'Slack webhook URL is required')
+    .max(URL_MAX_LENGTH, `Slack webhook URL must be at most ${URL_MAX_LENGTH} characters`)
+    .refine(isSlackWebhookUrl, 'Enter an https://hooks.slack.com URL'),
+  isActive: z.boolean(),
+})
+
+const emailChannelSchema = z.object({
+  type: z.literal('EMAIL'),
+  emailAddress: z
+    .string()
+    .trim()
+    .min(1, 'Email address is required')
+    .max(EMAIL_MAX_LENGTH, `Email address must be at most ${EMAIL_MAX_LENGTH} characters`)
+    .refine(isEmailAddress, 'Enter a valid email address'),
+  isActive: z.boolean(),
+})
+
+export const notificationChannelFormSchema = z.discriminatedUnion('type', [
+  webhookChannelSchema,
+  slackChannelSchema,
+  emailChannelSchema,
+])
 
 export type NotificationChannelFormValues = z.infer<typeof notificationChannelFormSchema>

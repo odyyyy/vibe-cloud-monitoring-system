@@ -1,4 +1,4 @@
-import type { AlertCondition, AlertRuleType, IncidentStatus } from '../../api/alerts'
+import type { AlertCondition, AlertRuleType, IncidentStatus, LogicOperator, NotificationChannelType } from '../../api/alerts'
 
 const RULE_TYPE_LABELS: Record<AlertRuleType, string> = {
   METRIC_THRESHOLD: 'Metric threshold',
@@ -22,6 +22,17 @@ const STATUS_LABELS: Record<IncidentStatus, string> = {
   RESOLVED: 'Resolved',
 }
 
+const LOGIC_OPERATOR_LABELS: Record<LogicOperator, string> = {
+  AND: 'AND',
+  OR: 'OR',
+}
+
+const CHANNEL_TYPE_LABELS: Record<NotificationChannelType, string> = {
+  WEBHOOK: 'Webhook',
+  SLACK: 'Slack',
+  EMAIL: 'Email',
+}
+
 export function alertRuleTypeLabel(type: AlertRuleType): string {
   return RULE_TYPE_LABELS[type]
 }
@@ -36,4 +47,12 @@ export function alertConditionSymbol(condition: AlertCondition): string {
 
 export function incidentStatusLabel(status: IncidentStatus): string {
   return STATUS_LABELS[status]
+}
+
+export function logicOperatorLabel(operator: LogicOperator): string {
+  return LOGIC_OPERATOR_LABELS[operator]
+}
+
+export function notificationChannelTypeLabel(type: NotificationChannelType): string {
+  return CHANNEL_TYPE_LABELS[type]
 }

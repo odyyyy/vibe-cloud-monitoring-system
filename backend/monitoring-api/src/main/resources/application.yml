@@ -118,6 +118,20 @@ monitoring:
       queue-capacity: ${MONITORING_ALERTS_WEBHOOK_QUEUE_CAPACITY:100}
       connect-timeout-ms: ${MONITORING_ALERTS_WEBHOOK_CONNECT_TIMEOUT_MS:5000}
       request-timeout-ms: ${MONITORING_ALERTS_WEBHOOK_REQUEST_TIMEOUT_MS:10000}
+    slack:
+      connect-timeout-ms: ${MONITORING_ALERTS_SLACK_CONNECT_TIMEOUT_MS:5000}
+      request-timeout-ms: ${MONITORING_ALERTS_SLACK_REQUEST_TIMEOUT_MS:10000}
+    # Email is sent asynchronously on a dedicated bounded executor.
+    # To enable the EMAIL channel, configure Spring's mail support (for example via
+    # SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD).
+    # Without spring.mail.host no JavaMailSender bean exists and email delivery fails fast.
+    email:
+      pool-size: ${MONITORING_ALERTS_EMAIL_POOL_SIZE:1}
+      queue-capacity: ${MONITORING_ALERTS_EMAIL_QUEUE_CAPACITY:100}
+      from: ${MONITORING_ALERTS_EMAIL_FROM:no-reply@vibemonitoring.local}
+    # Minimum time between two notifications for the same rule and channel (spam prevention).
+    notifications:
+      min-interval-seconds: ${MONITORING_ALERTS_NOTIFICATIONS_MIN_INTERVAL_SECONDS:900}
 
 # Actuator. Health details are hidden from anonymous clients; the dev profile shows them.
 management:

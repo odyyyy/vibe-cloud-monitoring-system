@@ -23,8 +23,8 @@ import java.net.URI;
 import java.util.List;
 
 /**
- * Notification channel CRUD for authenticated users. Webhook URLs are SSRF-validated in
- * {@link AlertService} before they are stored.
+ * Notification channel CRUD for authenticated users. Webhook, Slack and email destinations are
+ * format/SSRF-validated in {@link AlertService} before they are stored.
  */
 @RestController
 @RequestMapping("/api/v1/notification-channels")
@@ -62,5 +62,16 @@ public class NotificationChannelController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         alertService.deleteChannel(currentTenantService.requireOrganizationId(), id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Queues a test notification to the channel. Returns {@code 202 Accepted} because delivery is
+     * asynchronous; the response does not prove the destination accepted the message.
+     */
+    @PostMapping("/{id}/test")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
+    public ResponseEntity<Void> test(@PathVariable Long id) {
+        alertService.sendTestNotification(currentTenantService.requireOrganizationId(), id);
+        return ResponseEntity.accepted().build();
     }
 }

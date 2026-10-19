@@ -1,21 +1,27 @@
 package com.monitoring.alerts.service;
 
-import com.monitoring.alerts.dto.response.AlertIncidentResponse;
-import com.monitoring.alerts.dto.response.AlertRuleResponse;
+import com.monitoring.alerts.dto.request.AlertConditionRequest;
 import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
 import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
-import com.monitoring.alerts.dto.response.NotificationChannelResponse;
 import com.monitoring.alerts.dto.request.UpdateAlertRuleRequest;
 import com.monitoring.alerts.dto.request.UpdateNotificationChannelRequest;
+import com.monitoring.alerts.dto.response.AlertIncidentResponse;
+import com.monitoring.alerts.dto.response.AlertRuleResponse;
+import com.monitoring.alerts.dto.response.NotificationChannelResponse;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertIncident;
 import com.monitoring.alerts.entity.AlertRule;
+import com.monitoring.alerts.entity.AlertRuleCondition;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.IncidentStatus;
+import com.monitoring.alerts.entity.LogicOperator;
 import com.monitoring.alerts.entity.NotificationChannel;
+import com.monitoring.alerts.entity.NotificationChannelType;
+import com.monitoring.alerts.event.AlertEvent;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
 import com.monitoring.alerts.exception.AlertRuleNotFoundException;
 import com.monitoring.alerts.exception.InvalidAlertRuleException;
+import com.monitoring.alerts.exception.InvalidNotificationChannelException;
 import com.monitoring.alerts.exception.InvalidWebhookUrlException;
 import com.monitoring.alerts.exception.NotificationChannelAccessDeniedException;
 import com.monitoring.alerts.exception.NotificationChannelNotFoundException;
@@ -34,8 +40,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * Application service for alert rules, notification channels and incident history.
@@ -54,6 +62,14 @@ public class AlertService {
     public static final int MAX_INCIDENTS_LIMIT = 500;
 
     private static final String WEBHOOK_SCHEME = "https";
+    private static final String SLACK_HOST_SUFFIX = "slack.com";
+    /**
+     * Deliberately conservative email check: a single {@code @}, a non-empty local part and a
+     * dotted domain. Full RFC 5322 validation is unnecessary here and invitation to ReDoS; the
+     * address is only a notification destination.
+     */
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[^@\\s]+@[^@\\s.]+(\\.[^@\\s.]+)+$");
 
     private final AlertRuleRepository ruleRepository;
     private final NotificationChannelRepository channelRepository;
@@ -61,6 +77,7 @@ public class AlertService {
     private final ApplicationService applicationService;
     private final HealthCheckService healthCheckService;
     private final SsrfGuard ssrfGuard;
+    private final AlertNotificationDispatcher notificationDispatcher;
 
     // ---------------------------------------------------------------------------------------
     // Alert rules
@@ -76,17 +93,28 @@ public class AlertService {
     @Transactional
     public AlertRuleResponse createRule(Long organizationId, CreateAlertRuleRequest request) {
         AlertRuleType type = request.getType();
-        String target = request.getTarget().trim();
-        Long applicationId = normalizeApplicationId(organizationId, type, request.getApplicationId(), target);
+        if (type == null) {
+            throw new InvalidAlertRuleException("Alert rule type is required");
+        }
+
+        List<AlertConditionRequest> requested = request.getConditions() != null && !request.getConditions().isEmpty()
+                ? request.getConditions()
+                : List.of(new AlertConditionRequest(request.getTarget(), request.getCondition(), request.getThreshold()));
+
+        List<AlertRuleCondition> conditions =
+                materializeConditions(organizationId, type, request.getApplicationId(), requested);
+        AlertRuleCondition primary = conditions.get(0);
 
         AlertRule rule = AlertRule.builder()
                 .organizationId(organizationId)
-                .applicationId(applicationId)
+                .applicationId(type == AlertRuleType.METRIC_THRESHOLD ? request.getApplicationId() : null)
                 .name(request.getName().trim())
                 .type(type)
-                .target(target)
-                .condition(request.getCondition())
-                .threshold(request.getThreshold())
+                .target(primary.getTarget())
+                .condition(primary.getOperator())
+                .threshold(primary.getThreshold())
+                .conditions(conditions)
+                .logicOperator(request.getLogicOperator() == null ? LogicOperator.AND : request.getLogicOperator())
                 .durationMinutes(request.getDurationMinutes())
                 .active(request.getActive() == null || request.getActive())
                 .build();
@@ -104,26 +132,23 @@ public class AlertService {
         if (request.getType() != null) {
             rule.setType(request.getType());
         }
-        if (request.getTarget() != null && !request.getTarget().isBlank()) {
-            rule.setTarget(request.getTarget().trim());
-        }
-        if (request.getCondition() != null) {
-            rule.setCondition(request.getCondition());
-        }
-        if (request.getThreshold() != null) {
-            rule.setThreshold(request.getThreshold());
-        }
         if (request.getDurationMinutes() != null) {
             rule.setDurationMinutes(request.getDurationMinutes());
         }
+        if (request.getLogicOperator() != null) {
+            rule.setLogicOperator(request.getLogicOperator());
+        }
 
-        // Re-validate the merged rule: a partial update may have switched the type or target.
-        Long requestedApplicationId = request.getApplicationId();
-        Long normalizedApplicationId = normalizeApplicationId(
-                organizationId, rule.getType(),
-                requestedApplicationId != null ? requestedApplicationId : rule.getApplicationId(),
-                rule.getTarget());
-        rule.setApplicationId(normalizedApplicationId);
+        Long applicationId = request.getApplicationId() != null ? request.getApplicationId() : rule.getApplicationId();
+
+        List<AlertConditionRequest> requested = mergeConditionRequests(rule, request);
+        List<AlertRuleCondition> conditions = materializeConditions(organizationId, rule.getType(), applicationId, requested);
+        AlertRuleCondition primary = conditions.get(0);
+        rule.setTarget(primary.getTarget());
+        rule.setCondition(primary.getOperator());
+        rule.setThreshold(primary.getThreshold());
+        rule.setConditions(conditions);
+        rule.setApplicationId(rule.getType() == AlertRuleType.METRIC_THRESHOLD ? applicationId : null);
 
         if (request.getActive() != null) {
             rule.setActive(request.getActive());
@@ -156,12 +181,18 @@ public class AlertService {
 
     @Transactional
     public NotificationChannelResponse createChannel(Long organizationId, CreateNotificationChannelRequest request) {
+        NotificationChannelType type = request.getType();
+        if (type == null) {
+            throw new InvalidNotificationChannelException("Notification channel type is required");
+        }
+
         NotificationChannel channel = NotificationChannel.builder()
                 .organizationId(organizationId)
-                .type(request.getType())
-                .url(validateWebhookUrl(request.getUrl()))
+                .type(type)
                 .active(request.getActive() == null || request.getActive())
                 .build();
+        applyDestination(channel, request.getUrl(), request.getSlackWebhookUrl(), request.getEmailAddress());
+        requireDestination(channel);
 
         return NotificationChannelResponse.fromEntity(channelRepository.save(channel));
     }
@@ -170,15 +201,18 @@ public class AlertService {
     public NotificationChannelResponse updateChannel(Long organizationId, Long id, UpdateNotificationChannelRequest request) {
         NotificationChannel channel = getOwnedChannel(organizationId, id);
 
-        if (request.getType() != null) {
+        if (request.getType() != null && request.getType() != channel.getType()) {
+            // Switching type invalidates the previous destination; a new one must be supplied.
             channel.setType(request.getType());
+            channel.setUrl(null);
+            channel.setSlackWebhookUrl(null);
+            channel.setEmailAddress(null);
         }
-        if (request.getUrl() != null && !request.getUrl().isBlank()) {
-            channel.setUrl(validateWebhookUrl(request.getUrl()));
-        }
+        applyDestination(channel, request.getUrl(), request.getSlackWebhookUrl(), request.getEmailAddress());
         if (request.getActive() != null) {
             channel.setActive(request.getActive());
         }
+        requireDestination(channel);
 
         return NotificationChannelResponse.fromEntity(channelRepository.save(channel));
     }
@@ -187,6 +221,35 @@ public class AlertService {
     public void deleteChannel(Long organizationId, Long id) {
         NotificationChannel channel = getOwnedChannel(organizationId, id);
         channelRepository.delete(channel);
+    }
+
+    /**
+     * Sends a synthetic test notification to one owned channel so a user can verify the
+     * configuration. The rate limiter is bypassed; delivery still happens asynchronously on the
+     * notification executor and its failures are only logged.
+     */
+    @Transactional(readOnly = true)
+    public void sendTestNotification(Long organizationId, Long id) {
+        NotificationChannel channel = getOwnedChannel(organizationId, id);
+
+        AlertEvent event = new AlertEvent(
+                null,
+                0L,
+                "Test notification",
+                organizationId,
+                null,
+                AlertRuleType.METRIC_THRESHOLD,
+                "test.metric",
+                AlertCondition.GREATER_THAN,
+                0.0,
+                1.0,
+                List.of(new AlertEvent.ConditionObservation(
+                        "test.metric", AlertCondition.GREATER_THAN, 0.0, 1.0, true)),
+                LogicOperator.AND,
+                IncidentStatus.FIRING,
+                Instant.now());
+
+        notificationDispatcher.dispatchTest(channel, event);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -226,25 +289,103 @@ public class AlertService {
     }
 
     /**
-     * Validates the type-specific target and returns the application id to persist (null for
-     * health-check rules). Throws {@link InvalidAlertRuleException} for inconsistent payloads.
+     * Determines the effective condition list for an update. An explicit {@code conditions} list
+     * replaces the whole list; legacy {@code target}/{@code condition}/{@code threshold} fields
+     * update (or create) the primary condition while keeping any remaining compound conditions.
      */
-    private Long normalizeApplicationId(Long organizationId, AlertRuleType type, Long applicationId, String target) {
+    private List<AlertConditionRequest> mergeConditionRequests(AlertRule rule, UpdateAlertRuleRequest request) {
+        if (request.getConditions() != null) {
+            if (request.getConditions().isEmpty()) {
+                throw new InvalidAlertRuleException("An alert rule requires at least one condition");
+            }
+            return request.getConditions();
+        }
+
+        boolean legacyProvided = request.getTarget() != null
+                || request.getCondition() != null
+                || request.getThreshold() != null;
+        if (!legacyProvided) {
+            return existingConditions(rule);
+        }
+
+        AlertConditionRequest primary = new AlertConditionRequest(
+                request.getTarget() != null && !request.getTarget().isBlank()
+                        ? request.getTarget().trim()
+                        : rule.getTarget(),
+                request.getCondition() != null ? request.getCondition() : rule.getCondition(),
+                request.getThreshold() != null ? request.getThreshold() : rule.getThreshold());
+
+        if (rule.getConditions().isEmpty()) {
+            return List.of(primary);
+        }
+        List<AlertConditionRequest> merged = new ArrayList<>(existingConditions(rule));
+        merged.set(0, primary);
+        return merged;
+    }
+
+    private List<AlertConditionRequest> existingConditions(AlertRule rule) {
+        if (!rule.getConditions().isEmpty()) {
+            return rule.getConditions().stream()
+                    .map(condition -> new AlertConditionRequest(
+                            condition.getTarget(), condition.getOperator(), condition.getThreshold()))
+                    .toList();
+        }
+        return List.of(new AlertConditionRequest(rule.getTarget(), rule.getCondition(), rule.getThreshold()));
+    }
+
+    /**
+     * Validates the requested conditions and verifies that every target belongs to the tenant,
+     * then returns the persistable condition list.
+     */
+    private List<AlertRuleCondition> materializeConditions(
+            Long organizationId, AlertRuleType type, Long applicationId, List<AlertConditionRequest> requested) {
         if (type == null) {
             throw new InvalidAlertRuleException("Alert rule type is required");
         }
-        if (target == null || target.isBlank()) {
-            throw new InvalidAlertRuleException("Alert rule target is required");
+        if (requested.isEmpty()) {
+            throw new InvalidAlertRuleException("An alert rule requires at least one condition");
         }
+        if (requested.size() > AlertRule.MAX_CONDITIONS) {
+            throw new InvalidAlertRuleException(
+                    "At most " + AlertRule.MAX_CONDITIONS + " conditions are allowed");
+        }
+
         if (type == AlertRuleType.METRIC_THRESHOLD) {
             if (applicationId == null) {
                 throw new InvalidAlertRuleException("A metric-threshold rule requires an application");
             }
             // Verifies ownership; throws ApplicationAccessDenied/NotFound on a foreign or missing app.
             applicationService.getOwnedApplication(applicationId, organizationId);
-            return applicationId;
         }
 
+        List<AlertRuleCondition> conditions = new ArrayList<>(requested.size());
+        for (AlertConditionRequest condition : requested) {
+            if (condition == null || condition.getTarget() == null || condition.getTarget().isBlank()) {
+                throw new InvalidAlertRuleException(
+                        "Each condition requires a target, operator and threshold");
+            }
+            String target = condition.getTarget().trim();
+            AlertCondition operator = condition.getOperator();
+            Double threshold = condition.getThreshold();
+            if (type == AlertRuleType.HEALTH_CHECK) {
+                // Health-check conditions only need a target: the up/down state is the signal.
+                validateHealthCheckTarget(organizationId, target);
+                operator = operator == null ? AlertCondition.EQUAL : operator;
+                threshold = threshold == null ? 0.0 : threshold;
+            } else if (operator == null || threshold == null) {
+                throw new InvalidAlertRuleException(
+                        "Each condition requires a target, operator and threshold");
+            }
+            conditions.add(AlertRuleCondition.builder()
+                    .target(target)
+                    .operator(operator)
+                    .threshold(threshold)
+                    .build());
+        }
+        return conditions;
+    }
+
+    private void validateHealthCheckTarget(Long organizationId, String target) {
         long healthCheckId;
         try {
             healthCheckId = Long.parseLong(target);
@@ -257,7 +398,52 @@ public class AlertService {
         } catch (HealthCheckNotFoundException | HealthCheckAccessDeniedException ex) {
             throw new InvalidAlertRuleException("The referenced health check does not exist or is not yours");
         }
-        return null;
+    }
+
+    /**
+     * Validates and stores the destination that matches the channel's type. Only non-blank values
+     * are applied, so a partial update without a new destination keeps the existing one.
+     */
+    private void applyDestination(NotificationChannel channel, String rawUrl, String rawSlackUrl, String rawEmail) {
+        if (rawUrl != null && !rawUrl.isBlank()) {
+            channel.setUrl(validateWebhookUrl(rawUrl));
+        }
+        if (rawSlackUrl != null && !rawSlackUrl.isBlank()) {
+            channel.setSlackWebhookUrl(validateSlackUrl(rawSlackUrl));
+        }
+        if (rawEmail != null && !rawEmail.isBlank()) {
+            channel.setEmailAddress(validateEmail(rawEmail));
+        }
+    }
+
+    /**
+     * Ensures the channel has a destination for its type. WEBHOOK and SLACK store a URL,
+     * EMAIL stores an address; the other columns are cleared so exactly one destination is kept.
+     */
+    private void requireDestination(NotificationChannel channel) {
+        switch (channel.getType()) {
+            case WEBHOOK -> {
+                if (channel.getUrl() == null || channel.getUrl().isBlank()) {
+                    throw new InvalidNotificationChannelException("A webhook channel requires a URL");
+                }
+                channel.setSlackWebhookUrl(null);
+                channel.setEmailAddress(null);
+            }
+            case SLACK -> {
+                if (channel.getSlackWebhookUrl() == null || channel.getSlackWebhookUrl().isBlank()) {
+                    throw new InvalidNotificationChannelException("A Slack channel requires a webhook URL");
+                }
+                channel.setUrl(null);
+                channel.setEmailAddress(null);
+            }
+            case EMAIL -> {
+                if (channel.getEmailAddress() == null || channel.getEmailAddress().isBlank()) {
+                    throw new InvalidNotificationChannelException("An email channel requires an address");
+                }
+                channel.setUrl(null);
+                channel.setSlackWebhookUrl(null);
+            }
+        }
     }
 
     /**
@@ -275,6 +461,32 @@ public class AlertService {
             throw new InvalidWebhookUrlException(ex.getMessage());
         }
         return uri.toString();
+    }
+
+    /** Slack incoming webhooks must be https Slack hosts and resolve to public addresses. */
+    private String validateSlackUrl(String rawUrl) {
+        URI uri = ssrfGuard.parse(rawUrl.trim());
+        if (!WEBHOOK_SCHEME.equals(uri.getScheme().toLowerCase(Locale.ROOT))) {
+            throw new InvalidNotificationChannelException("Slack webhook URL must use https");
+        }
+        String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+        if (!host.equals(SLACK_HOST_SUFFIX) && !host.endsWith("." + SLACK_HOST_SUFFIX)) {
+            throw new InvalidNotificationChannelException("Slack webhook URL must be a slack.com address");
+        }
+        try {
+            ssrfGuard.assertPublicHost(uri);
+        } catch (RuntimeException ex) {
+            throw new InvalidNotificationChannelException(ex.getMessage());
+        }
+        return uri.toString();
+    }
+
+    private String validateEmail(String rawEmail) {
+        String email = rawEmail.trim();
+        if (email.length() > NotificationChannel.MAX_EMAIL_LENGTH || !EMAIL_PATTERN.matcher(email).matches()) {
+            throw new InvalidNotificationChannelException("Enter a valid email address");
+        }
+        return email;
     }
 
     private void resolveOpenIncidents(Long ruleId) {

@@ -9,7 +9,8 @@ SaaS-интерфейсе, подключают свои приложения и
 > сбросом пароля), управление приложениями (Applications), конвейеры метрик и логов
 > (ingest + query), дашборды с виджетами (Metric chart / Log table / Status),
 > синтетические health-checks (HTTP-проверки с историей результатов), правила
-> алертов (по метрике или health-check) с webhook-уведомлениями и историей инцидентов,
+> алертов (по метрике или health-check, с несколькими условиями AND/OR) с уведомлениями в
+> webhook/Slack/email и историей инцидентов,
 > а также настройки профиля (смена username/email с подтверждением и три темы оформления) —
 > см. раздел [Текущие ограничения](#текущие-ограничения).
 
@@ -823,34 +824,44 @@ link-local, CGNAT, multicast, `169.254.169.254` и т.п. отклоняются
 | `POST` | `/api/v1/alert-rules` | Создать правило | JWT |
 | `PUT` | `/api/v1/alert-rules/{id}` | Обновить (частично) | JWT (владелец) |
 | `DELETE` | `/api/v1/alert-rules/{id}` | Удалить правило и его инциденты | JWT (владелец) |
-| `GET` | `/api/v1/notification-channels` | Список webhook-каналов | JWT (владелец) |
-| `POST` | `/api/v1/notification-channels` | Добавить webhook | JWT |
+| `GET` | `/api/v1/notification-channels` | Список каналов (webhook/Slack/email) | JWT (владелец) |
+| `POST` | `/api/v1/notification-channels` | Добавить канал | JWT |
 | `PUT` | `/api/v1/notification-channels/{id}` | Обновить канал | JWT (владелец) |
 | `DELETE` | `/api/v1/notification-channels/{id}` | Удалить канал | JWT (владелец) |
+| `POST` | `/api/v1/notification-channels/{id}/test` | Отправить тестовое уведомление (async, `202 Accepted`) | JWT (владелец) |
 | `GET` | `/api/v1/alert-incidents` | История инцидентов (`limit`, по умолчанию 50, максимум 500) | JWT (владелец) |
 
-Правило: `name` (1–100), `type` (`METRIC_THRESHOLD|HEALTH_CHECK`), `target` (имя метрики
-или id health-check), `condition` (`GREATER_THAN|LESS_THAN|EQUAL`), `threshold` (double),
+Правило: `name` (1–100), `type` (`METRIC_THRESHOLD|HEALTH_CHECK`), список `conditions`
+(до 10; каждая — `target`, `operator` и `threshold`), `logicOperator` (`AND|OR`),
 `durationMinutes` (1–1440) и `isActive`. Для `METRIC_THRESHOLD` обязателен `applicationId`;
-для `HEALTH_CHECK` правило срабатывает при статусе `DOWN` или `TIMEOUT` (condition и
-threshold игнорируются). Инцидент: `id`, `ruleId`, `ruleName`, `status`
-(`FIRING|RESOLVED`), `triggeredAt`, `resolvedAt`.
+для `HEALTH_CHECK` правило срабатывает при статусе `DOWN` или `TIMEOUT` (одно условие —
+id health-check). Устаревшие поля `target`/`condition`/`threshold` по-прежнему принимаются
+(одно условие) и в ответе зеркалят первое условие. Инцидент: `id`, `ruleId`, `ruleName`,
+`status` (`FIRING|RESOLVED`), `triggeredAt`, `resolvedAt`.
 
 Плановый evaluator (отдельный пул с ограниченной очередью и `CallerRunsPolicy`) проверяет
 активные правила каждые `monitoring.alerts.scheduler-interval-ms` (по умолчанию 60 секунд).
-Условие должно непрерывно держаться `durationMinutes` прежде чем откроется инцидент.
-Отсутствие или устаревание данных не трактуется ни как breach, ни как recovery: метрика
-ищется в окне `monitoring.alerts.metric-lookback-minutes` (по умолчанию 5), результат
-health-check — не старше `monitoring.alerts.health-freshness-minutes` (по умолчанию 10).
-Планировщик отключается через `monitoring.alerts.scheduler.enabled=false`.
+Составное условие вычисляется как `AND` (все условия breach) или `OR` (любое условие breach);
+результат должен непрерывно держаться `durationMinutes` прежде чем откроется инцидент.
+Отсутствие или устаревание данных хотя бы по одному условию не трактуется ни как breach,
+ни как recovery: метрика ищется в окне `monitoring.alerts.metric-lookback-minutes` (по
+умолчанию 5), результат health-check — не старше `monitoring.alerts.health-freshness-minutes`
+(по умолчанию 10). Планировщик отключается через `monitoring.alerts.scheduler.enabled=false`.
 
-Webhook-каналы допускают только https-URL и проходят SSRF-проверку (хост должен
-разрешаться исключительно в публичные адреса) при сохранении и повторно перед каждой
-отправкой; отправка выполняется асинхронно после коммита транзакции, без редиректов и с
-таймаутами.
+Каналы уведомлений бывают трёх типов: `WEBHOOK` (произвольный https-URL), `SLACK` (incoming
+webhook на хосте `slack.com`, сообщение в формате Block Kit) и `EMAIL` (адрес получателя).
+Webhook- и Slack-URL допускают только https и проходят SSRF-проверку (хост должен разрешаться
+исключительно в публичные адреса) при сохранении и повторно перед каждой отправкой. Все
+отправки выполняются асинхронно после коммита транзакции, без редиректов и с таймаутами;
+email использует `spring-boot-starter-mail` (нужен `spring.mail.host`) и отдельный пул
+`monitoring.alerts.email.*`, поэтому недоступный SMTP не блокирует evaluation. Повторные
+уведомления по одному правилу и каналу ограничены `monitoring.alerts.notifications.min-interval-seconds`
+(по умолчанию 900). Тестовое сообщение в канал отправляется через
+`POST /api/v1/notification-channels/{id}/test`.
 
 Страница **Alerts** (`/app/alerts`) показывает список правил с переключателями активности,
-диалог создания/редактирования и настройку notification-каналов; страница **Incidents**
+диалог создания/редактирования (несколько условий с переключателем AND/OR) и настройку
+notification-каналов (webhook/Slack/email с кнопкой тестовой отправки); страница **Incidents**
 (`/app/incidents`) — таблицу инцидентов (новые первыми) с автообновлением раз в 30 секунд.
 
 ### Audit — `/api/v1/audit-events`
@@ -948,8 +959,9 @@ H2, frontend-тесты — jsdom.
   токенов в лог.
 - Агент пока собирает только хост-метрики; сбор логов и интеграции приложений — в
   планах.
-- Каналы уведомлений ограничены webhook (email/Slack — в планах); правила поддерживают
-  одно условие без логики AND/OR.
+- Каналы уведомлений поддерживают webhook, Slack и email. Отправка email требует
+  настроенного SMTP (`spring.mail.host`); пока он не задан, канал сохраняется, но доставка
+  не выполняется (ошибка логируется). Правила поддерживают несколько условий с логикой AND/OR.
 - Тема оформления перекрашивает интерфейс (поверхности, нейтральный текст, акценты и статусы),
   но серии графиков (Recharts), маркетинговый лендинг и изображения используют фиксированные
   цвета. В светлой теме **Daylight** акценты монохромные, поэтому разные серии на графике

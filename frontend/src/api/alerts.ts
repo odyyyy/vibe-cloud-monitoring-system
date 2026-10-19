@@ -5,7 +5,15 @@ import { apiRequest } from './client'
 export type AlertRuleType = 'METRIC_THRESHOLD' | 'HEALTH_CHECK'
 export type AlertCondition = 'GREATER_THAN' | 'LESS_THAN' | 'EQUAL'
 export type IncidentStatus = 'FIRING' | 'RESOLVED'
-export type NotificationChannelType = 'WEBHOOK'
+export type NotificationChannelType = 'WEBHOOK' | 'SLACK' | 'EMAIL'
+export type LogicOperator = 'AND' | 'OR'
+
+/** A single condition inside a compound alert rule. */
+export interface AlertConditionSpec {
+  target: string
+  operator: AlertCondition
+  threshold: number
+}
 
 export interface AlertRule {
   id: number
@@ -13,9 +21,12 @@ export interface AlertRule {
   applicationId: number | null
   name: string
   type: AlertRuleType
+  /** Legacy single-condition view; mirrors the first entry of {@link AlertRule.conditions}. */
   target: string
   condition: AlertCondition
   threshold: number
+  conditions: AlertConditionSpec[]
+  logicOperator: LogicOperator
   durationMinutes: number
   isActive: boolean
   createdAt: string
@@ -26,7 +37,9 @@ export interface NotificationChannel {
   id: number
   organizationId: number
   type: NotificationChannelType
-  url: string
+  url: string | null
+  slackWebhookUrl: string | null
+  emailAddress: string | null
   isActive: boolean
 }
 
@@ -43,9 +56,12 @@ export interface CreateAlertRuleRequest {
   name: string
   applicationId: number | null
   type: AlertRuleType
+  /** Legacy single-condition target; mirrors the first condition. */
   target: string
   condition: AlertCondition
   threshold: number
+  conditions: AlertConditionSpec[]
+  logicOperator: LogicOperator
   durationMinutes: number
   isActive: boolean
 }
@@ -54,7 +70,9 @@ export type UpdateAlertRuleRequest = Partial<CreateAlertRuleRequest>
 
 export interface CreateNotificationChannelRequest {
   type: NotificationChannelType
-  url: string
+  url?: string | null
+  slackWebhookUrl?: string | null
+  emailAddress?: string | null
   isActive: boolean
 }
 
@@ -98,6 +116,14 @@ export function updateNotificationChannel(id: number, data: UpdateNotificationCh
 
 export function deleteNotificationChannel(id: number): Promise<void> {
   return apiRequest<void>(`${CHANNELS_PATH}/${id}`, { method: 'DELETE', token: authToken() })
+}
+
+/**
+ * Queues a test notification for the channel. The backend responds 202 Accepted because delivery
+ * is asynchronous; a resolved promise means the message was queued, not delivered.
+ */
+export function testNotificationChannel(id: number): Promise<void> {
+  return apiRequest<void>(`${CHANNELS_PATH}/${id}/test`, { method: 'POST', token: authToken() })
 }
 
 export function getAlertIncidents(limit?: number): Promise<AlertIncident[]> {
@@ -196,6 +222,12 @@ export function useDeleteNotificationChannelMutation() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: notificationChannelsQueryKey })
     },
+  })
+}
+
+export function useTestNotificationChannelMutation() {
+  return useMutation({
+    mutationFn: (id: number) => testNotificationChannel(id),
   })
 }
 

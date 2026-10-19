@@ -19,6 +19,8 @@ public class NotificationChannelResponse {
     private Long organizationId;
     private NotificationChannelType type;
     private String url;
+    private String slackWebhookUrl;
+    private String emailAddress;
 
     @JsonProperty("isActive")
     private boolean active;
@@ -29,6 +31,8 @@ public class NotificationChannelResponse {
                 .organizationId(channel.getOrganizationId())
                 .type(channel.getType())
                 .url(channel.getUrl())
+                .slackWebhookUrl(channel.getSlackWebhookUrl())
+                .emailAddress(channel.getEmailAddress())
                 .active(channel.isActive())
                 .build();
     }

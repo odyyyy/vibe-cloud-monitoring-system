@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
  * <p>Evaluation runs on a dedicated bounded executor ({@code alertEvaluationExecutor}) rather than
  * the scheduler thread, so a large account cannot create unbounded concurrent work and the
  * schedule is not blocked by a single slow evaluation. Each task opens a short transaction; the
- * scheduler then dispatches webhook notifications for the transitions that occurred, after those
+ * scheduler then dispatches notifications for the transitions that occurred, after those
  * transactions have committed.
  */
 @Component
@@ -34,19 +34,19 @@ public class AlertScheduler {
 
     private final AlertRuleRepository ruleRepository;
     private final AlertEvaluationService evaluationService;
-    private final WebhookDispatcher webhookDispatcher;
+    private final AlertNotificationDispatcher notificationDispatcher;
     private final ExecutorService alertEvaluationExecutor;
     private final long evaluationTimeoutMs;
 
     public AlertScheduler(
             AlertRuleRepository ruleRepository,
             AlertEvaluationService evaluationService,
-            WebhookDispatcher webhookDispatcher,
+            AlertNotificationDispatcher notificationDispatcher,
             @Qualifier("alertEvaluationExecutor") ExecutorService alertEvaluationExecutor,
             @Value("${monitoring.alerts.evaluation-timeout-ms:120000}") long evaluationTimeoutMs) {
         this.ruleRepository = ruleRepository;
         this.evaluationService = evaluationService;
-        this.webhookDispatcher = webhookDispatcher;
+        this.notificationDispatcher = notificationDispatcher;
         this.alertEvaluationExecutor = alertEvaluationExecutor;
         this.evaluationTimeoutMs = evaluationTimeoutMs;
     }
@@ -75,7 +75,7 @@ public class AlertScheduler {
 
         for (Future<Optional<AlertEvent>> future : futures) {
             try {
-                future.get().ifPresent(webhookDispatcher::dispatch);
+                future.get().ifPresent(notificationDispatcher::dispatch);
             } catch (CancellationException ex) {
                 log.warn("Alert evaluation was cancelled after the {} ms timeout", evaluationTimeoutMs);
             } catch (ExecutionException ex) {

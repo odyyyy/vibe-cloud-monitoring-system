@@ -4,8 +4,10 @@ import com.monitoring.alerts.event.AlertEvent;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertIncident;
 import com.monitoring.alerts.entity.AlertRule;
+import com.monitoring.alerts.entity.AlertRuleCondition;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.IncidentStatus;
+import com.monitoring.alerts.entity.LogicOperator;
 import com.monitoring.alerts.repository.AlertIncidentRepository;
 import com.monitoring.alerts.repository.AlertRuleRepository;
 import com.monitoring.collector.service.MetricQueryService;
@@ -20,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalDouble;
@@ -28,13 +31,19 @@ import java.util.OptionalDouble;
  * Evaluates a single alert rule and maintains its incident state.
  *
  * <p>Each evaluation is one short transaction: reads (latest metric value or latest health-check
- * result) and the resulting incident insert/update. No network calls happen here — webhook
- * delivery is queued after the transaction commits (see {@link WebhookDispatcher}).
+ * result) and the resulting incident insert/update. No network calls happen here — notification
+ * delivery is queued after the transaction commits (see {@code AlertNotificationDispatcher}).
+ *
+ * <h2>Compound conditions</h2>
+ * A rule may carry several conditions combined by {@link LogicOperator}. {@code AND} fires only
+ * when every condition breaches; {@code OR} fires when any one does. A rule with no explicit
+ * conditions falls back to its legacy single target/condition/threshold.
  *
  * <h2>Missing data</h2>
- * When there is no recent data (no metric sample in the lookback window, no health result, or a
- * stale result) the evaluation returns empty and leaves the rule's state untouched. Missing data
- * is never treated as a breach or as recovery.
+ * When any required condition has no recent data (no metric sample in the lookback window, no
+ * health result, or a stale result) the whole evaluation returns empty and leaves the rule's state
+ * untouched. Missing data is never treated as a breach or as recovery, which also prevents a
+ * partially-observed {@code AND} rule from firing on incomplete evidence.
  *
  * <h2>Duration</h2>
  * A rule must breach continuously for {@code durationMinutes} before an incident is opened. The
@@ -87,11 +96,11 @@ public class AlertEvaluationService {
         }
 
         return observation.get().breaching()
-                ? handleBreach(rule, observation.get().value(), now)
-                : handleClear(rule, observation.get().value(), now);
+                ? handleBreach(rule, observation.get(), now)
+                : handleClear(rule, observation.get(), now);
     }
 
-    private Optional<AlertEvent> handleBreach(AlertRule rule, Double value, Instant now) {
+    private Optional<AlertEvent> handleBreach(AlertRule rule, Observation observation, Instant now) {
         if (rule.getBreachStartedAt() == null) {
             rule.setBreachStartedAt(now);
             ruleRepository.save(rule);
@@ -117,10 +126,10 @@ public class AlertEvaluationService {
                 .build());
 
         log.info("Alert rule {} ({}) is firing", rule.getId(), rule.getName());
-        return Optional.of(toEvent(rule, incident, value, now));
+        return Optional.of(toEvent(rule, incident, observation, now));
     }
 
-    private Optional<AlertEvent> handleClear(AlertRule rule, Double value, Instant now) {
+    private Optional<AlertEvent> handleClear(AlertRule rule, Observation observation, Instant now) {
         boolean hadBreach = rule.getBreachStartedAt() != null;
         if (hadBreach) {
             rule.setBreachStartedAt(null);
@@ -139,16 +148,77 @@ public class AlertEvaluationService {
         incidentRepository.save(incident);
 
         log.info("Alert rule {} ({}) resolved", rule.getId(), rule.getName());
-        return Optional.of(toEvent(rule, incident, value, now));
+        return Optional.of(toEvent(rule, incident, observation, now));
     }
 
     private Optional<Observation> observe(AlertRule rule, Instant now) {
-        return rule.getType() == AlertRuleType.METRIC_THRESHOLD
-                ? observeMetric(rule, now)
-                : observeHealthCheck(rule, now);
+        List<AlertRuleCondition> conditions = effectiveConditions(rule);
+        List<AlertEvent.ConditionObservation> evaluated = new ArrayList<>(conditions.size());
+        List<Double> values = new ArrayList<>(conditions.size());
+
+        for (AlertRuleCondition condition : conditions) {
+            Optional<ConditionObservation> observed = observeCondition(rule, condition, now);
+            if (observed.isEmpty()) {
+                // Incomplete evidence: do not change the rule's state this round.
+                return Optional.empty();
+            }
+            evaluated.add(new AlertEvent.ConditionObservation(
+                    condition.getTarget(),
+                    condition.getOperator(),
+                    condition.getThreshold(),
+                    observed.get().value(),
+                    observed.get().breaching()));
+            values.add(observed.get().value());
+        }
+
+        boolean breaching = combine(evaluated, rule.getLogicOperator());
+        return Optional.of(new Observation(breaching, representativeValue(evaluated, values), evaluated));
     }
 
-    private Optional<Observation> observeMetric(AlertRule rule, Instant now) {
+    private List<AlertRuleCondition> effectiveConditions(AlertRule rule) {
+        if (!rule.getConditions().isEmpty()) {
+            return rule.getConditions();
+        }
+        return List.of(AlertRuleCondition.builder()
+                .target(rule.getTarget())
+                .operator(rule.getCondition())
+                .threshold(rule.getThreshold())
+                .build());
+    }
+
+    private boolean combine(List<AlertEvent.ConditionObservation> observations, LogicOperator operator) {
+        if (operator == LogicOperator.OR) {
+            return observations.stream().anyMatch(AlertEvent.ConditionObservation::breaching);
+        }
+        return observations.stream().allMatch(AlertEvent.ConditionObservation::breaching);
+    }
+
+    /**
+     * Chooses the value reported on the event: the first breaching condition when any breaches,
+     * otherwise the first condition's value. Null values (health-check conditions) are skipped.
+     */
+    private Double representativeValue(List<AlertEvent.ConditionObservation> observations, List<Double> values) {
+        for (int i = 0; i < observations.size(); i++) {
+            if (observations.get(i).breaching() && values.get(i) != null) {
+                return values.get(i);
+            }
+        }
+        for (Double value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private Optional<ConditionObservation> observeCondition(AlertRule rule, AlertRuleCondition condition, Instant now) {
+        return rule.getType() == AlertRuleType.METRIC_THRESHOLD
+                ? observeMetricCondition(rule, condition, now)
+                : observeHealthCheckCondition(rule, condition, now);
+    }
+
+    private Optional<ConditionObservation> observeMetricCondition(
+            AlertRule rule, AlertRuleCondition condition, Instant now) {
         if (rule.getApplicationId() == null) {
             return Optional.empty();
         }
@@ -156,7 +226,7 @@ public class AlertEvaluationService {
         OptionalDouble latest;
         try {
             latest = metricQueryService.latestValue(
-                    rule.getOrganizationId(), rule.getApplicationId(), rule.getTarget(), since);
+                    rule.getOrganizationId(), rule.getApplicationId(), condition.getTarget(), since);
         } catch (RuntimeException ex) {
             // The application may have been deleted or become inaccessible; skip this round.
             log.debug("Metric lookup for rule {} failed: {}", rule.getId(), ex.getMessage());
@@ -166,13 +236,15 @@ public class AlertEvaluationService {
             return Optional.empty();
         }
         double value = latest.getAsDouble();
-        return Optional.of(new Observation(compare(value, rule.getCondition(), rule.getThreshold()), value));
+        return Optional.of(new ConditionObservation(
+                compare(value, condition.getOperator(), condition.getThreshold()), value));
     }
 
-    private Optional<Observation> observeHealthCheck(AlertRule rule, Instant now) {
+    private Optional<ConditionObservation> observeHealthCheckCondition(
+            AlertRule rule, AlertRuleCondition condition, Instant now) {
         long healthCheckId;
         try {
-            healthCheckId = Long.parseLong(rule.getTarget());
+            healthCheckId = Long.parseLong(condition.getTarget());
         } catch (NumberFormatException ex) {
             return Optional.empty();
         }
@@ -196,7 +268,7 @@ public class AlertEvaluationService {
         }
 
         boolean breaching = latest.getStatus() == HealthStatus.DOWN || latest.getStatus() == HealthStatus.TIMEOUT;
-        return Optional.of(new Observation(breaching, null));
+        return Optional.of(new ConditionObservation(breaching, null));
     }
 
     private boolean compare(double value, AlertCondition condition, double threshold) {
@@ -207,7 +279,7 @@ public class AlertEvaluationService {
         };
     }
 
-    private AlertEvent toEvent(AlertRule rule, AlertIncident incident, Double value, Instant now) {
+    private AlertEvent toEvent(AlertRule rule, AlertIncident incident, Observation observation, Instant now) {
         return new AlertEvent(
                 incident.getId(),
                 rule.getId(),
@@ -218,12 +290,25 @@ public class AlertEvaluationService {
                 rule.getTarget(),
                 rule.getCondition(),
                 rule.getThreshold(),
-                value,
+                observation.value(),
+                observation.conditions(),
+                rule.getLogicOperator(),
                 incident.getStatus(),
                 now);
     }
 
-    /** Result of observing a rule; {@code value} is null for health-check rules. */
-    private record Observation(boolean breaching, Double value) {
+    /**
+     * Result of observing a rule.
+     *
+     * @param value the representative observed metric value, or {@code null} for health-check rules
+     */
+    private record Observation(
+            boolean breaching,
+            Double value,
+            List<AlertEvent.ConditionObservation> conditions) {
+    }
+
+    /** Result of observing a single condition. */
+    private record ConditionObservation(boolean breaching, Double value) {
     }
 }

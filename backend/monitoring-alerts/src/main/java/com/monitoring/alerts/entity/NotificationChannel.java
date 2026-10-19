@@ -24,9 +24,12 @@ import java.time.Instant;
 /**
  * A user-owned destination for alert notifications.
  *
- * <p>{@code url} is validated for SSRF safety (https only, public host) before it is stored
- * and again right before each delivery ({@code SsrfGuard}). Ownership is enforced by
- * {@code organizationId} in the service layer.
+ * <p>The single destination field depends on {@link #type}: {@code url} for
+ * {@link NotificationChannelType#WEBHOOK}, {@code slackWebhookUrl} for
+ * {@link NotificationChannelType#SLACK} and {@code emailAddress} for
+ * {@link NotificationChannelType#EMAIL}. Webhook and Slack URLs are validated for SSRF safety
+ * (https only, public host) before they are stored and again right before each delivery
+ * ({@code SsrfGuard}). Ownership is enforced by {@code organizationId} in the service layer.
  */
 @Entity
 @Table(
@@ -41,6 +44,7 @@ import java.time.Instant;
 public class NotificationChannel {
 
     public static final int MAX_URL_LENGTH = 2048;
+    public static final int MAX_EMAIL_LENGTH = 320;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -54,8 +58,17 @@ public class NotificationChannel {
     @Column(nullable = false, length = 32)
     private NotificationChannelType type;
 
-    @Column(nullable = false, length = MAX_URL_LENGTH)
+    /** Destination for a {@link NotificationChannelType#WEBHOOK} channel; null otherwise. */
+    @Column(length = MAX_URL_LENGTH)
     private String url;
+
+    /** Destination for a {@link NotificationChannelType#SLACK} channel; null otherwise. */
+    @Column(name = "slack_webhook_url", length = MAX_URL_LENGTH)
+    private String slackWebhookUrl;
+
+    /** Destination for a {@link NotificationChannelType#EMAIL} channel; null otherwise. */
+    @Column(name = "email_address", length = MAX_EMAIL_LENGTH)
+    private String emailAddress;
 
     @Column(name = "is_active", nullable = false)
     private boolean active;

@@ -2,11 +2,13 @@ package com.monitoring.api;
 
 import com.monitoring.alerts.dto.response.AlertIncidentResponse;
 import com.monitoring.alerts.dto.response.AlertRuleResponse;
+import com.monitoring.alerts.dto.request.AlertConditionRequest;
 import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
 import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.IncidentStatus;
+import com.monitoring.alerts.entity.LogicOperator;
 import com.monitoring.alerts.entity.NotificationChannelType;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
 import com.monitoring.alerts.exception.InvalidWebhookUrlException;
@@ -210,5 +212,53 @@ class AlertsIntegrationTest {
                         .url("http://8.8.8.8/hook")
                         .build()));
         assertEquals(1, channelRepository.count());
+    }
+
+    @Test
+    void compoundConditionsArePersistedAndEvaluated() {
+        Application application = createApplication(OWNER_ID, "web");
+        String memoryMetric = "system.memory.usage";
+        AlertRuleResponse rule = alertService.createRule(OWNER_ID, CreateAlertRuleRequest.builder()
+                .name("CPU or memory")
+                .applicationId(application.getId())
+                .type(AlertRuleType.METRIC_THRESHOLD)
+                .conditions(List.of(
+                        new AlertConditionRequest(METRIC, AlertCondition.GREATER_THAN, 90.0),
+                        new AlertConditionRequest(memoryMetric, AlertCondition.GREATER_THAN, 85.0)))
+                .logicOperator(LogicOperator.OR)
+                .durationMinutes(1)
+                .active(true)
+                .build());
+
+        assertEquals(2, rule.getConditions().size());
+        assertEquals(LogicOperator.OR, rule.getLogicOperator());
+
+        AlertRuleResponse reloaded = alertService.listRules(OWNER_ID).get(0);
+        assertEquals(2, reloaded.getConditions().size());
+        assertEquals(LogicOperator.OR, reloaded.getLogicOperator());
+
+        metricSampleRepository.save(MetricSample.builder()
+                .application(application).name(METRIC).value(95.0).timestamp(NOW).receivedAt(NOW).build());
+        metricSampleRepository.save(MetricSample.builder()
+                .application(application).name(memoryMetric).value(10.0).timestamp(NOW).receivedAt(NOW).build());
+
+        assertTrue(evaluationService.evaluate(rule.getId(), NOW).isEmpty());
+        var event = evaluationService.evaluate(rule.getId(), NOW.plusSeconds(61));
+
+        assertTrue(event.isPresent());
+        assertEquals(IncidentStatus.FIRING, event.get().status());
+        assertEquals(2, event.get().conditions().size());
+    }
+
+    @Test
+    void emailChannelIsPersisted() {
+        var created = alertService.createChannel(OWNER_ID, CreateNotificationChannelRequest.builder()
+                .type(NotificationChannelType.EMAIL)
+                .emailAddress("oncall@example.com")
+                .build());
+
+        assertEquals(NotificationChannelType.EMAIL, created.getType());
+        assertEquals("oncall@example.com", created.getEmailAddress());
+        assertEquals(1, alertService.listChannels(OWNER_ID).size());
     }
 }

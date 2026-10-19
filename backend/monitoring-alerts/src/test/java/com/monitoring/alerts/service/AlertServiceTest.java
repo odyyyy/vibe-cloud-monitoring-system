@@ -2,6 +2,7 @@ package com.monitoring.alerts.service;
 
 import com.monitoring.alerts.dto.response.AlertIncidentResponse;
 import com.monitoring.alerts.dto.response.AlertRuleResponse;
+import com.monitoring.alerts.dto.request.AlertConditionRequest;
 import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
 import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
 import com.monitoring.alerts.dto.response.NotificationChannelResponse;
@@ -11,6 +12,7 @@ import com.monitoring.alerts.entity.AlertIncident;
 import com.monitoring.alerts.entity.AlertRule;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.IncidentStatus;
+import com.monitoring.alerts.entity.LogicOperator;
 import com.monitoring.alerts.entity.NotificationChannel;
 import com.monitoring.alerts.entity.NotificationChannelType;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
@@ -53,6 +55,7 @@ class AlertServiceTest {
     private AlertIncidentRepository incidentRepository;
     private ApplicationService applicationService;
     private HealthCheckService healthCheckService;
+    private AlertNotificationDispatcher notificationDispatcher;
     private AlertService service;
 
     @BeforeEach
@@ -62,8 +65,9 @@ class AlertServiceTest {
         incidentRepository = Mockito.mock(AlertIncidentRepository.class);
         applicationService = Mockito.mock(ApplicationService.class);
         healthCheckService = Mockito.mock(HealthCheckService.class);
+        notificationDispatcher = Mockito.mock(AlertNotificationDispatcher.class);
         service = new AlertService(ruleRepository, channelRepository, incidentRepository,
-                applicationService, healthCheckService, new SsrfGuard());
+                applicationService, healthCheckService, new SsrfGuard(), notificationDispatcher);
         when(ruleRepository.save(any(AlertRule.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(channelRepository.save(any(NotificationChannel.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -247,5 +251,50 @@ class AlertServiceTest {
         verify(incidentRepository).findByOrganizationIdOrderByTriggeredAtDesc(
                 org.mockito.ArgumentMatchers.eq(OWNER_ID),
                 org.mockito.ArgumentMatchers.argThat(page -> page.getPageSize() == AlertService.MAX_INCIDENTS_LIMIT));
+    }
+
+    @Test
+    void createCompoundMetricRulePersistsConditions() {
+        when(applicationService.getOwnedApplication(APP_ID, OWNER_ID)).thenReturn(new Application());
+
+        CreateAlertRuleRequest request = CreateAlertRuleRequest.builder()
+                .name("CPU and memory")
+                .applicationId(APP_ID)
+                .type(AlertRuleType.METRIC_THRESHOLD)
+                .conditions(List.of(
+                        new AlertConditionRequest("system.cpu.usage", AlertCondition.GREATER_THAN, 90.0),
+                        new AlertConditionRequest("system.memory.usage", AlertCondition.GREATER_THAN, 85.0)))
+                .logicOperator(LogicOperator.OR)
+                .durationMinutes(5)
+                .active(true)
+                .build();
+
+        AlertRuleResponse response = service.createRule(OWNER_ID, request);
+
+        assertEquals(2, response.getConditions().size());
+        assertEquals(LogicOperator.OR, response.getLogicOperator());
+        // The legacy columns mirror the first condition for backward compatibility.
+        assertEquals("system.cpu.usage", response.getTarget());
+        assertEquals(90.0, response.getThreshold());
+    }
+
+    @Test
+    void createRuleWithTooManyConditionsIsRejected() {
+        when(applicationService.getOwnedApplication(APP_ID, OWNER_ID)).thenReturn(new Application());
+
+        List<AlertConditionRequest> conditions = new java.util.ArrayList<>();
+        for (int i = 0; i < AlertRule.MAX_CONDITIONS + 1; i++) {
+            conditions.add(new AlertConditionRequest("metric." + i, AlertCondition.GREATER_THAN, 1.0));
+        }
+        CreateAlertRuleRequest request = CreateAlertRuleRequest.builder()
+                .name("Too many")
+                .applicationId(APP_ID)
+                .type(AlertRuleType.METRIC_THRESHOLD)
+                .conditions(conditions)
+                .durationMinutes(5)
+                .build();
+
+        assertThrows(InvalidAlertRuleException.class, () -> service.createRule(OWNER_ID, request));
+        verify(ruleRepository, never()).save(any());
     }
 }

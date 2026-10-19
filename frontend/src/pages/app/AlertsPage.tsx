@@ -23,7 +23,7 @@ import { Button } from '../../components/ui/button'
 import { Skeleton } from '../../components/ui/skeleton'
 import { Switch } from '../../components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
-import { alertConditionSymbol, alertRuleTypeLabel } from '../../features/alerts/labels'
+import { alertConditionSymbol, alertRuleTypeLabel, logicOperatorLabel } from '../../features/alerts/labels'
 import { metricLabel } from '../../features/metrics/catalog'
 import { useCanManage } from '../../features/organizations/useCanManage'
 
@@ -186,7 +186,9 @@ export default function AlertsPage() {
                     <TableCell className="whitespace-nowrap">
                       {rule.type === 'HEALTH_CHECK'
                         ? 'Down or Timeout'
-                        : `${alertConditionSymbol(rule.condition)} ${rule.threshold}`}
+                        : rule.conditions.length > 1
+                          ? `${rule.conditions.length} conditions · ${logicOperatorLabel(rule.logicOperator)}`
+                          : `${alertConditionSymbol(rule.condition)} ${rule.threshold}`}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">{`${rule.durationMinutes} min`}</TableCell>
                     <TableCell>

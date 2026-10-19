@@ -4,8 +4,10 @@ import com.monitoring.alerts.event.AlertEvent;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertIncident;
 import com.monitoring.alerts.entity.AlertRule;
+import com.monitoring.alerts.entity.AlertRuleCondition;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.IncidentStatus;
+import com.monitoring.alerts.entity.LogicOperator;
 import com.monitoring.alerts.repository.AlertIncidentRepository;
 import com.monitoring.alerts.repository.AlertRuleRepository;
 import com.monitoring.collector.service.MetricQueryService;
@@ -283,5 +285,96 @@ class AlertEvaluationServiceTest {
 
         assertTrue(event.isPresent());
         assertEquals(IncidentStatus.FIRING, event.get().status());
+    }
+
+    private AlertRule compoundRule(LogicOperator operator) {
+        return AlertRule.builder()
+                .id(1L)
+                .organizationId(OWNER_ID)
+                .applicationId(APP_ID)
+                .name("CPU and memory")
+                .type(AlertRuleType.METRIC_THRESHOLD)
+                .target("cpu")
+                .condition(AlertCondition.GREATER_THAN)
+                .threshold(90.0)
+                .conditions(List.of(
+                        AlertRuleCondition.builder()
+                                .target("cpu").operator(AlertCondition.GREATER_THAN).threshold(90.0).build(),
+                        AlertRuleCondition.builder()
+                                .target("memory").operator(AlertCondition.GREATER_THAN).threshold(85.0).build()))
+                .logicOperator(operator)
+                .durationMinutes(1)
+                .active(true)
+                .build();
+    }
+
+    private void metricValue(String metric, double value) {
+        when(metricQueryService.latestValue(eq(OWNER_ID), eq(APP_ID), eq(metric), any(Instant.class)))
+                .thenReturn(OptionalDouble.of(value));
+    }
+
+    @Test
+    void compoundAndFiresWhenAllConditionsBreach() {
+        AlertRule rule = compoundRule(LogicOperator.AND);
+        rule.setBreachStartedAt(NOW.minusSeconds(61));
+        when(ruleRepository.findById(1L)).thenReturn(Optional.of(rule));
+        metricValue("cpu", 95.0);
+        metricValue("memory", 90.0);
+        noOpenIncident(1L);
+
+        Optional<AlertEvent> event = service.evaluate(1L, NOW);
+
+        assertTrue(event.isPresent());
+        assertEquals(IncidentStatus.FIRING, event.get().status());
+        assertEquals(2, event.get().conditions().size());
+        assertTrue(event.get().conditions().stream().allMatch(AlertEvent.ConditionObservation::breaching));
+    }
+
+    @Test
+    void compoundAndDoesNotFireWhenOnlyOneConditionBreaches() {
+        AlertRule rule = compoundRule(LogicOperator.AND);
+        rule.setBreachStartedAt(NOW.minusSeconds(120));
+        when(ruleRepository.findById(1L)).thenReturn(Optional.of(rule));
+        metricValue("cpu", 95.0);
+        metricValue("memory", 10.0);
+
+        Optional<AlertEvent> event = service.evaluate(1L, NOW);
+
+        assertTrue(event.isEmpty());
+        verify(incidentRepository, never()).save(any());
+        assertNull(rule.getBreachStartedAt());
+    }
+
+    @Test
+    void compoundOrFiresWhenAnyConditionBreaches() {
+        AlertRule rule = compoundRule(LogicOperator.OR);
+        rule.setBreachStartedAt(NOW.minusSeconds(61));
+        when(ruleRepository.findById(1L)).thenReturn(Optional.of(rule));
+        metricValue("cpu", 95.0);
+        metricValue("memory", 10.0);
+        noOpenIncident(1L);
+
+        Optional<AlertEvent> event = service.evaluate(1L, NOW);
+
+        assertTrue(event.isPresent());
+        assertEquals(IncidentStatus.FIRING, event.get().status());
+    }
+
+    @Test
+    void compoundAndWithMissingConditionLeavesStateUntouched() {
+        AlertRule rule = compoundRule(LogicOperator.AND);
+        Instant breachStartedAt = NOW.minusSeconds(120);
+        rule.setBreachStartedAt(breachStartedAt);
+        when(ruleRepository.findById(1L)).thenReturn(Optional.of(rule));
+        metricValue("cpu", 95.0);
+        when(metricQueryService.latestValue(eq(OWNER_ID), eq(APP_ID), eq("memory"), any(Instant.class)))
+                .thenReturn(OptionalDouble.empty());
+
+        Optional<AlertEvent> event = service.evaluate(1L, NOW);
+
+        assertTrue(event.isEmpty());
+        assertEquals(breachStartedAt, rule.getBreachStartedAt());
+        verify(ruleRepository, never()).save(any());
+        verify(incidentRepository, never()).save(any());
     }
 }

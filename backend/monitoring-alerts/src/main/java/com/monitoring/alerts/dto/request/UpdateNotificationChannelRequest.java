@@ -22,6 +22,12 @@ public class UpdateNotificationChannelRequest {
     @Size(min = 1, max = 2048, message = "url must be between 1 and 2048 characters")
     private String url;
 
+    @Size(min = 1, max = 2048, message = "slackWebhookUrl must be between 1 and 2048 characters")
+    private String slackWebhookUrl;
+
+    @Size(min = 1, max = 320, message = "emailAddress must be between 1 and 320 characters")
+    private String emailAddress;
+
     @JsonProperty("isActive")
     private Boolean active;
 }

@@ -21,6 +21,7 @@ import com.monitoring.dashboards.exception.WidgetNotFoundException;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
 import com.monitoring.alerts.exception.AlertRuleNotFoundException;
 import com.monitoring.alerts.exception.InvalidAlertRuleException;
+import com.monitoring.alerts.exception.InvalidNotificationChannelException;
 import com.monitoring.alerts.exception.InvalidWebhookUrlException;
 import com.monitoring.alerts.exception.NotificationChannelAccessDeniedException;
 import com.monitoring.alerts.exception.NotificationChannelNotFoundException;
@@ -130,8 +131,9 @@ public class ApiExceptionHandler {
                 .body(new ApiError(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
     }
 
-    /** Inconsistent alert rule payloads and blocked webhook URLs. */
-    @ExceptionHandler({InvalidAlertRuleException.class, InvalidWebhookUrlException.class})
+    /** Inconsistent alert rule payloads and blocked webhook/Slack/email destinations. */
+    @ExceptionHandler({InvalidAlertRuleException.class, InvalidWebhookUrlException.class,
+            InvalidNotificationChannelException.class})
     public ResponseEntity<ApiError> handleInvalidAlertRequest(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));

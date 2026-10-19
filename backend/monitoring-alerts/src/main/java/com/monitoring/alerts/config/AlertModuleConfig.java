@@ -36,6 +36,16 @@ public class AlertModuleConfig {
         return boundedExecutor("alert-webhook-", poolSize, queueCapacity);
     }
 
+    /**
+     * Dedicated pool for email delivery so a slow SMTP server cannot starve webhook/Slack sends.
+     */
+    @Bean(name = "alertEmailExecutor", destroyMethod = "shutdown")
+    public ExecutorService alertEmailExecutor(
+            @Value("${monitoring.alerts.email.pool-size:1}") int poolSize,
+            @Value("${monitoring.alerts.email.queue-capacity:100}") int queueCapacity) {
+        return boundedExecutor("alert-email-", poolSize, queueCapacity);
+    }
+
     private ExecutorService boundedExecutor(String threadPrefix, int poolSize, int queueCapacity) {
         int effectivePoolSize = Math.max(1, poolSize);
         int effectiveQueueCapacity = Math.max(1, queueCapacity);
