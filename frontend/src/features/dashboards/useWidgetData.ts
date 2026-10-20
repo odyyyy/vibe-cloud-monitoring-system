@@ -3,6 +3,7 @@ import type { LogLevel, LogsPageResponse } from '../../api/logs'
 import { getLogs } from '../../api/logs'
 import type { AggregatedMetricPoint } from '../../api/metrics'
 import { getMetricsQuery } from '../../api/metrics'
+import { getSharedWidgetLogs, getSharedWidgetMetrics } from '../../api/dashboards'
 import { resolvePresetRange } from '../metrics/timeRange'
 import type { LogTableConfig, MetricChartConfig } from './schemas'
 
@@ -21,6 +22,7 @@ export function useMetricChartWidget(
   widgetId: number,
   config: MetricChartConfig,
   refetchInterval: number,
+  shareToken?: string,
 ) {
   const { applicationId, metricName, aggregation, intervalMinutes, timeRangeHours } = config
 
@@ -34,9 +36,13 @@ export function useMetricChartWidget(
       aggregation,
       intervalMinutes,
       timeRangeHours,
+      shareToken ?? null,
     ] as const,
     queryFn: () => {
       const { from, to } = relativeRange(timeRangeHours)
+      if (shareToken) {
+        return getSharedWidgetMetrics(shareToken, widgetId, { from, to })
+      }
       return getMetricsQuery({ applicationId, metricName, from, to, aggregation, intervalMinutes })
     },
     refetchInterval,
@@ -44,13 +50,26 @@ export function useMetricChartWidget(
 }
 
 /** Data hook for a LOG_TABLE widget, mirroring {@link useMetricChartWidget}. */
-export function useLogTableWidget(widgetId: number, config: LogTableConfig, refetchInterval: number) {
+export function useLogTableWidget(
+  widgetId: number,
+  config: LogTableConfig,
+  refetchInterval: number,
+  shareToken?: string,
+) {
   const { applicationId, level, searchText, timeRangeHours } = config
 
   return useQuery<LogsPageResponse>({
-    queryKey: ['dashboard-widget', 'logs', widgetId, applicationId, level ?? null, searchText ?? null, timeRangeHours] as const,
+    queryKey: ['dashboard-widget', 'logs', widgetId, applicationId, level ?? null, searchText ?? null, timeRangeHours, shareToken ?? null] as const,
     queryFn: () => {
       const { from, to } = relativeRange(timeRangeHours)
+      if (shareToken) {
+        return getSharedWidgetLogs(shareToken, widgetId, {
+          from,
+          to,
+          page: 0,
+          size: WIDGET_LOGS_PAGE_SIZE,
+        })
+      }
       return getLogs({
         applicationId,
         level: level as LogLevel | undefined,

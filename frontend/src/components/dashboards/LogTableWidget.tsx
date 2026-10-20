@@ -9,10 +9,12 @@ interface LogTableWidgetProps {
   widgetId: number
   config: LogTableConfig
   refetchInterval: number
+  /** Share token of a public dashboard; the data is then read through the public endpoint. */
+  shareToken?: string
 }
 
-export function LogTableWidget({ widgetId, config, refetchInterval }: LogTableWidgetProps) {
-  const query = useLogTableWidget(widgetId, config, refetchInterval)
+export function LogTableWidget({ widgetId, config, refetchInterval, shareToken }: LogTableWidgetProps) {
+  const query = useLogTableWidget(widgetId, config, refetchInterval, shareToken)
   const [selectedLog, setSelectedLog] = useState<LogEvent | null>(null)
 
   // The widget always queries a window relative to "now", so spell out the window in the

@@ -28,6 +28,12 @@
             <artifactId>monitoring-auth</artifactId>
         </dependency>
 
+        <!-- Metric and log queries used by the public shared-dashboard endpoints. -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-collector</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

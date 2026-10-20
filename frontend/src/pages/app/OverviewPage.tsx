@@ -1,6 +1,6 @@
 import { useMemo, useState, type DragEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { LayoutGrid } from 'lucide-react'
+import { LayoutGrid, Share2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
 import type { Dashboard } from '../../api/dashboards'
 import { useDashboardsQuery } from '../../api/dashboards'
@@ -11,6 +11,22 @@ import { Skeleton } from '../../components/ui/skeleton'
 import { DEFAULT_POLLING_INTERVAL_MS } from '../../features/dashboards/polling'
 import { useDashboardOrder } from '../../features/dashboards/useDashboardOrder'
 import { useAuthStore } from '../../store/authStore'
+import { toast } from 'sonner'
+import { copyText } from '../../lib/clipboard'
+import {
+  useGenerateShareTokenMutation,
+  useRevokeShareTokenMutation,
+} from '../../api/dashboards'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog'
+import { Input } from '../../components/ui/input'
+import { Label } from '../../components/ui/label'
 
 export default function OverviewPage() {
   const user = useAuthStore((state) => state.user)
@@ -29,6 +45,18 @@ export default function OverviewPage() {
 
   const [draggingId, setDraggingId] = useState<number | null>(null)
 
+  // Share dialog state
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareDashboard, setShareDashboard] = useState<Dashboard | null>(null)
+
+  const generateShareToken = useGenerateShareTokenMutation()
+  const revokeShareToken = useRevokeShareTokenMutation()
+
+  const handleShareClick = (dashboard: Dashboard) => {
+    setShareDashboard(dashboard)
+    setShareOpen(true)
+  }
+
   const handleDragOver = (event: DragEvent<HTMLElement>) => {
     if (draggingId !== null) {
       event.preventDefault()
@@ -43,8 +71,9 @@ export default function OverviewPage() {
   }
 
   return (
-    <section className="space-y-8">
-      <header className="space-y-2">
+    <>
+      <section className="space-y-8">
+        <header className="space-y-2">
         <p className="section-tag">Overview</p>
         <h1 className="font-display text-2xl font-semibold text-slate-100">
           Welcome back{user?.username ? `, ${user.username}` : ''}
@@ -107,11 +136,98 @@ export default function OverviewPage() {
                 onDrop={() => handleDrop(index)}
                 onMoveUp={() => moveBy(dashboard.id, -1)}
                 onMoveDown={() => moveBy(dashboard.id, 1)}
+                onShareClick={handleShareClick}
               />
             ))}
           </div>
         )}
       </div>
     </section>
+
+      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share dashboard</DialogTitle>
+            <DialogDescription>
+              Generate a secure, read-only link that anyone can use to view this dashboard without an account.
+            </DialogDescription>
+          </DialogHeader>
+          {shareDashboard?.shareToken ? (
+            <>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="share-url" className="text-sm text-slate-300">
+                    Public URL
+                  </Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      id="share-url"
+                      value={`${window.location.origin}/share/${shareDashboard.shareToken}`}
+                      readOnly
+                      className="flex-1 bg-slate-900/50"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={async () => {
+                        const success = await copyText(`${window.location.origin}/share/${shareDashboard.shareToken}`)
+                        if (success) {
+                          toast.success('Link copied')
+                        } else {
+                          toast.error('Failed to copy link')
+                        }
+                      }}
+                      aria-label="Copy share link"
+                    >
+                      <Share2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Anyone with this link can view the dashboard. The link does not expire.
+                </p>
+              </div>
+              <DialogFooter className="flex justify-between">
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    if (!shareDashboard) {
+                      return
+                    }
+                    await revokeShareToken.mutateAsync(shareDashboard.id)
+                    toast.success('Share link revoked')
+                    setShareDashboard(null)
+                    setShareOpen(false)
+                  }}
+                  disabled={revokeShareToken.isPending}
+                >
+                  {revokeShareToken.isPending ? 'Revoking…' : 'Revoke access'}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-slate-300">This dashboard is not currently shared.</p>
+              <DialogFooter className="flex justify-end">
+                <Button
+                  onClick={async () => {
+                    if (!shareDashboard) {
+                      return
+                    }
+                    const updated = await generateShareToken.mutateAsync(shareDashboard.id)
+                    setShareDashboard(updated)
+                    toast.success('Share link created')
+                  }}
+                  disabled={generateShareToken.isPending}
+                >
+                  {generateShareToken.isPending ? 'Creating…' : 'Create share link'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

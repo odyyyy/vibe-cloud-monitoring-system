@@ -24,9 +24,11 @@ interface DashboardWidgetProps {
   refetchInterval: number
   onEdit: (widget: Widget) => void
   onDelete: (widget: Widget) => void
+  /** Share token of a public dashboard; the data is then read through the public endpoint. */
+  shareToken?: string
 }
 
-export function DashboardWidget({ widget, showActions, refetchInterval, onEdit, onDelete }: DashboardWidgetProps) {
+export function DashboardWidget({ widget, showActions, refetchInterval, onEdit, onDelete, shareToken }: DashboardWidgetProps) {
   const variableValues = useDashboardVariableValues()
   const parsed = useMemo(() => parseWidgetConfig(widget.type, widget.config), [widget.type, widget.config])
   // Resolve `${var}` placeholders before the widget runs its query; without a variables
@@ -95,9 +97,19 @@ export function DashboardWidget({ widget, showActions, refetchInterval, onEdit, 
               <p className="text-center text-sm text-red-300">{parsed.error}</p>
             </div>
           ) : resolved === null ? null : resolved.type === 'METRIC_CHART' ? (
-            <MetricChartWidget widgetId={widget.id} config={resolved.config} refetchInterval={refetchInterval} />
+            <MetricChartWidget
+              widgetId={widget.id}
+              config={resolved.config}
+              refetchInterval={refetchInterval}
+              shareToken={shareToken}
+            />
           ) : resolved.type === 'LOG_TABLE' ? (
-            <LogTableWidget widgetId={widget.id} config={resolved.config} refetchInterval={refetchInterval} />
+            <LogTableWidget
+              widgetId={widget.id}
+              config={resolved.config}
+              refetchInterval={refetchInterval}
+              shareToken={shareToken}
+            />
           ) : (
             <StatusWidget applicationId={resolved.config.applicationId} />
           )}

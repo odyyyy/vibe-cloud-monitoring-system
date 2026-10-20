@@ -16,11 +16,17 @@ import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
 import com.monitoring.dashboards.exception.DashboardNotFoundException;
 import com.monitoring.dashboards.exception.InvalidDashboardVariableException;
 import com.monitoring.dashboards.exception.InvalidWidgetConfigException;
+import com.monitoring.dashboards.exception.InvalidSharedQueryException;
+import com.monitoring.dashboards.exception.SharedDashboardNotFoundException;
 import com.monitoring.dashboards.exception.WidgetLimitExceededException;
 import com.monitoring.dashboards.exception.WidgetNotFoundException;
+import com.monitoring.alerts.exception.AlertIncidentAccessDeniedException;
+import com.monitoring.alerts.exception.AlertIncidentNotFoundException;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
 import com.monitoring.alerts.exception.AlertRuleNotFoundException;
 import com.monitoring.alerts.exception.InvalidAlertRuleException;
+import com.monitoring.alerts.exception.InvalidIncidentNoteException;
+import com.monitoring.alerts.exception.InvalidIncidentStateException;
 import com.monitoring.alerts.exception.InvalidNotificationChannelException;
 import com.monitoring.alerts.exception.InvalidWebhookUrlException;
 import com.monitoring.alerts.exception.NotificationChannelAccessDeniedException;
@@ -88,6 +94,20 @@ public class ApiExceptionHandler {
                 .body(new ApiError(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
     }
 
+    /** Unknown, revoked or mismatched public share link. */
+    @ExceptionHandler(SharedDashboardNotFoundException.class)
+    public ResponseEntity<ApiError> handleSharedDashboardNotFound(SharedDashboardNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
+    }
+
+    /** Invalid time range or widget configuration in a public shared-dashboard query. */
+    @ExceptionHandler(InvalidSharedQueryException.class)
+    public ResponseEntity<ApiError> handleInvalidSharedQuery(InvalidSharedQueryException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
+    }
+
     @ExceptionHandler(InvalidWidgetConfigException.class)
     public ResponseEntity<ApiError> handleInvalidWidgetConfig(InvalidWidgetConfigException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -119,13 +139,15 @@ public class ApiExceptionHandler {
                 .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
     }
 
-    @ExceptionHandler({AlertRuleNotFoundException.class, NotificationChannelNotFoundException.class})
+    @ExceptionHandler({AlertRuleNotFoundException.class, NotificationChannelNotFoundException.class,
+            AlertIncidentNotFoundException.class})
     public ResponseEntity<ApiError> handleAlertNotFound(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
     }
 
-    @ExceptionHandler({AlertRuleAccessDeniedException.class, NotificationChannelAccessDeniedException.class})
+    @ExceptionHandler({AlertRuleAccessDeniedException.class, NotificationChannelAccessDeniedException.class,
+            AlertIncidentAccessDeniedException.class})
     public ResponseEntity<ApiError> handleAlertAccessDenied(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(new ApiError(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
@@ -133,10 +155,17 @@ public class ApiExceptionHandler {
 
     /** Inconsistent alert rule payloads and blocked webhook/Slack/email destinations. */
     @ExceptionHandler({InvalidAlertRuleException.class, InvalidWebhookUrlException.class,
-            InvalidNotificationChannelException.class})
+            InvalidNotificationChannelException.class, InvalidIncidentNoteException.class})
     public ResponseEntity<ApiError> handleInvalidAlertRequest(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
+    }
+
+    /** Invalid lifecycle transitions, for example resolving an already resolved incident. */
+    @ExceptionHandler(InvalidIncidentStateException.class)
+    public ResponseEntity<ApiError> handleInvalidIncidentState(InvalidIncidentStateException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(HttpStatus.CONFLICT.value(), ex.getMessage()));
     }
 
     /**

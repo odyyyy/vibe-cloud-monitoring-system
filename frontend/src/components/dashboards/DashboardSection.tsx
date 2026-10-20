@@ -1,6 +1,6 @@
 import type { DragEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowDown, ArrowUp, ExternalLink, GripVertical, LayoutGrid } from 'lucide-react'
+import { ArrowDown, ArrowUp, ExternalLink, GripVertical, LayoutGrid, Share2 } from 'lucide-react'
 import type { Dashboard } from '../../api/dashboards'
 import { widgetToLayout } from '../../features/dashboards/layout'
 import { cn } from '../../lib/utils'
@@ -21,6 +21,7 @@ interface DashboardSectionProps {
   onDrop: () => void
   onMoveUp: () => void
   onMoveDown: () => void
+  onShareClick: (dashboard: Dashboard) => void
 }
 
 export function DashboardSection({
@@ -35,6 +36,7 @@ export function DashboardSection({
   onDrop,
   onMoveUp,
   onMoveDown,
+  onShareClick,
 }: DashboardSectionProps) {
   const items: DashboardGridItem[] = dashboard.widgets.map((widget) => ({
     id: widget.id,
@@ -111,6 +113,16 @@ export function DashboardSection({
             <Link to={`/app/dashboards/${dashboard.id}`}>
               <ExternalLink className="h-4 w-4" />
             </Link>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            aria-label={`Share ${dashboard.name}`}
+            onClick={() => onShareClick(dashboard)}
+          >
+            <Share2 className="h-4 w-4" />
           </Button>
         </div>
       </header>

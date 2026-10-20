@@ -22,6 +22,8 @@ public class DashboardResponse {
     private Instant createdAt;
     private List<DashboardVariable> variables;
     private List<WidgetResponse> widgets;
+    private String shareToken;
+    private Boolean isPublic;
 
     public static DashboardResponse fromEntity(Dashboard dashboard, List<DashboardVariable> variables) {
         return DashboardResponse.builder()
@@ -31,6 +33,25 @@ public class DashboardResponse {
                 .createdAt(dashboard.getCreatedAt())
                 .variables(variables)
                 .widgets(dashboard.getWidgets().stream().map(WidgetResponse::fromEntity).toList())
+                .shareToken(dashboard.getShareToken())
+                .isPublic(dashboard.isPublic())
+                .build();
+    }
+
+    /**
+     * Creates a public response without sensitive fields like organizationId.
+     * Used for the public share endpoint.
+     */
+    public static DashboardResponse fromEntityPublic(Dashboard dashboard, List<DashboardVariable> variables) {
+        return DashboardResponse.builder()
+                .id(dashboard.getId())
+                .name(dashboard.getName())
+                .organizationId(null) // Not exposed in public view
+                .createdAt(dashboard.getCreatedAt())
+                .variables(variables)
+                .widgets(dashboard.getWidgets().stream().map(WidgetResponse::fromEntity).toList())
+                .shareToken(dashboard.getShareToken())
+                .isPublic(dashboard.isPublic())
                 .build();
     }
 }

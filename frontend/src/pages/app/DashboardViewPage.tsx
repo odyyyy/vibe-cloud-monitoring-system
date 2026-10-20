@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Settings2 } from 'lucide-react'
+import { ArrowLeft, Plus, Settings2, Share2, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Layout } from 'react-grid-layout'
 import { ApiError } from '../../api/client'
@@ -12,6 +12,8 @@ import {
   useAddWidgetMutation,
   useDashboardQuery,
   useDeleteWidgetMutation,
+  useGenerateShareTokenMutation,
+  useRevokeShareTokenMutation,
   useUpdateWidgetMutation,
 } from '../../api/dashboards'
 import { DashboardGrid, type DashboardGridItem } from '../../components/dashboards/DashboardGrid'
@@ -33,6 +35,16 @@ import { Button } from '../../components/ui/button'
 import { Label } from '../../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import { Skeleton } from '../../components/ui/skeleton'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '../../components/ui/dialog'
+import { Input } from '../../components/ui/input'
 import { DashboardVariablesProvider } from '../../features/dashboards/DashboardVariablesContext'
 import { widgetToLayout, resolveGridLayout } from '../../features/dashboards/layout'
 import {
@@ -46,6 +58,7 @@ import {
   MAX_WIDGETS_PER_DASHBOARD,
 } from '../../features/dashboards/schemas'
 import { useCanManage } from '../../features/organizations/useCanManage'
+import { copyText } from '../../lib/clipboard'
 
 export default function DashboardViewPage() {
   const canManage = useCanManage()
@@ -58,6 +71,8 @@ export default function DashboardViewPage() {
   const addWidget = useAddWidgetMutation(dashboardId ?? 0)
   const updateWidgetMutation = useUpdateWidgetMutation(dashboardId ?? 0)
   const deleteWidget = useDeleteWidgetMutation(dashboardId ?? 0)
+  const generateShareToken = useGenerateShareTokenMutation()
+  const revokeShareToken = useRevokeShareTokenMutation()
 
   const [pollInterval, setPollInterval] = useState(DEFAULT_POLLING_INTERVAL_MS)
   const [layout, setLayout] = useState<Layout[] | null>(null)
@@ -66,6 +81,7 @@ export default function DashboardViewPage() {
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Widget | null>(null)
   const [variablesOpen, setVariablesOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
 
   const serverLayout = useMemo<Layout[]>(() => (dashboard?.widgets ?? []).map(widgetToLayout), [dashboard])
   const serverSignature = useMemo(() => JSON.stringify(serverLayout), [serverLayout])
@@ -283,6 +299,10 @@ export default function DashboardViewPage() {
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 Add widget
               </Button>
+              <Button type="button" variant="secondary" onClick={() => setShareOpen(true)}>
+                <Share2 className="h-4 w-4" aria-hidden="true" />
+                Share
+              </Button>
             </>
           ) : null}
         </div>
@@ -361,6 +381,83 @@ export default function DashboardViewPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share dashboard</DialogTitle>
+            <DialogDescription>
+              Generate a secure, read-only link that anyone can use to view this dashboard without an account.
+            </DialogDescription>
+          </DialogHeader>
+          {dashboard.shareToken ? (
+            <>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="share-url" className="text-sm text-slate-300">
+                    Public URL
+                  </Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      id="share-url"
+                      value={`${window.location.origin}/share/${dashboard.shareToken}`}
+                      readOnly
+                      className="flex-1 bg-slate-900/50"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={async () => {
+                        const success = await copyText(`${window.location.origin}/share/${dashboard.shareToken}`)
+                        if (success) {
+                          toast.success('Link copied')
+                        } else {
+                          toast.error('Failed to copy link')
+                        }
+                      }}
+                      aria-label="Copy share link"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Anyone with this link can view the dashboard. The link does not expire.
+                </p>
+              </div>
+              <DialogFooter className="flex justify-between">
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    await revokeShareToken.mutateAsync(dashboard.id)
+                    toast.success('Share link revoked')
+                    setShareOpen(false)
+                  }}
+                  disabled={revokeShareToken.isPending}
+                >
+                  {revokeShareToken.isPending ? 'Revoking…' : 'Revoke access'}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-slate-300">This dashboard is not currently shared.</p>
+              <DialogFooter className="flex justify-end">
+                <Button
+                  onClick={async () => {
+                    await generateShareToken.mutateAsync(dashboard.id)
+                    toast.success('Share link created')
+                  }}
+                  disabled={generateShareToken.isPending}
+                >
+                  {generateShareToken.isPending ? 'Creating…' : 'Create share link'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

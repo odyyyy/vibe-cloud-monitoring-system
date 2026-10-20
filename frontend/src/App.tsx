@@ -22,6 +22,7 @@ import LogExplorerPage from './pages/app/LogExplorerPage'
 import MetricsExplorerPage from './pages/app/MetricsExplorerPage'
 import OverviewPage from './pages/app/OverviewPage'
 import OrganizationSettingsPage from './pages/app/OrganizationSettingsPage'
+import PublicDashboardViewPage from './pages/app/PublicDashboardViewPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import SettingsPage from './pages/app/SettingsPage'
 import UsagePage from './pages/app/UsagePage'
@@ -70,6 +71,10 @@ const router = createBrowserRouter([
   {
     path: '/confirm-email-change',
     element: <ConfirmEmailChangePage />,
+  },
+  {
+    path: '/share/:token',
+    element: <PublicDashboardViewPage />,
   },
   {
     path: '/app',

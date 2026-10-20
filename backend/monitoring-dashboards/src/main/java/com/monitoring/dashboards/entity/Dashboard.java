@@ -22,6 +22,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * A user-owned dashboard: a named collection of widgets with a saved layout.
@@ -32,7 +33,10 @@ import java.util.List;
 @Entity
 @Table(
         name = "dashboards",
-        indexes = @Index(name = "idx_dashboards_organization_id", columnList = "organization_id")
+        indexes = {
+                @Index(name = "idx_dashboards_organization_id", columnList = "organization_id"),
+                @Index(name = "idx_dashboards_share_token", columnList = "share_token", unique = true)
+        }
 )
 @Getter
 @Setter
@@ -58,6 +62,13 @@ public class Dashboard {
     @Column(name = "variables", columnDefinition = "TEXT")
     private String variables;
 
+    @Column(name = "share_token", length = 36, unique = true)
+    private String shareToken;
+
+    @Column(name = "is_public", nullable = false)
+    @Builder.Default
+    private boolean isPublic = false;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -70,4 +81,20 @@ public class Dashboard {
     @OrderBy("positionY ASC, positionX ASC, id ASC")
     @Builder.Default
     private List<Widget> widgets = new ArrayList<>();
+
+    /**
+     * Generates a new cryptographically secure share token (UUID v4).
+     */
+    public void generateShareToken() {
+        this.shareToken = UUID.randomUUID().toString();
+        this.isPublic = true;
+    }
+
+    /**
+     * Revokes the share token, making the dashboard private again.
+     */
+    public void revokeShareToken() {
+        this.shareToken = null;
+        this.isPublic = false;
+    }
 }

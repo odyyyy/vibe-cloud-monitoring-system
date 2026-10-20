@@ -11,7 +11,11 @@ import com.monitoring.dashboards.entity.WidgetType;
 import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
 import com.monitoring.dashboards.exception.DashboardNotFoundException;
 import com.monitoring.dashboards.exception.InvalidWidgetConfigException;
+import com.monitoring.dashboards.exception.SharedDashboardNotFoundException;
 import com.monitoring.dashboards.service.DashboardService;
+import com.monitoring.dashboards.service.SharedDashboardDataService;
+import com.monitoring.collector.dto.response.AggregatedMetricResponse;
+import com.monitoring.common.dto.response.PageResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +36,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -50,15 +55,17 @@ class DashboardControllerTest {
     private static final Long USER_ID = 42L;
 
     private DashboardService dashboardService;
+    private SharedDashboardDataService sharedDashboardDataService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         dashboardService = Mockito.mock(DashboardService.class);
+        sharedDashboardDataService = Mockito.mock(SharedDashboardDataService.class);
         CurrentTenantService tenantService = Mockito.mock(CurrentTenantService.class);
         when(tenantService.requireOrganizationId()).thenReturn(USER_ID);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new DashboardController(dashboardService, tenantService))
+                .standaloneSetup(new DashboardController(dashboardService, sharedDashboardDataService, tenantService))
                 .setControllerAdvice(new TestAdvice())
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
@@ -251,6 +258,122 @@ class DashboardControllerTest {
         verify(dashboardService).deleteWidget(USER_ID, 5L, 3L);
     }
 
+    @Test
+    void generateShareToken_returnsDashboardWithToken() throws Exception {
+        String token = UUID.randomUUID().toString();
+        DashboardResponse sharedDashboard = DashboardResponse.builder()
+                .id(5L)
+                .name("Prod")
+                .organizationId(USER_ID)
+                .createdAt(Instant.parse("2026-10-09T10:00:00Z"))
+                .widgets(List.of())
+                .shareToken(token)
+                .isPublic(true)
+                .build();
+        when(dashboardService.generateShareToken(USER_ID, 5L)).thenReturn(sharedDashboard);
+
+        mockMvc.perform(post("/api/v1/dashboards/5/share"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shareToken").value(token))
+                .andExpect(jsonPath("$.isPublic").value(true));
+        verify(dashboardService).generateShareToken(USER_ID, 5L);
+    }
+
+    @Test
+    void revokeShareToken_returnsDashboardWithoutToken() throws Exception {
+        DashboardResponse privateDashboard = DashboardResponse.builder()
+                .id(5L)
+                .name("Prod")
+                .organizationId(USER_ID)
+                .createdAt(Instant.parse("2026-10-09T10:00:00Z"))
+                .widgets(List.of())
+                .shareToken(null)
+                .isPublic(false)
+                .build();
+        when(dashboardService.revokeShareToken(USER_ID, 5L)).thenReturn(privateDashboard);
+
+        mockMvc.perform(delete("/api/v1/dashboards/5/share"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.shareToken").doesNotExist())
+                .andExpect(jsonPath("$.isPublic").value(false));
+        verify(dashboardService).revokeShareToken(USER_ID, 5L);
+    }
+
+    @Test
+    void getDashboardByShareToken_validToken_returnsDashboard() throws Exception {
+        String token = UUID.randomUUID().toString();
+        DashboardResponse publicDashboard = DashboardResponse.builder()
+                .id(5L)
+                .name("Prod")
+                .organizationId(null)
+                .createdAt(Instant.parse("2026-10-09T10:00:00Z"))
+                .widgets(List.of())
+                .build();
+        when(dashboardService.getDashboardByShareToken(token)).thenReturn(publicDashboard);
+
+        mockMvc.perform(get("/api/v1/dashboards/share/{token}", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(5))
+                .andExpect(jsonPath("$.name").value("Prod"))
+                .andExpect(jsonPath("$.organizationId").doesNotExist());
+        verify(dashboardService).getDashboardByShareToken(token);
+    }
+
+    @Test
+    void getDashboardByShareToken_invalidToken_returnsNotFound() throws Exception {
+        when(dashboardService.getDashboardByShareToken("invalid-token")).thenReturn(null);
+
+        mockMvc.perform(get("/api/v1/dashboards/share/invalid-token"))
+                .andExpect(status().isNotFound());
+        verify(dashboardService).getDashboardByShareToken("invalid-token");
+    }
+
+    @Test
+    void getSharedWidgetMetrics_returnsSeries() throws Exception {
+        String token = UUID.randomUUID().toString();
+        Instant from = Instant.parse("2026-10-09T09:00:00Z");
+        Instant to = Instant.parse("2026-10-09T10:00:00Z");
+        when(sharedDashboardDataService.queryWidgetMetrics(token, 3L, from, to))
+                .thenReturn(List.of(AggregatedMetricResponse.builder()
+                        .timestamp(Instant.parse("2026-10-09T09:30:00Z"))
+                        .value(42.5)
+                        .build()));
+
+        mockMvc.perform(get("/api/v1/dashboards/share/{token}/widgets/3/metrics", token)
+                        .param("from", from.toString())
+                        .param("to", to.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].value").value(42.5));
+    }
+
+    @Test
+    void getSharedWidgetLogs_returnsPage() throws Exception {
+        String token = UUID.randomUUID().toString();
+        Instant from = Instant.parse("2026-10-09T09:00:00Z");
+        Instant to = Instant.parse("2026-10-09T10:00:00Z");
+        when(sharedDashboardDataService.queryWidgetLogs(token, 3L, from, to, 0, 10))
+                .thenReturn(new PageResponse<>(List.of(), 0, 0, 0, 10));
+
+        mockMvc.perform(get("/api/v1/dashboards/share/{token}/widgets/3/logs", token)
+                        .param("from", from.toString())
+                        .param("to", to.toString())
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void getSharedWidgetMetrics_unknownToken_returnsNotFound() throws Exception {
+        String token = UUID.randomUUID().toString();
+        when(sharedDashboardDataService.queryWidgetMetrics(any(), any(), any(), any()))
+                .thenThrow(new SharedDashboardNotFoundException());
+
+        mockMvc.perform(get("/api/v1/dashboards/share/{token}/widgets/3/metrics", token)
+                        .param("from", "2026-10-09T09:00:00Z")
+                        .param("to", "2026-10-09T10:00:00Z"))
+                .andExpect(status().isNotFound());
+    }
+
     @RestControllerAdvice
     static class TestAdvice {
 
@@ -268,6 +391,12 @@ class DashboardControllerTest {
 
         @ExceptionHandler({DashboardNotFoundException.class})
         ResponseEntity<Map<String, Object>> handleNotFound(RuntimeException ex) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("status", HttpStatus.NOT_FOUND.value(), "message", ex.getMessage()));
+        }
+
+        @ExceptionHandler(SharedDashboardNotFoundException.class)
+        ResponseEntity<Map<String, Object>> handleSharedNotFound(SharedDashboardNotFoundException ex) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("status", HttpStatus.NOT_FOUND.value(), "message", ex.getMessage()));
         }

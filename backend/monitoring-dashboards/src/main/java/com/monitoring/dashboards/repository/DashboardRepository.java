@@ -24,4 +24,11 @@ public interface DashboardRepository extends JpaRepository<Dashboard, Long> {
 
     @Query("SELECT d FROM Dashboard d LEFT JOIN FETCH d.widgets WHERE d.id = :id")
     Optional<Dashboard> findWithWidgetsById(@Param("id") Long id);
+
+    /**
+     * Finds a dashboard by its public share token with widgets eagerly fetched.
+     * Only returns dashboards that are publicly shared (isPublic = true).
+     */
+    @Query("SELECT d FROM Dashboard d LEFT JOIN FETCH d.widgets WHERE d.shareToken = :token AND d.isPublic = true")
+    Optional<Dashboard> findByShareToken(@Param("token") String token);
 }

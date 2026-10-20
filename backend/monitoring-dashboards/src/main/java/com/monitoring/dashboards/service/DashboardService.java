@@ -147,6 +147,43 @@ public class DashboardService {
         widgetRepository.delete(getWidget(widgetId, dashboardId));
     }
 
+    /**
+     * Generates or regenerates a public share token for the dashboard.
+     * Only ADMIN/OWNER of the organization can call this.
+     */
+    @Transactional
+    public DashboardResponse generateShareToken(Long organizationId, Long dashboardId) {
+        Dashboard dashboard = getOwnedDashboard(organizationId, dashboardId);
+        dashboard.generateShareToken();
+        return toResponse(dashboardRepository.save(dashboard));
+    }
+
+    /**
+     * Revokes the public share token for the dashboard.
+     * Only ADMIN/OWNER of the organization can call this.
+     */
+    @Transactional
+    public DashboardResponse revokeShareToken(Long organizationId, Long dashboardId) {
+        Dashboard dashboard = getOwnedDashboard(organizationId, dashboardId);
+        dashboard.revokeShareToken();
+        return toResponse(dashboardRepository.save(dashboard));
+    }
+
+    /**
+     * Retrieves a dashboard by its public share token.
+     * This bypasses organization scoping - access is controlled by the unguessable token.
+     * Returns null if token is invalid, dashboard is not public, or dashboard doesn't exist.
+     */
+    @Transactional(readOnly = true)
+    public DashboardResponse getDashboardByShareToken(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        return dashboardRepository.findByShareToken(token)
+                .map(this::toPublicResponse)
+                .orElse(null);
+    }
+
     private Widget getWidget(Long widgetId, Long dashboardId) {
         return widgetRepository.findByIdAndDashboard_Id(widgetId, dashboardId)
                 .orElseThrow(() -> new WidgetNotFoundException(widgetId));
@@ -163,6 +200,14 @@ public class DashboardService {
 
     private DashboardResponse toResponse(Dashboard dashboard) {
         return DashboardResponse.fromEntity(dashboard, parseVariables(dashboard.getVariables()));
+    }
+
+    /**
+     * Creates a public response without sensitive fields like organizationId.
+     * Used for the public share endpoint.
+     */
+    private DashboardResponse toPublicResponse(Dashboard dashboard) {
+        return DashboardResponse.fromEntityPublic(dashboard, parseVariables(dashboard.getVariables()));
     }
 
     /** Parses stored definitions; a corrupted document degrades to no variables instead of failing reads. */
