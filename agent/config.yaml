@@ -51,3 +51,16 @@ kubernetes:
 metrics:
   network:
     interfaces: []
+
+# Local custom metrics receiver (optional). It binds strictly to 127.0.0.1 so
+# only applications on the same host/container network namespace can send
+# metrics. Protocol is "statsd" (UDP) or "http" (POST /metrics).
+#
+#   receiver:
+#     enabled: true
+#     protocol: statsd              # statsd (UDP) or http
+#     port: 8125                    # default: 8125 for statsd, 8080 for http
+receiver:
+  enabled: false
+  protocol: statsd
+  port: 8125

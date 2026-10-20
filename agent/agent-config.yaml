@@ -40,3 +40,11 @@ kubernetes:
 metrics:
   network:
     interfaces: []
+
+# Local custom metrics receiver. Disabled by default; binds to 127.0.0.1 only.
+# When running the agent in a container, the application must share the agent's
+# network namespace (for example, a Kubernetes sidecar) to reach this port.
+receiver:
+  enabled: false
+  protocol: statsd
+  port: 8125

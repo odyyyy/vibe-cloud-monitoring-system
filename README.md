@@ -149,7 +149,7 @@ cloud-monitoring/
 │   └── package.json
 ├── agent/                       # Go-агент
 │   ├── cmd/agent/               # entry point (package main)
-│   ├── internal/                # config, transport, metrics, logs
+│   ├── internal/                # config, transport, metrics, logs, receiver
 │   ├── config.yaml              # пример конфигурации (плейсхолдеры)
 │   └── Dockerfile
 ├── compose.yaml                 # mysql + app + frontend
@@ -344,6 +344,9 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `config.yaml` / `AGENT_KUBERNETES_ENABLED` | `kubernetes.enabled` | Включить автообнаружение логов подов (по умолчанию `false`) |
 | `config.yaml` / `AGENT_KUBERNETES_NAMESPACE` | `kubernetes.namespace` | Namespace или `all`; пусто — все namespace |
 | `config.yaml` / `AGENT_KUBERNETES_LABEL_SELECTOR` | `kubernetes.label_selector` | Селектор подов, например `app=api` |
+| `config.yaml` / `AGENT_RECEIVER_ENABLED` | `receiver.enabled` | Включить локальный приём custom-метрик (по умолчанию `false`) |
+| `config.yaml` / `AGENT_RECEIVER_PROTOCOL` | `receiver.protocol` | `statsd` (UDP) или `http` |
+| `config.yaml` / `AGENT_RECEIVER_PORT` | `receiver.port` | Порт receiver'а (по умолчанию 8125 для StatsD, 8080 для HTTP) |
 | env `NODE_NAME` | — | Ограничить discovery подами этого узла; DaemonSet задаёт автоматически |
 
 ---
@@ -506,6 +509,94 @@ backend. API-ключ в ConfigMap — только placeholder; фактиче�
   `Role`/`RoleBinding` в этом namespace.
 - Вне кластера (локально) агент использует `KUBECONFIG` или `~/.kube/config`.
 
+### 6. Локальный приём custom-метрик (StatsD / HTTP)
+
+Агент может принимать бизнес-метрики от приложения (например, `orders_processed`,
+`login_failures`, `queue_depth`) и отправлять их в облако вместе с host-метриками
+в рамках обычного интервала сбора. Receiver выключен по умолчанию:
+
+```yaml
+receiver:
+  enabled: true
+  protocol: statsd   # statsd (UDP) или http
+  port: 8125         # по умолчанию 8125 для statsd, 8080 для http
+```
+
+```bash
+# Включение через переменные окружения (port зависит от protocol)
+AGENT_RECEIVER_ENABLED=true AGENT_RECEIVER_PROTOCOL=statsd AGENT_RECEIVER_PORT=8125 \
+  ./agent -config config.yaml
+```
+
+Receiver **всегда** слушает только `127.0.0.1` — порт недоступен из внешней сети.
+Все полученные точки получают теги `host` (hostname агента), `version` (версия
+агента) и `source=custom`. `applicationId` определяется backend'ом по API-ключу,
+поэтому в payload его передавать не нужно.
+
+#### StatsD (UDP)
+
+Поддерживается стандартный формат
+`metric.name:value|type|@sample_rate|#tag1,tag2`:
+
+```bash
+# counter: значения суммируются за интервал сбора
+printf 'orders_processed:1|c\n' | nc -u -w0 127.0.0.1 8125
+
+# gauge: сохраняется последнее значение за интервал
+printf 'queue.depth:42|g\n' | nc -u -w0 127.0.0.1 8125
+
+# timer/histogram: raw-значения пересылаются как есть
+printf 'request.latency:12.5|ms|#env:prod\n' | nc -u -w0 127.0.0.1 8125
+```
+
+Типы: `c` — counter (учитывается sample rate), `g` — gauge (абсолютное значение),
+`ms`/`h` — timer/histogram. Теги задаются как `#env:prod,region:eu`; допустимы и
+теги без значения (`#env`). Некорректные строки пропускаются, агент не падает.
+
+Пример на Python:
+
+```python
+import socket
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.sendto(b"orders_processed:1|c|#env:prod,service:checkout", ("127.0.0.1", 8125))
+```
+
+#### HTTP
+
+При `protocol: http` агент принимает `POST /metrics` с тем же JSON, что и
+`/api/v1/ingest/metrics`:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8080/metrics \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "metrics": [
+      {
+        "name": "orders_processed",
+        "value": 1,
+        "timestamp": "2026-10-20T12:00:00Z",
+        "tags": {"env": "prod", "service": "checkout"}
+      }
+    ]
+  }'
+```
+
+`timestamp` можно не указывать — агент подставит текущее UTC-время. За один запрос
+принимается не более 1000 точек и не более 1 MiB. Ответы: `202` — точки приняты
+(возможно, часть отброшена из-за лимита), `400` — некорректный payload, `429` —
+превышен локальный лимит. Количество принятых/отброшенных точек возвращается в
+заголовках `X-Metrics-Accepted` и `X-Metrics-Dropped`.
+
+Ограничения receiver'а: не более **10 000 метрик/с** и ограниченный буфер
+(50 000 точек). Лишние точки отбрасываются, чтобы локальное приложение не могло
+исчерпать память агента. При переполнении буфера приоритет отдаётся новым данным.
+
+> В Docker/Kubernetes receiver слушает loopback **внутри** контейнера агента. Чтобы
+> приложение могло отправить метрику на `127.0.0.1`, оно должно находиться в том же
+> network namespace: sidecar-контейнер в одном Pod'е либо
+> `docker run --network container:<agent-container>`.
+
 ### Поведение при сбоях
 
 - HTTP-запросы имеют таймаут (`10s`).
@@ -514,6 +605,9 @@ backend. API-ключ в ConfigMap — только placeholder; фактиче�
 - Логи буферизуются и отправляются пачками (по `log_batch_size` или каждые
   `log_flush_seconds`). Буфер ограничен: при длительной недоступности backend самые
   старые события отбрасываются, чтобы не исчерпать память.
+- Custom-метрики буферизуются до следующего цикла сбора и ограничены 10 000
+  метрик/с и 50 000 точками; превышение лимита приводит к отбрасыванию точек, а не
+  к росту памяти или падению агента.
 - При `SIGINT`/`SIGTERM` агент корректно останавливает in-flight запросы и ожидания,
   а также выполняет финальное чтение и отправку остатка логов (в пределах `10s`).
 

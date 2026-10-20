@@ -29,14 +29,22 @@ const (
 )
 
 const (
-	defaultIntervalSeconds = 15
-	defaultLogBatchSize    = 500
-	defaultLogFlushSeconds = 5
-	defaultStateFile       = ".agent_state.json"
+	defaultIntervalSeconds  = 15
+	defaultLogBatchSize     = 500
+	defaultLogFlushSeconds  = 5
+	defaultStateFile        = ".agent_state.json"
+	defaultReceiverPort     = 8125
+	defaultReceiverHTTPPort = 8080
 
 	// maxLogBatchSize matches the backend LogIngestRequest.MAX_BATCH_SIZE. A larger
 	// batch would be rejected with HTTP 400, so it is a configuration error here.
 	maxLogBatchSize = 1000
+)
+
+// Supported local metric receiver protocols.
+const (
+	ReceiverProtocolHTTP   = "http"
+	ReceiverProtocolStatsD = "statsd"
 )
 
 // KubernetesMetadata identifies the pod container a log line came from. It is
@@ -95,6 +103,15 @@ type MetricsConfig struct {
 	Network NetworkConfig `yaml:"network"`
 }
 
+// ReceiverConfig controls the loopback-only listener that accepts custom
+// metrics from applications running next to the agent. The receiver always
+// binds to 127.0.0.1 and is opt-in.
+type ReceiverConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	Protocol string `yaml:"protocol"`
+	Port     int    `yaml:"port"`
+}
+
 // KubernetesConfig controls automatic discovery of pod logs from the Kubernetes
 // node the agent runs on.
 type KubernetesConfig struct {
@@ -139,6 +156,7 @@ type Config struct {
 	StateFile       string           `yaml:"state_file"`
 	Metrics         MetricsConfig    `yaml:"metrics"`
 	Kubernetes      KubernetesConfig `yaml:"kubernetes"`
+	Receiver        ReceiverConfig   `yaml:"receiver"`
 }
 
 // LoadConfig reads, parses, applies environment overrides and validates the
@@ -205,6 +223,19 @@ func applyEnvOverrides(cfg *Config) {
 	if v := strings.TrimSpace(os.Getenv("AGENT_KUBERNETES_LABEL_SELECTOR")); v != "" {
 		cfg.Kubernetes.LabelSelector = v
 	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_RECEIVER_ENABLED")); v != "" {
+		if enabled, err := strconv.ParseBool(v); err == nil {
+			cfg.Receiver.Enabled = enabled
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_RECEIVER_PROTOCOL")); v != "" {
+		cfg.Receiver.Protocol = v
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_RECEIVER_PORT")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Receiver.Port = n
+		}
+	}
 }
 
 func (c *Config) validate() error {
@@ -261,6 +292,26 @@ func (c *Config) validate() error {
 	if c.Kubernetes.LabelSelector != "" {
 		if _, err := labels.Parse(c.Kubernetes.LabelSelector); err != nil {
 			return fmt.Errorf("kubernetes.label_selector is invalid: %w", err)
+		}
+	}
+
+	protocol := strings.ToLower(strings.TrimSpace(c.Receiver.Protocol))
+	if protocol == "" {
+		protocol = ReceiverProtocolStatsD
+	}
+	if protocol != ReceiverProtocolHTTP && protocol != ReceiverProtocolStatsD {
+		return fmt.Errorf("receiver.protocol must be %q or %q, got %q",
+			ReceiverProtocolHTTP, ReceiverProtocolStatsD, c.Receiver.Protocol)
+	}
+	c.Receiver.Protocol = protocol
+	if c.Receiver.Port < 0 || c.Receiver.Port > 65535 {
+		return fmt.Errorf("receiver.port must be 0 (use default) or between 1 and 65535, got %d", c.Receiver.Port)
+	}
+	if c.Receiver.Port == 0 {
+		if protocol == ReceiverProtocolHTTP {
+			c.Receiver.Port = defaultReceiverHTTPPort
+		} else {
+			c.Receiver.Port = defaultReceiverPort
 		}
 	}
 	return nil

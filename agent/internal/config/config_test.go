@@ -275,3 +275,117 @@ logs:
 		t.Fatal("expected error for unknown logs[].format")
 	}
 }
+
+func TestLoadConfigDefaultsReceiver(t *testing.T) {
+	path := writeConfigFile(t, "backend_url: http://localhost:8080\napi_key: app_test\n")
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Receiver.Enabled {
+		t.Error("receiver should be disabled by default")
+	}
+	if cfg.Receiver.Protocol != ReceiverProtocolStatsD {
+		t.Errorf("default protocol = %q, want %q", cfg.Receiver.Protocol, ReceiverProtocolStatsD)
+	}
+	if cfg.Receiver.Port != defaultReceiverPort {
+		t.Errorf("default port = %d, want %d", cfg.Receiver.Port, defaultReceiverPort)
+	}
+}
+
+func TestLoadConfigParsesReceiver(t *testing.T) {
+	path := writeConfigFile(t, `
+backend_url: http://localhost:8080
+api_key: app_test
+receiver:
+  enabled: true
+  protocol: statsd
+  port: 9125
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if !cfg.Receiver.Enabled {
+		t.Error("expected receiver.enabled to be true")
+	}
+	if cfg.Receiver.Protocol != ReceiverProtocolStatsD {
+		t.Errorf("protocol = %q, want %q", cfg.Receiver.Protocol, ReceiverProtocolStatsD)
+	}
+	if cfg.Receiver.Port != 9125 {
+		t.Errorf("port = %d, want 9125", cfg.Receiver.Port)
+	}
+}
+
+func TestLoadConfigDefaultsHTTPReceiverPort(t *testing.T) {
+	path := writeConfigFile(t, `
+backend_url: http://localhost:8080
+api_key: app_test
+receiver:
+  enabled: true
+  protocol: HTTP
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Receiver.Protocol != ReceiverProtocolHTTP {
+		t.Errorf("protocol = %q, want %q", cfg.Receiver.Protocol, ReceiverProtocolHTTP)
+	}
+	if cfg.Receiver.Port != defaultReceiverHTTPPort {
+		t.Errorf("port = %d, want %d", cfg.Receiver.Port, defaultReceiverHTTPPort)
+	}
+}
+
+func TestLoadConfigRejectsInvalidReceiverProtocol(t *testing.T) {
+	path := writeConfigFile(t, `
+backend_url: http://localhost:8080
+api_key: app_test
+receiver:
+  enabled: true
+  protocol: tcp
+`)
+
+	if _, err := LoadConfig(path); err == nil {
+		t.Fatal("expected error for unsupported receiver.protocol")
+	}
+}
+
+func TestLoadConfigRejectsInvalidReceiverPort(t *testing.T) {
+	path := writeConfigFile(t, `
+backend_url: http://localhost:8080
+api_key: app_test
+receiver:
+  enabled: true
+  protocol: statsd
+  port: 70000
+`)
+
+	if _, err := LoadConfig(path); err == nil {
+		t.Fatal("expected error for receiver.port over 65535")
+	}
+}
+
+func TestReceiverEnvOverrides(t *testing.T) {
+	t.Setenv("AGENT_RECEIVER_ENABLED", "true")
+	t.Setenv("AGENT_RECEIVER_PROTOCOL", "http")
+	t.Setenv("AGENT_RECEIVER_PORT", "9090")
+
+	path := writeConfigFile(t, "backend_url: http://localhost:8080\napi_key: app_test\n")
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if !cfg.Receiver.Enabled {
+		t.Error("expected env to enable the receiver")
+	}
+	if cfg.Receiver.Protocol != ReceiverProtocolHTTP {
+		t.Errorf("protocol = %q, want %q", cfg.Receiver.Protocol, ReceiverProtocolHTTP)
+	}
+	if cfg.Receiver.Port != 9090 {
+		t.Errorf("port = %d, want 9090", cfg.Receiver.Port)
+	}
+}
