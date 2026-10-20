@@ -1,5 +1,6 @@
 package com.monitoring.organization.tenant;
 
+import com.monitoring.auth.jwt.PatAuthenticationDetails;
 import com.monitoring.organization.entity.Membership;
 import com.monitoring.organization.exception.TenantAccessDeniedException;
 import com.monitoring.organization.repository.MembershipRepository;
@@ -58,6 +59,22 @@ public class CurrentTenantService {
      */
     public TenantContext requireTenant() {
         Long userId = requireUserId();
+
+        // Personal Access Tokens are bound to the organization they were created in: the
+        // header cannot be used to switch the token into another tenant.
+        PatAuthenticationDetails pat = patAuthenticationDetails();
+        if (pat != null) {
+            Long requested = requestedOrganizationId();
+            if (requested != null && !requested.equals(pat.organizationId())) {
+                throw new TenantAccessDeniedException("This token is not valid for this organization");
+            }
+            Membership membership = membershipRepository
+                    .findByOrganizationIdAndUserId(pat.organizationId(), userId)
+                    .orElseThrow(() -> new TenantAccessDeniedException(
+                            "You no longer belong to this organization"));
+            return new TenantContext(userId, membership.getOrganizationId(), membership.getRole());
+        }
+
         Long requestedOrganizationId = requestedOrganizationId();
 
         if (requestedOrganizationId != null) {
@@ -77,6 +94,14 @@ public class CurrentTenantService {
 
     public Long requireOrganizationId() {
         return requireTenant().organizationId();
+    }
+
+    private PatAuthenticationDetails patAuthenticationDetails() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return null;
+        }
+        return authentication.getDetails() instanceof PatAuthenticationDetails pat ? pat : null;
     }
 
     private Long requestedOrganizationId() {

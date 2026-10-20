@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { ApiError } from '../../api/client'
 import { checkUsernameAvailable, requestEmailChange, updateUsername } from '../../api/profile'
 import { FormField, PasswordField } from '../../components/auth/FormField'
+import { PersonalAccessTokensSection } from '../../components/settings/PersonalAccessTokensSection'
 import { Button } from '../../components/ui/button'
 import { changePasswordSchema, type ChangePasswordFormValues } from '../../features/auth/schemas'
 import { useProfile } from '../../features/auth/useProfile'
@@ -126,9 +127,9 @@ export default function SettingsPage() {
 
   if (isError) {
     return (
-      <section className="space-y-6">
+      <section className="space-y-6" role="alert">
         <SettingsHeading />
-        <div role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6">
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6">
           <h2 className="font-display text-lg font-semibold text-red-200">Could not load your profile</h2>
           <p className="mt-2 text-sm text-slate-400">
             {error instanceof ApiError ? error.message : 'Something went wrong. Please try again.'}
@@ -276,6 +277,8 @@ export default function SettingsPage() {
           </Button>
         </form>
       </div>
+
+      <PersonalAccessTokensSection />
     </section>
   )
 }
@@ -284,7 +287,7 @@ function SettingsHeading() {
   return (
     <header className="space-y-2">
       <p className="section-tag">Settings</p>
-      <h1 className="font-display text-2xl font-semibold text-slate-100">Profile &amp; settings</h1>
+      <h1 className="font-display text-2xl font-semibold text-slate-100">Profile & settings</h1>
       <p className="text-sm text-slate-400">Manage your account details and appearance.</p>
     </header>
   )

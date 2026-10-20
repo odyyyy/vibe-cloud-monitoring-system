@@ -4,7 +4,9 @@ import com.monitoring.auth.dto.response.MessageResponse;
 import com.monitoring.auth.exception.EmailAlreadyUsedException;
 import com.monitoring.auth.exception.EmailNotVerifiedException;
 import com.monitoring.auth.exception.InvalidCredentialsException;
+import com.monitoring.auth.exception.InvalidPatScopeException;
 import com.monitoring.auth.exception.InvalidTokenException;
+import com.monitoring.auth.exception.PatNotFoundException;
 import com.monitoring.auth.exception.TooManyLoginAttemptsException;
 import com.monitoring.auth.exception.UserNotFoundException;
 import org.springframework.http.HttpHeaders;
@@ -54,6 +56,20 @@ public class AuthExceptionHandler {
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<MessageResponse> handleUserNotFound(UserNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new MessageResponse(ex.getMessage()));
+    }
+
+    /** Revoking a token that does not exist or belongs to another user/tenant. */
+    @ExceptionHandler(PatNotFoundException.class)
+    public ResponseEntity<MessageResponse> handlePatNotFound(PatNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new MessageResponse(ex.getMessage()));
+    }
+
+    /** A Personal Access Token requested a scope that is not supported. */
+    @ExceptionHandler(InvalidPatScopeException.class)
+    public ResponseEntity<MessageResponse> handleInvalidPatScope(InvalidPatScopeException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new MessageResponse(ex.getMessage()));
     }
 

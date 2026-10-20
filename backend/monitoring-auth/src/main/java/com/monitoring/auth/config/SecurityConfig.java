@@ -1,11 +1,13 @@
 package com.monitoring.auth.config;
 
 import com.monitoring.auth.jwt.JwtAuthFilter;
+import com.monitoring.auth.jwt.PatAuthFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -28,10 +30,12 @@ import java.util.List;
  */
 @Configuration
 @EnableWebSecurity
+@EnableAsync
 @RequiredArgsConstructor
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final PatAuthFilter patAuthFilter;
 
     /** The H2 console servlet is only registered when this property is true (dev-only). */
     @Value("${spring.h2.console.enabled:false}")
@@ -53,7 +57,9 @@ public class SecurityConfig {
             // Ingestion does not require JWT: agents authenticate with X-API-Key in a
             // dedicated chain (IngestSecurityConfig in monitoring-collector).
             "/api/v1/ingest/**",
-            "/api/ingest/**"
+            "/api/ingest/**",
+            // Public share endpoint for dashboards (no authentication required)
+            "/api/v1/dashboards/share/**"
         ));
         if (h2ConsoleEnabled) {
             // The H2 web console is reachable only when explicitly enabled (dev-only).
@@ -93,7 +99,7 @@ public class SecurityConfig {
                 // Alert rules, notification channels and incident history require an
                 // authenticated user; ownership is verified in AlertService.
                 .requestMatchers("/api/v1/alert-rules/**", "/api/v1/notification-channels/**",
-                        "/api/v1/alert-incidents/**").authenticated()
+                        "/api/v1/alert-incidents/**", "/api/v1/incidents/**").authenticated()
                 // The audit trail is read-only and scoped to the authenticated user in
                 // AuditEventService; there is no write/delete endpoint.
                 .requestMatchers("/api/v1/audit-events/**").authenticated()
@@ -103,6 +109,9 @@ public class SecurityConfig {
                 // Usage and quota visualization requires an authenticated user; the scope is
                 // taken from the active organization in UsageController.
                 .requestMatchers("/api/v1/usage", "/api/v1/usage/**").authenticated()
+                // Personal Access Tokens management requires authentication (JWT human users only);
+                // PATs are denied from settings endpoints by the auth filter skipping settings paths.
+                .requestMatchers("/api/v1/settings/pats", "/api/v1/settings/pats/**").authenticated()
                 // Deny by default: any endpoint not explicitly listed above is not reachable.
                 // Public endpoints must be added to `endpoints` deliberately.
                 .anyRequest().denyAll()
@@ -111,7 +120,8 @@ public class SecurityConfig {
             // distinguish "not authenticated" from "authenticated but forbidden".
             .exceptionHandling(ex -> ex.authenticationEntryPoint(
                     new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(patAuthFilter, JwtAuthFilter.class);
 
         return http.build();
     }
