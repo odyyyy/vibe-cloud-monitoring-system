@@ -14,6 +14,7 @@ import java.time.YearMonth;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -51,6 +52,19 @@ class UsageQueryServiceTest {
         assertEquals(70.0, response.getMetrics().getPercentage());
         assertEquals(250L, response.getLogs().getUsed());
         assertEquals(50.0, response.getLogs().getPercentage());
+    }
+
+    @Test
+    void currentMonth_smallUsage_isNotRoundedDownToZero() {
+        usageProperties.setMetricsQuota(10_000_000L);
+        when(dailyUsageRepository.findByOrganizationIdAndUsageDateBetweenOrderByUsageDateAsc(
+                any(), any(), any())).thenReturn(List.of(usage(LocalDate.of(2026, 10, 1), 5, 0, 0)));
+
+        CurrentMonthUsageResponse response = service.currentMonth(1L, YearMonth.of(2026, 10));
+
+        assertEquals(5L, response.getMetrics().getUsed());
+        assertEquals(0.00005, response.getMetrics().getPercentage());
+        assertTrue(response.getMetrics().getPercentage() > 0.0);
     }
 
     @Test

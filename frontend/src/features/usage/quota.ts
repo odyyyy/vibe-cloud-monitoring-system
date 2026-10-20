@@ -30,7 +30,41 @@ export function clampPercentage(percentage: number): number {
   return Math.min(percentage, 100)
 }
 
-/** Compact, locale-aware count (e.g. 12,500 -> "12.5K") for meter summaries. */
+/** Locale-aware count for meter summaries (e.g. 12500 -> "12,500"). */
 export function formatUsageCount(value: number): string {
   return value.toLocaleString()
+}
+
+/**
+ * Computes the consumed share of a quota from the raw counters.
+ *
+ * <p>The UI must not rely solely on a server-provided percentage: an older or rounding
+ * backend can report {@code 0.0} for a small-but-real usage, and the page would then look
+ * like nothing was counted. Returns {@code 0} when the limit is missing or non-positive.
+ */
+export function computeUsagePercentage(used: number, limit: number): number {
+  if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0 || used <= 0) {
+    return 0
+  }
+  return (used * 100) / limit
+}
+
+/**
+ * Formats a usage percentage for display.
+ *
+ * <p>Plan limits are in the millions of items, so a small but real usage would be printed as
+ * "0%" and look like nothing was counted. Below one percent the value keeps two decimals;
+ * below 0.01% it keeps two significant digits (e.g. "0.0001%") so tiny usage stays visible.
+ */
+export function formatUsagePercentage(percentage: number): string {
+  if (!Number.isFinite(percentage) || percentage <= 0) {
+    return '0%'
+  }
+  if (percentage < 0.01) {
+    return `${Number(percentage.toPrecision(2))}%`
+  }
+  if (percentage < 1) {
+    return `${Math.round(percentage * 100) / 100}%`
+  }
+  return `${Math.round(percentage * 10) / 10}%`
 }

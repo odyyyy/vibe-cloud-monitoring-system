@@ -1,5 +1,12 @@
 import type { LucideIcon } from 'lucide-react'
-import { clampPercentage, formatUsageCount, usageLevel, type UsageLevel } from '../../features/usage/quota'
+import {
+  clampPercentage,
+  computeUsagePercentage,
+  formatUsageCount,
+  formatUsagePercentage,
+  usageLevel,
+  type UsageLevel,
+} from '../../features/usage/quota'
 import { cn } from '../../lib/utils'
 
 interface UsageMeterBarProps {
@@ -29,8 +36,12 @@ const LEVEL_LABEL: Record<UsageLevel, string> = {
 }
 
 export function UsageMeterBar({ label, icon: Icon, used, limit, percentage }: UsageMeterBarProps) {
-  const level = usageLevel(percentage)
-  const width = clampPercentage(percentage)
+  // Derive the share from the raw counters instead of trusting the server value alone: a
+  // rounded/stale backend percentage can be 0 while `used` is already non-zero.
+  const effectivePercentage = limit > 0 ? computeUsagePercentage(used, limit) : percentage
+  const level = usageLevel(effectivePercentage)
+  const width = clampPercentage(effectivePercentage)
+  const percentageLabel = formatUsagePercentage(effectivePercentage)
 
   return (
     <div className="rounded-2xl border border-white/10 bg-panel/60 p-5">
@@ -49,8 +60,8 @@ export function UsageMeterBar({ label, icon: Icon, used, limit, percentage }: Us
         aria-label={`${label} usage`}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={Math.round(percentage)}
-        aria-valuetext={`${Math.round(percentage)} percent used`}
+        aria-valuenow={Math.round(width * 100) / 100}
+        aria-valuetext={`${percentageLabel} used`}
         className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10"
       >
         <div
@@ -60,7 +71,7 @@ export function UsageMeterBar({ label, icon: Icon, used, limit, percentage }: Us
       </div>
 
       <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-        <span className={cn('font-medium', LEVEL_TEXT_CLASS[level])}>{Math.round(percentage)}% used</span>
+        <span className={cn('font-medium', LEVEL_TEXT_CLASS[level])}>{percentageLabel} used</span>
         <span className="text-slate-500">{LEVEL_LABEL[level]}</span>
       </div>
     </div>

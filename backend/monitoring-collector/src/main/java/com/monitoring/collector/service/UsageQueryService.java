@@ -89,9 +89,16 @@ public class UsageQueryService {
         return points;
     }
 
+    /**
+     * Builds a meter for the given usage.
+     *
+     * <p>The percentage is not rounded: plan limits are in the millions of items, so a small
+     * but real usage must not be collapsed to {@code 0.0} and look like nothing was counted.
+     * The frontend decides how many decimals to show.
+     */
     private UsageMeterResponse meter(long used, long limit) {
         double percentage = limit > 0
-                ? Math.round(used * 1000.0 / limit) / 10.0
+                ? used * 100.0 / limit
                 : 0.0;
         return UsageMeterResponse.builder()
                 .used(used)

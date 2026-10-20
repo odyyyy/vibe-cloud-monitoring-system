@@ -23,8 +23,8 @@ public class UsageMeterResponse {
     private long limit;
 
     /**
-     * Fraction of the limit consumed, as a percentage rounded to one decimal.
-     * {@code 0.0} when the limit is zero.
+     * Fraction of the limit consumed, as a percentage. The value is not rounded, so a small
+     * but real usage stays visible; {@code 0.0} when the limit is zero.
      */
     private double percentage;
 }

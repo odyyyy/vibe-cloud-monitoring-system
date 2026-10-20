@@ -5,7 +5,7 @@ import { apiRequest } from './client'
 export interface UsageMeter {
   used: number
   limit: number
-  /** Percentage of the limit consumed, already rounded by the backend. */
+  /** Percentage of the limit consumed. The UI also derives it from used/limit as a fallback. */
   percentage: number
 }
 

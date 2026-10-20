@@ -27,6 +27,12 @@ services:
       - "8080:8080"
     env_file:
       - ./backend/.env
+    environment:
+      # Local development plan limits. The shipped defaults (millions of items) make the
+      # usage meters unreadable with sample data, so the local stack uses smaller limits.
+      - MONITORING_USAGE_METRICS_QUOTA=100000
+      - MONITORING_USAGE_LOGS_QUOTA=50000
+      - MONITORING_USAGE_TRACES_QUOTA=10000
     depends_on:
       mysql:
         condition: service_healthy
