@@ -48,6 +48,8 @@ public class SecurityConfig {
             "/api/hello",
             "/actuator/health",
             "/actuator/info",
+            // Prometheus scrape endpoint. It contains only platform telemetry (no tenant data).
+            "/actuator/prometheus",
             // Swagger UI / OpenAPI
             "/v3/api-docs/**",
             "/swagger-ui/**",

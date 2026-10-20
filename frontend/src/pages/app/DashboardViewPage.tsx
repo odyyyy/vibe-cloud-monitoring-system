@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Settings2, Share2, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Plus, Settings2, Share2, Copy, Check, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Layout } from 'react-grid-layout'
 import { ApiError } from '../../api/client'
@@ -108,7 +108,7 @@ export default function DashboardViewPage() {
 
   const handleLayoutCommit = useCallback(
     async (next: Layout[]) => {
-      if (!dashboard) {
+      if (!dashboard || dashboard.isSystem) {
         return
       }
       const changes = next.filter((item) => {
@@ -229,6 +229,8 @@ export default function DashboardViewPage() {
     )
   }
 
+  const readOnly = dashboard.isSystem === true
+  const canEdit = canManage && !readOnly
   const atWidgetLimit = dashboard.widgets.length >= MAX_WIDGETS_PER_DASHBOARD
   const variables = dashboard.variables ?? []
   const items: DashboardGridItem[] = dashboard.widgets.map((widget) => ({
@@ -236,7 +238,7 @@ export default function DashboardViewPage() {
     node: (
       <DashboardWidget
         widget={widget}
-        showActions={canManage}
+        showActions={canEdit}
         refetchInterval={pollInterval}
         onEdit={handleEditClick}
         onDelete={setDeleteTarget}
@@ -255,8 +257,18 @@ export default function DashboardViewPage() {
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
             Dashboards
           </Link>
-          <h1 className="font-display text-2xl font-semibold text-slate-100">{dashboard.name}</h1>
-          {isSavingLayout ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-display text-2xl font-semibold text-slate-100">{dashboard.name}</h1>
+            {readOnly ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[11px] font-medium text-cyan-200">
+                <Lock className="h-3 w-3" aria-hidden="true" />
+                System
+              </span>
+            ) : null}
+          </div>
+          {readOnly ? (
+            <p className="text-xs text-slate-500">Platform-managed dashboard. It refreshes automatically and is read-only.</p>
+          ) : isSavingLayout ? (
             <p className="text-xs text-amber-300" role="status">
               Saving layout…
             </p>
@@ -289,7 +301,7 @@ export default function DashboardViewPage() {
             </Select>
           </div>
 
-          {canManage ? (
+          {canEdit ? (
             <>
               <Button type="button" variant="secondary" onClick={() => setVariablesOpen(true)}>
                 <Settings2 className="h-4 w-4" aria-hidden="true" />
@@ -311,7 +323,7 @@ export default function DashboardViewPage() {
       <DashboardVariablesProvider variables={variables}>
         {variables.length > 0 ? <DashboardVariablesBar variables={variables} /> : null}
 
-        {atWidgetLimit ? (
+        {atWidgetLimit && !readOnly ? (
           <p className="text-xs text-slate-500">
             This dashboard has reached the limit of {MAX_WIDGETS_PER_DASHBOARD} widgets.
           </p>
@@ -320,7 +332,7 @@ export default function DashboardViewPage() {
         {dashboard.widgets.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-white/10 bg-panel/40 p-10 text-center">
             <p className="text-sm text-slate-300">This dashboard has no widgets yet.</p>
-            {canManage ? (
+            {canEdit ? (
               <Button type="button" variant="secondary" className="mt-4" onClick={handleAddClick}>
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 Add your first widget
@@ -331,7 +343,7 @@ export default function DashboardViewPage() {
           <DashboardGrid
             items={items}
             layout={gridLayout}
-            interactive={canManage}
+            interactive={canEdit}
             onLayoutChange={handleLayoutChange}
             onLayoutCommit={(next) => void handleLayoutCommit(next)}
           />

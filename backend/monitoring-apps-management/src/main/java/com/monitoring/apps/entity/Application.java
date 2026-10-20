@@ -37,6 +37,13 @@ public class Application {
     @Column(nullable = false)
     private Long organizationId;
 
+    /**
+     * Marks the internal application that receives the platform's own metrics.
+     * System applications are readable by every authenticated tenant but own no customer data.
+     */
+    @Column(name = "is_system", nullable = false)
+    private boolean isSystem;
+
     @CreationTimestamp
     private Instant createdAt;
 

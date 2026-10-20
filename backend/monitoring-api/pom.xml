@@ -106,6 +106,12 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- Prometheus registry: exposes JVM, HTTP, Tomcat and HikariCP metrics. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
         <!-- Flyway: single source of truth for the DB schema (migrations in module db/migration dirs) -->
         <dependency>
             <groupId>org.flywaydb</groupId>

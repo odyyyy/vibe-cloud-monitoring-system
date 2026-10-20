@@ -59,14 +59,14 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public List<DashboardResponse> listDashboards(Long organizationId) {
-        return dashboardRepository.findAllWithWidgetsByOrganizationId(organizationId).stream()
+        return dashboardRepository.findAllVisibleByOrganizationId(organizationId).stream()
                 .map(this::toResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public DashboardResponse getDashboard(Long organizationId, Long dashboardId) {
-        return toResponse(getOwnedDashboard(organizationId, dashboardId));
+        return toResponse(getReadableDashboard(organizationId, dashboardId));
     }
 
     @Transactional
@@ -189,10 +189,23 @@ public class DashboardService {
                 .orElseThrow(() -> new WidgetNotFoundException(widgetId));
     }
 
-    private Dashboard getOwnedDashboard(Long organizationId, Long dashboardId) {
+    /**
+     * Loads a dashboard for a read: it must belong to the tenant or be a built-in system
+     * dashboard, which is readable but never writable by tenants.
+     */
+    private Dashboard getReadableDashboard(Long organizationId, Long dashboardId) {
         Dashboard dashboard = dashboardRepository.findById(dashboardId)
                 .orElseThrow(() -> new DashboardNotFoundException(dashboardId));
-        if (!dashboard.getOrganizationId().equals(organizationId)) {
+        if (!dashboard.isSystem() && !dashboard.getOrganizationId().equals(organizationId)) {
+            throw new DashboardAccessDeniedException();
+        }
+        return dashboard;
+    }
+
+    /** Loads a dashboard that the tenant may change; system dashboards are immutable. */
+    private Dashboard getOwnedDashboard(Long organizationId, Long dashboardId) {
+        Dashboard dashboard = getReadableDashboard(organizationId, dashboardId);
+        if (dashboard.isSystem()) {
             throw new DashboardAccessDeniedException();
         }
         return dashboard;

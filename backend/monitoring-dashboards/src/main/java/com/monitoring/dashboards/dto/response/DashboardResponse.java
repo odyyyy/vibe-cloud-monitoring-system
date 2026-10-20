@@ -24,6 +24,7 @@ public class DashboardResponse {
     private List<WidgetResponse> widgets;
     private String shareToken;
     private Boolean isPublic;
+    private Boolean isSystem;
 
     public static DashboardResponse fromEntity(Dashboard dashboard, List<DashboardVariable> variables) {
         return DashboardResponse.builder()
@@ -35,6 +36,7 @@ public class DashboardResponse {
                 .widgets(dashboard.getWidgets().stream().map(WidgetResponse::fromEntity).toList())
                 .shareToken(dashboard.getShareToken())
                 .isPublic(dashboard.isPublic())
+                .isSystem(dashboard.isSystem())
                 .build();
     }
 
@@ -52,6 +54,7 @@ public class DashboardResponse {
                 .widgets(dashboard.getWidgets().stream().map(WidgetResponse::fromEntity).toList())
                 .shareToken(dashboard.getShareToken())
                 .isPublic(dashboard.isPublic())
+                .isSystem(dashboard.isSystem())
                 .build();
     }
 }

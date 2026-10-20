@@ -1,6 +1,6 @@
 import type { DragEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowDown, ArrowUp, ExternalLink, GripVertical, LayoutGrid, Share2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ExternalLink, GripVertical, LayoutGrid, Lock, Share2 } from 'lucide-react'
 import type { Dashboard } from '../../api/dashboards'
 import { widgetToLayout } from '../../features/dashboards/layout'
 import { cn } from '../../lib/utils'
@@ -38,6 +38,7 @@ export function DashboardSection({
   onMoveDown,
   onShareClick,
 }: DashboardSectionProps) {
+  const readOnly = dashboard.isSystem === true
   const items: DashboardGridItem[] = dashboard.widgets.map((widget) => ({
     id: widget.id,
     node: (
@@ -63,14 +64,17 @@ export function DashboardSection({
     >
       <header className="flex items-center gap-3">
         <span
-          className="cursor-grab text-slate-500 transition-colors hover:text-slate-300 active:cursor-grabbing"
-          draggable
+          className={cn(
+            'text-slate-500 transition-colors hover:text-slate-300',
+            !readOnly && 'cursor-grab active:cursor-grabbing',
+          )}
+          draggable={!readOnly}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
-          title="Drag to reorder"
+          title={readOnly ? 'System dashboard' : 'Drag to reorder'}
           aria-hidden="true"
         >
-          <GripVertical className="h-4 w-4" />
+          {readOnly ? <Lock className="h-4 w-4" /> : <GripVertical className="h-4 w-4" />}
         </span>
 
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03]">
@@ -80,6 +84,7 @@ export function DashboardSection({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h2 className="truncate font-display text-base font-semibold text-slate-100">{dashboard.name}</h2>
+            {readOnly ? <Badge variant="muted">System</Badge> : null}
             <Badge variant="muted">
               {dashboard.widgets.length} {dashboard.widgets.length === 1 ? 'widget' : 'widgets'}
             </Badge>
@@ -87,52 +92,60 @@ export function DashboardSection({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            aria-label={`Move ${dashboard.name} up`}
-            disabled={index === 0}
-            onClick={onMoveUp}
-          >
-            <ArrowUp className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            aria-label={`Move ${dashboard.name} down`}
-            disabled={index === total - 1}
-            onClick={onMoveDown}
-          >
-            <ArrowDown className="h-4 w-4" />
-          </Button>
+          {!readOnly ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                aria-label={`Move ${dashboard.name} up`}
+                disabled={index === 0}
+                onClick={onMoveUp}
+              >
+                <ArrowUp className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                aria-label={`Move ${dashboard.name} down`}
+                disabled={index === total - 1}
+                onClick={onMoveDown}
+              >
+                <ArrowDown className="h-4 w-4" />
+              </Button>
+            </>
+          ) : null}
           <Button asChild variant="ghost" size="icon" className="h-8 w-8" aria-label={`Open ${dashboard.name}`}>
             <Link to={`/app/dashboards/${dashboard.id}`}>
               <ExternalLink className="h-4 w-4" />
             </Link>
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            aria-label={`Share ${dashboard.name}`}
-            onClick={() => onShareClick(dashboard)}
-          >
-            <Share2 className="h-4 w-4" />
-          </Button>
+          {!readOnly ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              aria-label={`Share ${dashboard.name}`}
+              onClick={() => onShareClick(dashboard)}
+            >
+              <Share2 className="h-4 w-4" />
+            </Button>
+          ) : null}
         </div>
       </header>
 
       {dashboard.widgets.length === 0 ? (
         <p className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center text-sm text-slate-400">
           This dashboard has no widgets yet.{' '}
-          <Link to={`/app/dashboards/${dashboard.id}`} className="text-cyan-300 hover:underline">
-            Add widgets
-          </Link>
+          {!readOnly ? (
+            <Link to={`/app/dashboards/${dashboard.id}`} className="text-cyan-300 hover:underline">
+              Add widgets
+            </Link>
+          ) : null}
         </p>
       ) : (
         <DashboardGrid

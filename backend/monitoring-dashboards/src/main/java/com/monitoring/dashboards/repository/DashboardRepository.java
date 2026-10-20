@@ -22,6 +22,21 @@ public interface DashboardRepository extends JpaRepository<Dashboard, Long> {
             """)
     List<Dashboard> findAllWithWidgetsByOrganizationId(@Param("organizationId") Long organizationId);
 
+    /**
+     * Lists the tenant's dashboards together with the built-in system dashboards, which are
+     * visible to every tenant in read-only mode.
+     */
+    @Query("""
+            SELECT DISTINCT d FROM Dashboard d
+            LEFT JOIN FETCH d.widgets
+            WHERE d.organizationId = :organizationId OR d.isSystem = true
+            ORDER BY d.isSystem DESC, d.createdAt DESC
+            """)
+    List<Dashboard> findAllVisibleByOrganizationId(@Param("organizationId") Long organizationId);
+
+    /** The built-in dashboard managed by the platform bootstrap. */
+    Optional<Dashboard> findFirstByIsSystemTrue();
+
     @Query("SELECT d FROM Dashboard d LEFT JOIN FETCH d.widgets WHERE d.id = :id")
     Optional<Dashboard> findWithWidgetsById(@Param("id") Long id);
 

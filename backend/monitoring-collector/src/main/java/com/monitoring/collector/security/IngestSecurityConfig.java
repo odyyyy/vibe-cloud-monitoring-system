@@ -2,7 +2,9 @@ package com.monitoring.collector.security;
 
 import com.monitoring.collector.config.IngestionQuotaProperties;
 import com.monitoring.apps.repository.ApplicationRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -31,6 +33,7 @@ public class IngestSecurityConfig {
     private final ApplicationRepository applicationRepository;
     private final IngestionRateLimiter rateLimiter;
     private final IngestionQuotaProperties quotaProperties;
+    private final ObjectProvider<MeterRegistry> meterRegistryProvider;
 
     @Bean
     @Order(0)
@@ -45,6 +48,13 @@ public class IngestSecurityConfig {
             .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
             .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterAfter(rateLimitFilter, ApiKeyAuthFilter.class);
+
+        // The collector module can be used without an actuator registry (for example in
+        // module-level tests); self-monitoring is added only when a registry exists.
+        MeterRegistry meterRegistry = meterRegistryProvider.getIfAvailable();
+        if (meterRegistry != null) {
+            http.addFilterAfter(new IngestMetricsFilter(meterRegistry), RateLimitFilter.class);
+        }
 
         return http.build();
     }

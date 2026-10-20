@@ -58,6 +58,11 @@ describe('metricLabel', () => {
     expect(metricLabel('system.cpu.usage')).toBe('CPU usage')
   })
 
+  it('returns a friendly label for platform self-monitoring metrics', () => {
+    expect(metricLabel('ingest_requests_total')).toBe('Ingestion Request Rate')
+    expect(metricLabel('hikaricp_connections_active')).toBe('Active DB Connections')
+  })
+
   it('falls back to the raw name for custom metrics', () => {
     expect(metricLabel('my.metric')).toBe('my.metric')
   })

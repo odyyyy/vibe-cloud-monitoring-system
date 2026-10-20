@@ -69,6 +69,11 @@ public class Dashboard {
     @Builder.Default
     private boolean isPublic = false;
 
+    /** Built-in dashboard managed by the platform; regular users can read but never modify it. */
+    @Column(name = "is_system", nullable = false)
+    @Builder.Default
+    private boolean isSystem = false;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

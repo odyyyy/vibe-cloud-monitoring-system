@@ -21,6 +21,9 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 
     List<Application> findByOrganizationId(Long organizationId);
 
+    /** The internal application that stores the platform's own telemetry. */
+    Optional<Application> findFirstByIsSystemTrue();
+
     /**
      * Distinct organizations that own at least one application.
      *

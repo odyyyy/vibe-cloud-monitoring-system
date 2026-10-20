@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { LayoutGrid, Pencil, Plus, Trash2 } from 'lucide-react'
+import { LayoutGrid, Lock, Pencil, Plus, Trash2 } from 'lucide-react'
 import { ApiError } from '../../api/client'
 import type { Dashboard } from '../../api/dashboards'
 import { useDashboardsQuery } from '../../api/dashboards'
@@ -77,7 +77,7 @@ export default function DashboardsPage() {
             <DashboardCard
               key={dashboard.id}
               dashboard={dashboard}
-              canManage={canManage}
+              canManage={canManage && !dashboard.isSystem}
               onRename={() => openRename(dashboard)}
               onDelete={() => setDeleteTarget(dashboard)}
             />
@@ -114,7 +114,18 @@ function DashboardCard({ dashboard, canManage, onRename, onDelete }: DashboardCa
           <LayoutGrid className="h-5 w-5 text-cyan-300" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate font-display text-base font-semibold text-slate-100">{dashboard.name}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="truncate font-display text-base font-semibold text-slate-100">{dashboard.name}</h2>
+            {dashboard.isSystem ? (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-medium text-cyan-200"
+                title="Platform-managed read-only dashboard"
+              >
+                <Lock className="h-2.5 w-2.5" aria-hidden="true" />
+                System
+              </span>
+            ) : null}
+          </div>
           <p className="mt-0.5 text-xs text-slate-500">Created {formatDateTime(dashboard.createdAt)}</p>
         </div>
       </div>

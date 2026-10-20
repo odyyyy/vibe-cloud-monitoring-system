@@ -55,9 +55,18 @@ const BUILT_IN_BY_NAME: ReadonlyMap<string, MetricDefinition> = new Map(
   BUILT_IN_METRICS.map((metric) => [metric.name, metric]),
 )
 
+/** Platform self-monitoring metrics are not collected by agents, but get friendly titles. */
+const PLATFORM_METRIC_LABELS: Readonly<Record<string, string>> = {
+  jvm_memory_used_bytes: 'JVM Heap Usage',
+  hikaricp_connections_active: 'Active DB Connections',
+  tomcat_threads_busy: 'Tomcat Busy Threads',
+  ingest_requests_total: 'Ingestion Request Rate',
+  ingest_request_duration_seconds: 'Ingestion Latency (p95)',
+}
+
 /** Friendly label for a metric name; falls back to the raw name for custom metrics. */
 export function metricLabel(name: string): string {
-  return BUILT_IN_BY_NAME.get(name)?.label ?? name
+  return BUILT_IN_BY_NAME.get(name)?.label ?? PLATFORM_METRIC_LABELS[name] ?? name
 }
 
 /**

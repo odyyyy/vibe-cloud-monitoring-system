@@ -35,6 +35,13 @@ public class Organization {
     @Column(nullable = false, length = 100)
     private String name;
 
+    /**
+     * Internal platform tenant used to own self-monitoring data. It is hidden from users
+     * because no membership is ever created for it.
+     */
+    @Column(name = "is_system", nullable = false)
+    private boolean isSystem;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

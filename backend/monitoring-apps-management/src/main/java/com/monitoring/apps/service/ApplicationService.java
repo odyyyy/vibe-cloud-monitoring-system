@@ -51,6 +51,19 @@ public class ApplicationService {
         return application;
     }
 
+    /**
+     * Resolves an application for a read-only query. Customer applications still require
+     * tenant ownership; the platform's internal telemetry application is readable by every
+     * authenticated tenant because it contains no customer data.
+     */
+    public Application getQueryableApplication(Long id, Long organizationId) {
+        Application application = findOrThrow(id);
+        if (!application.isSystem()) {
+            verifyOwnership(application, organizationId);
+        }
+        return application;
+    }
+
     @Transactional
     public Application updateApplication(Long id, String name, Long organizationId) {
         Application application = getOwnedApplication(id, organizationId);

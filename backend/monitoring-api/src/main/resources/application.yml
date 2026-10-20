@@ -71,6 +71,12 @@ app:
 # Background telemetry maintenance (downsampling of raw metrics and retention).
 # Each job can be disabled independently; retention windows are in days.
 monitoring:
+  # Platform self-monitoring (dogfooding). Samples are written through the regular metric
+  # ingestion pipeline into a hidden system application every interval.
+  platform-metrics:
+    enabled: ${MONITORING_PLATFORM_METRICS_ENABLED:true}
+    interval-ms: ${MONITORING_PLATFORM_METRICS_INTERVAL_MS:60000}
+    initial-delay-ms: ${MONITORING_PLATFORM_METRICS_INITIAL_DELAY_MS:30000}
   downsample:
     enabled: ${MONITORING_DOWNSAMPLE_ENABLED:true}
     # Hourly, at minute 5.
@@ -138,10 +144,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: never
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 # Local development profile.
 ---
