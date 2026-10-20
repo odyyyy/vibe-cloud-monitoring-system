@@ -2,6 +2,7 @@ package com.monitoring.collector.service;
 
 import com.monitoring.collector.dto.response.AggregatedMetricResponse;
 import com.monitoring.collector.dto.request.MetricsQueryRequest;
+import com.monitoring.collector.export.ExportData;
 import com.monitoring.collector.repository.MetricBucketProjection;
 import com.monitoring.collector.repository.MetricSampleRepository;
 import com.monitoring.apps.service.ApplicationService;
@@ -18,8 +19,9 @@ import java.util.OptionalDouble;
  * Reads and aggregates stored metrics.
  *
  * <p>Before querying {@code metric_samples}, it verifies that the application belongs to
- * the current user ({@link ApplicationService#getOwnedApplication}). This is a tenant
- * invariant: the application id from the request is never trusted on its own.
+ * the current user or is the internal platform application
+ * ({@link ApplicationService#getQueryableApplication}). This is a tenant invariant: the
+ * application id from the request is never trusted on its own.
  *
  * <p>Aggregation happens in the database (GROUP BY over time buckets), so raw points are
  * not loaded into the application. Range and interval validation happens at the API
@@ -39,11 +41,46 @@ public class MetricQueryService {
     private final ApplicationService applicationService;
 
     public List<AggregatedMetricResponse> query(Long organizationId, MetricsQueryRequest request) {
-        applicationService.getOwnedApplication(request.getApplicationId(), organizationId);
+        applicationService.getQueryableApplication(request.getApplicationId(), organizationId);
 
         long intervalSeconds = request.getIntervalMinutes().longValue() * SECONDS_PER_MINUTE;
+        String groupByTag = normalizeGroupByTag(request.getGroupByTag());
 
-        List<MetricBucketProjection> buckets = switch (request.getAggregation()) {
+        List<MetricBucketProjection> buckets = groupByTag == null
+                ? aggregate(request, intervalSeconds)
+                : aggregateGrouped(request, intervalSeconds, groupByTag);
+
+        return buckets.stream()
+                .map(bucket -> AggregatedMetricResponse.builder()
+                        .timestamp(Instant.ofEpochSecond(bucket.getBucketEpoch() * intervalSeconds))
+                        .value(bucket.getAggregatedValue())
+                        .group(bucket.getGroupValue())
+                        .build())
+                .toList();
+    }
+
+    /**
+     * Runs the same aggregated query as {@link #query} and truncates the result to
+     * {@code limit} rows for a bounded export. The full bucket count is reported so callers
+     * can warn the user that filters need narrowing.
+     */
+    public ExportData<AggregatedMetricResponse> exportRows(Long organizationId,
+                                                           MetricsQueryRequest request,
+                                                           int limit) {
+        if (limit < 1) {
+            throw new IllegalArgumentException("Export limit must be positive");
+        }
+
+        List<AggregatedMetricResponse> points = query(organizationId, request);
+        List<AggregatedMetricResponse> rows = points.size() > limit
+                ? List.copyOf(points.subList(0, limit))
+                : points;
+
+        return new ExportData<>(rows, points.size());
+    }
+
+    private List<MetricBucketProjection> aggregate(MetricsQueryRequest request, long intervalSeconds) {
+        return switch (request.getAggregation()) {
             case AVG -> metricSampleRepository.aggregateAverage(
                     request.getApplicationId(), request.getMetricName(),
                     request.getFrom(), request.getTo(), intervalSeconds);
@@ -57,13 +94,32 @@ public class MetricQueryService {
                     request.getApplicationId(), request.getMetricName(),
                     request.getFrom(), request.getTo(), intervalSeconds);
         };
+    }
 
-        return buckets.stream()
-                .map(bucket -> AggregatedMetricResponse.builder()
-                        .timestamp(Instant.ofEpochSecond(bucket.getBucketEpoch() * intervalSeconds))
-                        .value(bucket.getAggregatedValue())
-                        .build())
-                .toList();
+    private List<MetricBucketProjection> aggregateGrouped(MetricsQueryRequest request,
+                                                          long intervalSeconds,
+                                                          String groupByTag) {
+        return switch (request.getAggregation()) {
+            case AVG -> metricSampleRepository.aggregateAverageGrouped(
+                    request.getApplicationId(), request.getMetricName(),
+                    request.getFrom(), request.getTo(), intervalSeconds, groupByTag);
+            case MAX -> metricSampleRepository.aggregateMaximumGrouped(
+                    request.getApplicationId(), request.getMetricName(),
+                    request.getFrom(), request.getTo(), intervalSeconds, groupByTag);
+            case MIN -> metricSampleRepository.aggregateMinimumGrouped(
+                    request.getApplicationId(), request.getMetricName(),
+                    request.getFrom(), request.getTo(), intervalSeconds, groupByTag);
+            case SUM -> metricSampleRepository.aggregateSumGrouped(
+                    request.getApplicationId(), request.getMetricName(),
+                    request.getFrom(), request.getTo(), intervalSeconds, groupByTag);
+        };
+    }
+
+    private String normalizeGroupByTag(String groupByTag) {
+        if (groupByTag == null || groupByTag.isBlank()) {
+            return null;
+        }
+        return groupByTag.trim();
     }
 
     /**

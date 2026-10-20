@@ -2,14 +2,19 @@ package com.monitoring.collector.controller;
 
 import com.monitoring.collector.dto.response.AggregatedMetricResponse;
 import com.monitoring.collector.dto.request.MetricsQueryRequest;
+import com.monitoring.collector.exception.InvalidExportFormatException;
+import com.monitoring.collector.export.ExportData;
+import com.monitoring.collector.export.ExportResponseWriter;
 import com.monitoring.collector.service.MetricQueryService;
 import com.monitoring.organization.tenant.CurrentTenantService;
 import com.monitoring.apps.exception.ApplicationAccessDeniedException;
 import com.monitoring.apps.exception.ApplicationNotFoundException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -26,11 +31,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -52,7 +61,10 @@ class MetricQueryControllerTest {
         CurrentTenantService tenantService = Mockito.mock(CurrentTenantService.class);
         when(tenantService.requireOrganizationId()).thenReturn(USER_ID);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new MetricQueryController(metricQueryService, tenantService))
+                .standaloneSetup(new MetricQueryController(
+                        metricQueryService,
+                        tenantService,
+                        new ExportResponseWriter(new ObjectMapper().findAndRegisterModules())))
                 .setControllerAdvice(new TestAdvice())
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
@@ -137,6 +149,66 @@ class MetricQueryControllerTest {
     }
 
     @Test
+    void csvExport_returnsAttachmentWithGroupColumn() throws Exception {
+        when(metricQueryService.exportRows(eq(USER_ID), any(MetricsQueryRequest.class),
+                eq(ExportResponseWriter.MAX_EXPORT_ROWS)))
+                .thenReturn(new ExportData<>(List.of(AggregatedMetricResponse.builder()
+                        .timestamp(Instant.parse("2026-10-09T00:00:00Z"))
+                        .value(-12.5)
+                        .group("=200")
+                        .build()), 1));
+
+        mockMvc.perform(get(VALID_QUERY + "&format=csv"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"export.csv\""))
+                .andExpect(content().contentTypeCompatibleWith("text/csv"))
+                .andExpect(header().string(ExportResponseWriter.TRUNCATED_HEADER, "false"))
+                .andExpect(content().string(containsString("\"2026-10-09T00:00:00Z\",\"-12.5\",\"'=200\"")));
+    }
+
+    @Test
+    void csvExport_reportsTruncationWhenMorePointsMatched() throws Exception {
+        when(metricQueryService.exportRows(eq(USER_ID), any(MetricsQueryRequest.class),
+                eq(ExportResponseWriter.MAX_EXPORT_ROWS)))
+                .thenReturn(new ExportData<>(List.of(AggregatedMetricResponse.builder()
+                        .timestamp(Instant.parse("2026-10-09T00:00:00Z"))
+                        .value(1.0)
+                        .build()), ExportResponseWriter.MAX_EXPORT_ROWS + 1L));
+
+        mockMvc.perform(get(VALID_QUERY + "&format=csv"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(ExportResponseWriter.TRUNCATED_HEADER, "true"));
+    }
+
+    @Test
+    void jsonExport_returnsJsonArrayAttachment() throws Exception {
+        when(metricQueryService.exportRows(eq(USER_ID), any(MetricsQueryRequest.class),
+                eq(ExportResponseWriter.MAX_EXPORT_ROWS)))
+                .thenReturn(new ExportData<>(List.of(AggregatedMetricResponse.builder()
+                        .timestamp(Instant.parse("2026-10-09T00:00:00Z"))
+                        .value(15.0)
+                        .build()), 1));
+
+        mockMvc.perform(get(VALID_QUERY + "&format=json"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"export.json\""))
+                .andExpect(content().contentTypeCompatibleWith("application/json"))
+                .andExpect(jsonPath("$[0].value").value(15.0))
+                .andExpect(jsonPath("$[0].timestamp").exists());
+    }
+
+    @Test
+    void unknownExportFormat_returnsBadRequest() throws Exception {
+        mockMvc.perform(get(VALID_QUERY + "&format=xlsx"))
+                .andExpect(status().isBadRequest());
+
+        verify(metricQueryService, Mockito.never()).query(any(), any());
+        verify(metricQueryService, Mockito.never()).exportRows(any(), any(), anyInt());
+    }
+
+    @Test
     void names_returnsOkWithDistinctMetricNames() throws Exception {
         when(metricQueryService.listMetricNames(eq(USER_ID), eq(7L)))
                 .thenReturn(List.of("cpu_usage", "mem_usage"));
@@ -210,6 +282,12 @@ class MetricQueryControllerTest {
         ResponseEntity<Map<String, Object>> handleNotFound(ApplicationNotFoundException ex) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("status", HttpStatus.NOT_FOUND.value(), "message", ex.getMessage()));
+        }
+
+        @ExceptionHandler(InvalidExportFormatException.class)
+        ResponseEntity<Map<String, Object>> handleInvalidExportFormat(InvalidExportFormatException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("status", HttpStatus.BAD_REQUEST.value(), "message", ex.getMessage()));
         }
     }
 }

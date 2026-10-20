@@ -2,6 +2,7 @@ package com.monitoring.api;
 
 import com.monitoring.collector.dto.response.LogEventResponse;
 import com.monitoring.collector.dto.request.LogsQueryRequest;
+import com.monitoring.collector.export.ExportData;
 import com.monitoring.common.dto.response.PageResponse;
 import com.monitoring.collector.entity.LogEvent;
 import com.monitoring.collector.entity.LogLevel;
@@ -19,7 +20,9 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Verifies log query filtering, ordering, paging and tenant isolation against a real
@@ -178,5 +181,53 @@ class LogsQueryIntegrationTest {
 
         assertEquals(1, page.totalElements());
         assertEquals("inside", page.content().get(0).getMessage());
+    }
+
+    @Test
+    void exportRows_truncatesAndReportsTotalMatchingRows() {
+        saveLog(application, LogLevel.INFO, "first", Instant.parse("2026-10-09T10:00:00Z"));
+        saveLog(application, LogLevel.INFO, "second", Instant.parse("2026-10-09T10:01:00Z"));
+        saveLog(application, LogLevel.INFO, "third", Instant.parse("2026-10-09T10:02:00Z"));
+
+        ExportData<LogEventResponse> data =
+                logQueryService.exportRows(OWNER_ID, request(null, null, 0, 25), 2);
+
+        assertEquals(2, data.rows().size());
+        assertEquals(3, data.totalRows());
+        assertTrue(data.isTruncated());
+        assertEquals("third", data.rows().get(0).getMessage());
+        assertEquals("second", data.rows().get(1).getMessage());
+    }
+
+    @Test
+    void exportRows_returnsAllRowsWhenUnderLimit() {
+        saveLog(application, LogLevel.INFO, "only", Instant.parse("2026-10-09T10:00:00Z"));
+
+        ExportData<LogEventResponse> data =
+                logQueryService.exportRows(OWNER_ID, request(null, null, 0, 25), 10);
+
+        assertEquals(1, data.rows().size());
+        assertEquals(1, data.totalRows());
+        assertFalse(data.isTruncated());
+    }
+
+    @Test
+    void exportRows_rejectsForeignApplication() {
+        Application other = applicationRepository.save(Application.builder()
+                .name("foreign-export-app")
+                .apiKeyHash("app_foreign_export")
+                .organizationId(2L)
+                .build());
+
+        LogsQueryRequest foreign = LogsQueryRequest.builder()
+                .applicationId(other.getId())
+                .from(FROM)
+                .to(TO)
+                .page(0)
+                .size(25)
+                .build();
+
+        assertThrows(ApplicationAccessDeniedException.class,
+                () -> logQueryService.exportRows(OWNER_ID, foreign, 10));
     }
 }

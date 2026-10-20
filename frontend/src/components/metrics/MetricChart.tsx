@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { AggregatedMetricPoint } from '../../api/metrics'
 import { cn } from '../../lib/utils'
 import { Button } from '../ui/button'
@@ -26,18 +26,32 @@ interface MetricChartProps {
   accentColor?: string
 }
 
-interface ChartPoint {
+interface ChartRow {
   timestamp: number
-  value: number
+  [seriesKey: string]: number | undefined
+}
+
+interface ChartSeries {
+  key: string
+  name: string
+  color: string
 }
 
 interface ChartTooltipProps {
   active?: boolean
-  payload?: ReadonlyArray<{ payload?: ChartPoint }>
+  label?: number | string
+  payload?: ReadonlyArray<{
+    dataKey?: string | number
+    name?: string
+    value?: number | string
+    color?: string
+    payload?: ChartRow
+  }>
   accentColor?: string
 }
 
 const DEFAULT_ACCENT_COLOR = '#22d3ee'
+const SERIES_COLORS = ['#22d3ee', '#f59e0b', '#34d399', '#f472b6', '#a78bfa', '#f87171', '#60a5fa', '#facc15']
 
 const Y_AXIS_WIDTH = 56
 const CHART_MARGIN = { top: 8, right: 16, bottom: 8, left: 0 }
@@ -45,26 +59,81 @@ const ZOOM_STEP = 0.6
 const PAN_CURSOR_CLASS = 'cursor-grab'
 const PANNING_CURSOR_CLASS = 'cursor-grabbing'
 
-function ChartTooltip({ active, payload, accentColor }: ChartTooltipProps) {
-  const point = active ? payload?.[0]?.payload : undefined
-  if (!point) {
+function ChartTooltip({ active, label, payload, accentColor }: ChartTooltipProps) {
+  if (!active || !payload || payload.length === 0) {
     return null
   }
+  const timestamp = typeof label === 'number' ? label : Number(label)
   return (
     <div className="rounded-lg border border-white/10 bg-panel px-3 py-2 text-xs shadow-xl">
-      <p className="text-slate-400">{new Date(point.timestamp).toLocaleString()}</p>
-      <p className="mono mt-1" style={{ color: accentColor ?? DEFAULT_ACCENT_COLOR }}>
-        {point.value}
+      <p className="text-slate-400">
+        {Number.isNaN(timestamp) ? '' : new Date(timestamp).toLocaleString()}
       </p>
+      <div className="mt-1 space-y-0.5">
+        {payload.map((item) => (
+          <div
+            key={String(item.dataKey)}
+            className="flex items-center justify-between gap-4"
+            style={{ color: item.color ?? accentColor ?? DEFAULT_ACCENT_COLOR }}
+          >
+            <span className="text-slate-400">{item.name ?? 'Value'}</span>
+            <span className="mono">{item.value}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
 
-function toChartData(data: AggregatedMetricPoint[]): ChartPoint[] {
-  return data
-    .map((point) => ({ timestamp: Date.parse(point.timestamp), value: point.value }))
-    .filter((point) => !Number.isNaN(point.timestamp))
-    .sort((a, b) => a.timestamp - b.timestamp)
+/**
+ * Converts the flat response into chart rows and series. A response with `group` values is
+ * rendered as one line per tag value (for example ingestion status codes); an ungrouped
+ * response stays a single line.
+ */
+function toChartData(
+  data: AggregatedMetricPoint[],
+  accentColor: string,
+  title: string,
+): { rows: ChartRow[]; series: ChartSeries[] } {
+  const grouped = data.some((point) => point.group !== undefined && point.group !== null)
+
+  if (!grouped) {
+    const rows = data
+      .map((point) => ({ timestamp: Date.parse(point.timestamp), value: point.value }))
+      .filter((row) => !Number.isNaN(row.timestamp))
+      .sort((a, b) => a.timestamp - b.timestamp)
+    return {
+      rows,
+      series: [{ key: 'value', name: title, color: accentColor }],
+    }
+  }
+
+  const groupNames = Array.from(
+    new Set(data.map((point) => (point.group === null || point.group === undefined ? 'unknown' : point.group))),
+  ).sort()
+  const keyByGroup = new Map(groupNames.map((group, index) => [group, `series_${index}`]))
+
+  const rowsByTimestamp = new Map<number, ChartRow>()
+  for (const point of data) {
+    const timestamp = Date.parse(point.timestamp)
+    if (Number.isNaN(timestamp)) {
+      continue
+    }
+    const group = point.group === null || point.group === undefined ? 'unknown' : point.group
+    const key = keyByGroup.get(group) as string
+    const row = rowsByTimestamp.get(timestamp) ?? { timestamp }
+    row[key] = point.value
+    rowsByTimestamp.set(timestamp, row)
+  }
+
+  return {
+    rows: Array.from(rowsByTimestamp.values()).sort((a, b) => a.timestamp - b.timestamp),
+    series: groupNames.map((group, index) => ({
+      key: keyByGroup.get(group) as string,
+      name: group,
+      color: SERIES_COLORS[index % SERIES_COLORS.length],
+    })),
+  }
 }
 
 export function MetricChart({
@@ -76,9 +145,12 @@ export function MetricChart({
   heightClass,
   accentColor,
 }: MetricChartProps) {
-  const chartData = useMemo(() => toChartData(data), [data])
   const height = heightClass ?? 'h-72'
   const accent = accentColor ?? DEFAULT_ACCENT_COLOR
+  const { rows: chartData, series } = useMemo(
+    () => toChartData(data, accent, title),
+    [data, accent, title],
+  )
 
   const bounds = useMemo<Domain | null>(() => {
     if (chartData.length < 2) {
@@ -286,15 +358,22 @@ export function MetricChart({
           />
           <YAxis stroke="#64748b" fontSize={11} width={Y_AXIS_WIDTH} />
           <Tooltip content={<ChartTooltip accentColor={accent} />} />
-          <Line
-            type="monotone"
-            dataKey="value"
-            stroke={accent}
-            strokeWidth={2}
-            dot={false}
-            isAnimationActive={false}
-            connectNulls={false}
-          />
+          {series.length > 1 ? (
+            <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
+          ) : null}
+          {series.map((item) => (
+            <Line
+              key={item.key}
+              type="monotone"
+              dataKey={item.key}
+              name={item.name}
+              stroke={item.color}
+              strokeWidth={2}
+              dot={false}
+              isAnimationActive={false}
+              connectNulls={false}
+            />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     </div>

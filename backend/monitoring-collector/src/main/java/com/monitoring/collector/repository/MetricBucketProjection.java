@@ -13,4 +13,7 @@ public interface MetricBucketProjection {
     Long getBucketEpoch();
 
     Double getAggregatedValue();
+
+    /** Tag value when the aggregation is grouped by a tag; {@code null} for ungrouped queries. */
+    String getGroupValue();
 }

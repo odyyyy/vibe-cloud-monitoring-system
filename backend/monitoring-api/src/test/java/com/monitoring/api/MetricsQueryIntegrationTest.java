@@ -14,6 +14,8 @@ import org.springframework.data.domain.PageRequest;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -56,13 +58,21 @@ class MetricsQueryIntegrationTest {
     }
 
     private void saveSample(Application app, String name, double value, Instant timestamp) {
+        saveSample(app, name, value, timestamp, Map.of());
+    }
+
+    private void saveSample(Application app,
+                            String name,
+                            double value,
+                            Instant timestamp,
+                            Map<String, String> tags) {
         metricSampleRepository.save(MetricSample.builder()
                 .application(app)
                 .name(name)
                 .value(value)
                 .timestamp(timestamp)
                 .receivedAt(Instant.now())
-                .tags(new HashMap<>())
+                .tags(new HashMap<>(tags))
                 .build());
     }
 
@@ -122,6 +132,29 @@ class MetricsQueryIntegrationTest {
 
         assertEquals(1, buckets.size());
         assertEquals(10.0, buckets.get(0).getAggregatedValue());
+    }
+
+    @Test
+    void aggregateSumGrouped_splitsBucketsByTagValue() {
+        saveSample(application, "ingest_requests_total", 2.0,
+                Instant.parse("2026-10-09T12:00:00Z"), Map.of("status", "200"));
+        saveSample(application, "ingest_requests_total", 1.0,
+                Instant.parse("2026-10-09T12:01:00Z"), Map.of("status", "200"));
+        saveSample(application, "ingest_requests_total", 4.0,
+                Instant.parse("2026-10-09T12:02:00Z"), Map.of("status", "500"));
+        saveSample(application, "ingest_requests_total", 99.0,
+                Instant.parse("2026-10-09T12:03:00Z"), Map.of("status", "ignored"));
+
+        List<MetricBucketProjection> buckets = metricSampleRepository.aggregateSumGrouped(
+                application.getId(), "ingest_requests_total", FROM, TO, FIVE_MINUTES_SECONDS, "status");
+
+        Map<String, Double> valuesByGroup = buckets.stream()
+                .collect(Collectors.toMap(MetricBucketProjection::getGroupValue,
+                        MetricBucketProjection::getAggregatedValue));
+        assertEquals(Map.of("200", 3.0, "500", 4.0, "ignored", 99.0), valuesByGroup);
+        assertEquals(1, buckets.stream()
+                .filter(bucket -> "200".equals(bucket.getGroupValue()))
+                .count());
     }
 
     @Test

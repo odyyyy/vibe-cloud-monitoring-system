@@ -162,4 +162,84 @@ public interface MetricSampleRepository extends JpaRepository<MetricSample, Long
                                               @Param("fromInstant") Instant from,
                                               @Param("toInstant") Instant to,
                                               @Param("intervalSeconds") long intervalSeconds);
+
+    @Query(value = """
+            SELECT FLOOR(UNIX_TIMESTAMP(ms.event_time) / :intervalSeconds) AS bucketEpoch,
+                   AVG(ms.metric_value) AS aggregatedValue,
+                   t.tag_value AS groupValue
+            FROM metric_samples ms
+            JOIN metric_sample_tags t ON t.metric_sample_id = ms.id AND t.tag_key = :groupByTag
+            WHERE ms.application_id = :applicationId
+              AND ms.name = :metricName
+              AND ms.event_time >= :fromInstant
+              AND ms.event_time <= :toInstant
+            GROUP BY bucketEpoch, t.tag_value
+            ORDER BY bucketEpoch, t.tag_value
+            """, nativeQuery = true)
+    List<MetricBucketProjection> aggregateAverageGrouped(@Param("applicationId") Long applicationId,
+                                                         @Param("metricName") String metricName,
+                                                         @Param("fromInstant") Instant from,
+                                                         @Param("toInstant") Instant to,
+                                                         @Param("intervalSeconds") long intervalSeconds,
+                                                         @Param("groupByTag") String groupByTag);
+
+    @Query(value = """
+            SELECT FLOOR(UNIX_TIMESTAMP(ms.event_time) / :intervalSeconds) AS bucketEpoch,
+                   MAX(ms.metric_value) AS aggregatedValue,
+                   t.tag_value AS groupValue
+            FROM metric_samples ms
+            JOIN metric_sample_tags t ON t.metric_sample_id = ms.id AND t.tag_key = :groupByTag
+            WHERE ms.application_id = :applicationId
+              AND ms.name = :metricName
+              AND ms.event_time >= :fromInstant
+              AND ms.event_time <= :toInstant
+            GROUP BY bucketEpoch, t.tag_value
+            ORDER BY bucketEpoch, t.tag_value
+            """, nativeQuery = true)
+    List<MetricBucketProjection> aggregateMaximumGrouped(@Param("applicationId") Long applicationId,
+                                                         @Param("metricName") String metricName,
+                                                         @Param("fromInstant") Instant from,
+                                                         @Param("toInstant") Instant to,
+                                                         @Param("intervalSeconds") long intervalSeconds,
+                                                         @Param("groupByTag") String groupByTag);
+
+    @Query(value = """
+            SELECT FLOOR(UNIX_TIMESTAMP(ms.event_time) / :intervalSeconds) AS bucketEpoch,
+                   MIN(ms.metric_value) AS aggregatedValue,
+                   t.tag_value AS groupValue
+            FROM metric_samples ms
+            JOIN metric_sample_tags t ON t.metric_sample_id = ms.id AND t.tag_key = :groupByTag
+            WHERE ms.application_id = :applicationId
+              AND ms.name = :metricName
+              AND ms.event_time >= :fromInstant
+              AND ms.event_time <= :toInstant
+            GROUP BY bucketEpoch, t.tag_value
+            ORDER BY bucketEpoch, t.tag_value
+            """, nativeQuery = true)
+    List<MetricBucketProjection> aggregateMinimumGrouped(@Param("applicationId") Long applicationId,
+                                                         @Param("metricName") String metricName,
+                                                         @Param("fromInstant") Instant from,
+                                                         @Param("toInstant") Instant to,
+                                                         @Param("intervalSeconds") long intervalSeconds,
+                                                         @Param("groupByTag") String groupByTag);
+
+    @Query(value = """
+            SELECT FLOOR(UNIX_TIMESTAMP(ms.event_time) / :intervalSeconds) AS bucketEpoch,
+                   SUM(ms.metric_value) AS aggregatedValue,
+                   t.tag_value AS groupValue
+            FROM metric_samples ms
+            JOIN metric_sample_tags t ON t.metric_sample_id = ms.id AND t.tag_key = :groupByTag
+            WHERE ms.application_id = :applicationId
+              AND ms.name = :metricName
+              AND ms.event_time >= :fromInstant
+              AND ms.event_time <= :toInstant
+            GROUP BY bucketEpoch, t.tag_value
+            ORDER BY bucketEpoch, t.tag_value
+            """, nativeQuery = true)
+    List<MetricBucketProjection> aggregateSumGrouped(@Param("applicationId") Long applicationId,
+                                                     @Param("metricName") String metricName,
+                                                     @Param("fromInstant") Instant from,
+                                                     @Param("toInstant") Instant to,
+                                                     @Param("intervalSeconds") long intervalSeconds,
+                                                     @Param("groupByTag") String groupByTag);
 }

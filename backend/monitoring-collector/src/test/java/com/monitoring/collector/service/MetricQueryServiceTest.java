@@ -3,6 +3,7 @@ package com.monitoring.collector.service;
 import com.monitoring.collector.dto.response.AggregatedMetricResponse;
 import com.monitoring.collector.dto.request.MetricAggregation;
 import com.monitoring.collector.dto.request.MetricsQueryRequest;
+import com.monitoring.collector.export.ExportData;
 import com.monitoring.collector.repository.MetricBucketProjection;
 import com.monitoring.collector.repository.MetricSampleRepository;
 import com.monitoring.apps.entity.Application;
@@ -16,7 +17,9 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -63,12 +66,17 @@ class MetricQueryServiceTest {
             public Double getAggregatedValue() {
                 return value;
             }
+
+            @Override
+            public String getGroupValue() {
+                return null;
+            }
         };
     }
 
     @Test
     void query_leftOutWhenRequesterDoesNotOwnApplication() {
-        when(applicationService.getOwnedApplication(APP_ID, USER_ID))
+        when(applicationService.getQueryableApplication(APP_ID, USER_ID))
                 .thenThrow(new ApplicationAccessDeniedException());
 
         assertThrows(ApplicationAccessDeniedException.class,
@@ -79,7 +87,7 @@ class MetricQueryServiceTest {
 
     @Test
     void query_mapsBucketsToIntervalStartAndValue() {
-        when(applicationService.getOwnedApplication(APP_ID, USER_ID)).thenReturn(application());
+        when(applicationService.getQueryableApplication(APP_ID, USER_ID)).thenReturn(application());
         when(repository.aggregateAverage(APP_ID, METRIC, FROM, TO, 300L))
                 .thenReturn(List.of(bucket(5_971_764L, 15.0), bucket(5_971_766L, 30.0)));
 
@@ -94,7 +102,7 @@ class MetricQueryServiceTest {
 
     @Test
     void query_dispatchesToRepositoryMethodMatchingAggregation() {
-        when(applicationService.getOwnedApplication(APP_ID, USER_ID)).thenReturn(application());
+        when(applicationService.getQueryableApplication(APP_ID, USER_ID)).thenReturn(application());
         when(repository.aggregateMaximum(APP_ID, METRIC, FROM, TO, 60L)).thenReturn(List.of());
         when(repository.aggregateMinimum(APP_ID, METRIC, FROM, TO, 60L)).thenReturn(List.of());
         when(repository.aggregateSum(APP_ID, METRIC, FROM, TO, 60L)).thenReturn(List.of());
@@ -107,6 +115,36 @@ class MetricQueryServiceTest {
         verify(repository, never()).aggregateAverage(APP_ID, METRIC, FROM, TO, 60L);
         verify(repository).aggregateMinimum(APP_ID, METRIC, FROM, TO, 60L);
         verify(repository).aggregateSum(APP_ID, METRIC, FROM, TO, 60L);
+    }
+
+    @Test
+    void exportRows_truncatesToLimitAndReportsTotal() {
+        when(applicationService.getQueryableApplication(APP_ID, USER_ID)).thenReturn(application());
+        when(repository.aggregateAverage(APP_ID, METRIC, FROM, TO, 300L))
+                .thenReturn(List.of(bucket(1L, 1.0), bucket(2L, 2.0), bucket(3L, 3.0)));
+
+        ExportData<AggregatedMetricResponse> data =
+                service.exportRows(USER_ID, request(MetricAggregation.AVG, 5), 2);
+
+        assertEquals(2, data.rows().size());
+        assertEquals(3, data.totalRows());
+        assertTrue(data.isTruncated());
+        assertEquals(1.0, data.rows().get(0).getValue());
+        assertEquals(2.0, data.rows().get(1).getValue());
+    }
+
+    @Test
+    void exportRows_returnsAllRowsWhenUnderLimit() {
+        when(applicationService.getQueryableApplication(APP_ID, USER_ID)).thenReturn(application());
+        when(repository.aggregateAverage(APP_ID, METRIC, FROM, TO, 300L))
+                .thenReturn(List.of(bucket(1L, 1.0)));
+
+        ExportData<AggregatedMetricResponse> data =
+                service.exportRows(USER_ID, request(MetricAggregation.AVG, 5), 10);
+
+        assertEquals(1, data.rows().size());
+        assertEquals(1, data.totalRows());
+        assertFalse(data.isTruncated());
     }
 
     private Application application() {

@@ -10,6 +10,7 @@ import com.monitoring.organization.exception.TenantAccessDeniedException;
 import com.monitoring.collector.exception.SavedLogViewAccessDeniedException;
 import com.monitoring.collector.exception.SavedLogViewLimitExceededException;
 import com.monitoring.collector.exception.SavedLogViewNotFoundException;
+import com.monitoring.collector.exception.InvalidExportFormatException;
 import com.monitoring.collector.exception.InvalidTraceException;
 import com.monitoring.collector.exception.TraceNotFoundException;
 import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
@@ -201,6 +202,13 @@ public class ApiExceptionHandler {
     /** Trace-level ingestion constraints (for example too many spans for a single trace). */
     @ExceptionHandler(InvalidTraceException.class)
     public ResponseEntity<ApiError> handleInvalidTrace(InvalidTraceException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
+    }
+
+    /** Unknown {@code format} value on a log or metric query export request. */
+    @ExceptionHandler(InvalidExportFormatException.class)
+    public ResponseEntity<ApiError> handleInvalidExportFormat(InvalidExportFormatException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
     }

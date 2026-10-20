@@ -22,4 +22,7 @@ public class AggregatedMetricResponse {
     private Instant timestamp;
 
     private Double value;
+
+    /** Tag value when the query is grouped by a tag, otherwise {@code null}. */
+    private String group;
 }

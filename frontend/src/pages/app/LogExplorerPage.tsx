@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ApiError } from '../../api/client'
+import { ApiError, type ExportFormat } from '../../api/client'
 import type { LogEvent, LogsQueryParams } from '../../api/logs'
-import { useLogsQuery } from '../../api/logs'
+import { exportLogs, useLogsQuery } from '../../api/logs'
 import type { SavedLogView } from '../../api/savedLogViews'
 import { LogDetailModal } from '../../components/logs/LogDetailModal'
 import { LogTable } from '../../components/logs/LogTable'
@@ -23,6 +23,7 @@ import {
 } from '../../features/logs/searchParams'
 import { savedViewToSearchParams } from '../../features/logs/savedViews'
 import { TIME_RANGE_PRESETS, resolvePresetRange } from '../../features/metrics/timeRange'
+import { downloadBlob } from '../../lib/download'
 
 export default function LogExplorerPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -40,6 +41,7 @@ export default function LogExplorerPage() {
     filtersFromSearchParams(searchParams, initialFilters),
   )
   const [applyError, setApplyError] = useState<string | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
   const [selectedLog, setSelectedLog] = useState<LogEvent | null>(null)
 
   useEffect(() => {
@@ -80,6 +82,26 @@ export default function LogExplorerPage() {
 
     setApplyError(null)
     setSearchParams(filtersToSearchParams(result.data))
+  }
+
+  const handleExport = async (format: ExportFormat) => {
+    if (!params) {
+      toast.error('Apply filters before exporting.')
+      return
+    }
+
+    setIsExporting(true)
+    try {
+      const file = await exportLogs(params, format)
+      downloadBlob(file.blob, file.filename ?? `logs-export.${format}`)
+      if (file.truncated) {
+        toast.warning('Export limited to first 10,000 rows. Refine your filters.')
+      }
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Could not export logs.')
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   const commit = (next: LogsQueryParams) => {
@@ -125,8 +147,11 @@ export default function LogExplorerPage() {
             draft={draft}
             onChange={handleChange}
             onApply={handleApply}
+            onExport={handleExport}
             error={validationError}
             isApplying={query.isFetching}
+            isExporting={isExporting}
+            canExport={params !== null}
           />
 
           {params ? (

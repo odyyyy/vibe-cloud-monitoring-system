@@ -739,6 +739,8 @@ Online/Offline вычисляется на фронтенде по `lastSeenAt` 
 Параметры `GET /api/v1/metrics/query`:
 `applicationId`, `metricName`, `from`, `to` (ISO-8601 UTC), `aggregation`
 (`AVG|MAX|MIN|SUM`), `intervalMinutes` (>0). Диапазон не более 30 дней.
+Необязательный `format=csv|json` превращает ответ в скачиваемый файл (см. раздел
+«Экспорт логов и метрик»).
 
 Параметры `GET /api/v1/metrics/names`: `applicationId` (обязателен). Возвращает
 отсортированный по алфавиту список уникальных имён метрик (до 500), ограниченный
@@ -778,6 +780,25 @@ Content-Type: application/json
 Ответ имеет форму `{ content, totalElements, totalPages, page, size }` (собственный
 `PageResponse`, не Spring Data `Page`); `content[]` содержит
 `{ id, applicationId, timestamp, level, message, context }`.
+
+### Экспорт логов и метрик
+
+`GET /api/v1/logs` и `GET /api/v1/metrics/query` принимают необязательный параметр
+`format=csv|json`. Без него контракт ответа не меняется. С параметром сервер возвращает
+файл с заголовком `Content-Disposition: attachment` (`export.csv` или `export.json`):
+
+- `format=csv` — `Content-Type: text/csv; charset=UTF-8`. Каждая ячейка в кавычках,
+  внутренние кавычки удвоены, поэтому запятые и переводы строк в сообщениях логов не
+  ломают файл. Текстовые ячейки, начинающиеся с `=`, `+`, `-`, `@`, таба или CR,
+  получают префикс `'` для защиты от формул в Excel/Numbers.
+- `format=json` — массив объектов; для логов это
+  `[{ id, applicationId, timestamp, level, message, context }]`, для метрик —
+  `[{ timestamp, value, group }]`.
+
+Экспорт ограничен 10 000 строками. Заголовки `X-Export-Limit`, `X-Export-Total` и
+`X-Export-Truncated` позволяют фронтенду предупредить, что результат усечён. Права
+доступа и tenant isolation те же, что у обычных query-эндпоинтов: `format` не ослабляет
+проверки владельца приложения и организации.
 
 Пример приёма логов:
 

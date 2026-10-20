@@ -3,15 +3,20 @@ package com.monitoring.collector.controller;
 import com.monitoring.organization.tenant.CurrentTenantService;
 import com.monitoring.collector.dto.response.LogEventResponse;
 import com.monitoring.collector.dto.request.LogsQueryRequest;
+import com.monitoring.collector.exception.InvalidExportFormatException;
+import com.monitoring.collector.export.ExportData;
+import com.monitoring.collector.export.ExportResponseWriter;
 import com.monitoring.common.dto.response.PageResponse;
 import com.monitoring.collector.entity.LogLevel;
 import com.monitoring.collector.service.LogQueryService;
 import com.monitoring.apps.exception.ApplicationAccessDeniedException;
 import com.monitoring.apps.exception.ApplicationNotFoundException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -28,11 +33,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -53,7 +62,10 @@ class LogQueryControllerTest {
         CurrentTenantService tenantService = Mockito.mock(CurrentTenantService.class);
         when(tenantService.requireOrganizationId()).thenReturn(USER_ID);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new LogQueryController(logQueryService, tenantService))
+                .standaloneSetup(new LogQueryController(
+                        logQueryService,
+                        tenantService,
+                        new ExportResponseWriter(new ObjectMapper().findAndRegisterModules())))
                 .setControllerAdvice(new TestAdvice())
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
@@ -138,6 +150,78 @@ class LogQueryControllerTest {
         mockMvc.perform(get(VALID_QUERY)).andExpect(status().isNotFound());
     }
 
+    @Test
+    void csvExport_returnsAttachmentWithSanitizedCells() throws Exception {
+        when(logQueryService.exportRows(eq(USER_ID), any(LogsQueryRequest.class),
+                eq(ExportResponseWriter.MAX_EXPORT_ROWS)))
+                .thenReturn(new ExportData<>(List.of(LogEventResponse.builder()
+                        .id(1L)
+                        .applicationId(7L)
+                        .timestamp(Instant.parse("2026-10-09T00:10:00Z"))
+                        .level(LogLevel.ERROR)
+                        .message("=SUM(A1:A2), \"quoted\"")
+                        .context("line1\nline2")
+                        .build()), 1));
+
+        mockMvc.perform(get(VALID_QUERY + "&format=csv"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"export.csv\""))
+                .andExpect(content().contentTypeCompatibleWith("text/csv"))
+                .andExpect(header().string(ExportResponseWriter.TRUNCATED_HEADER, "false"))
+                .andExpect(header().string(ExportResponseWriter.TOTAL_HEADER, "1"))
+                .andExpect(content().string(containsString("\"'=SUM(A1:A2), \"\"quoted\"\"\"")))
+                .andExpect(content().string(containsString("\"line1\nline2\"")));
+    }
+
+    @Test
+    void csvExport_reportsTruncationWhenMoreRowsMatched() throws Exception {
+        when(logQueryService.exportRows(eq(USER_ID), any(LogsQueryRequest.class),
+                eq(ExportResponseWriter.MAX_EXPORT_ROWS)))
+                .thenReturn(new ExportData<>(List.of(LogEventResponse.builder()
+                        .id(1L)
+                        .applicationId(7L)
+                        .timestamp(Instant.parse("2026-10-09T00:10:00Z"))
+                        .level(LogLevel.INFO)
+                        .message("first")
+                        .build()), ExportResponseWriter.MAX_EXPORT_ROWS + 5L));
+
+        mockMvc.perform(get(VALID_QUERY + "&format=csv"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(ExportResponseWriter.TRUNCATED_HEADER, "true"))
+                .andExpect(header().string(ExportResponseWriter.TOTAL_HEADER, "10005"));
+    }
+
+    @Test
+    void jsonExport_returnsJsonArrayAttachment() throws Exception {
+        when(logQueryService.exportRows(eq(USER_ID), any(LogsQueryRequest.class),
+                eq(ExportResponseWriter.MAX_EXPORT_ROWS)))
+                .thenReturn(new ExportData<>(List.of(LogEventResponse.builder()
+                        .id(1L)
+                        .applicationId(7L)
+                        .timestamp(Instant.parse("2026-10-09T00:10:00Z"))
+                        .level(LogLevel.INFO)
+                        .message("boom")
+                        .build()), 1));
+
+        mockMvc.perform(get(VALID_QUERY + "&format=json"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"export.json\""))
+                .andExpect(content().contentTypeCompatibleWith("application/json"))
+                .andExpect(jsonPath("$[0].message").value("boom"))
+                .andExpect(jsonPath("$[0].timestamp").exists());
+    }
+
+    @Test
+    void unknownExportFormat_returnsBadRequest() throws Exception {
+        mockMvc.perform(get(VALID_QUERY + "&format=xlsx"))
+                .andExpect(status().isBadRequest());
+
+        verify(logQueryService, Mockito.never()).query(any(), any());
+        verify(logQueryService, Mockito.never()).exportRows(any(), any(), anyInt());
+    }
+
     /**
      * Minimal advice for the standalone test: in the running application the same errors are
      * handled by the global ApiExceptionHandler from monitoring-api.
@@ -167,6 +251,12 @@ class LogQueryControllerTest {
         ResponseEntity<Map<String, Object>> handleNotFound(ApplicationNotFoundException ex) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("status", HttpStatus.NOT_FOUND.value(), "message", ex.getMessage()));
+        }
+
+        @ExceptionHandler(InvalidExportFormatException.class)
+        ResponseEntity<Map<String, Object>> handleInvalidExportFormat(InvalidExportFormatException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("status", HttpStatus.BAD_REQUEST.value(), "message", ex.getMessage()));
         }
     }
 }

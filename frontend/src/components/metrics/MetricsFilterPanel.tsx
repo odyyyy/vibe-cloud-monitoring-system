@@ -1,8 +1,10 @@
 import type { Aggregation } from '../../api/metrics'
+import type { ExportFormat } from '../../api/client'
 import type { MetricFilters } from '../../features/metrics/searchParams'
 import { ApplicationSelect } from '../filters/ApplicationSelect'
 import { MetricNameSelect } from '../filters/MetricNameSelect'
 import { TimeRangePicker } from '../filters/TimeRangePicker'
+import { ExportMenu } from '../ExportMenu'
 import { Button } from '../ui/button'
 import { Label } from '../ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
@@ -14,11 +16,23 @@ interface MetricsFilterPanelProps {
   draft: MetricFilters
   onChange: (patch: Partial<MetricFilters>) => void
   onApply: () => void
+  onExport: (format: ExportFormat) => void
   error: string | null
   isApplying: boolean
+  isExporting: boolean
+  canExport: boolean
 }
 
-export function MetricsFilterPanel({ draft, onChange, onApply, error, isApplying }: MetricsFilterPanelProps) {
+export function MetricsFilterPanel({
+  draft,
+  onChange,
+  onApply,
+  onExport,
+  error,
+  isApplying,
+  isExporting,
+  canExport,
+}: MetricsFilterPanelProps) {
   return (
     <form
       className="rounded-2xl border border-white/10 bg-panel/60 p-4 sm:p-5"
@@ -87,10 +101,11 @@ export function MetricsFilterPanel({ draft, onChange, onApply, error, isApplying
           </Select>
         </div>
 
-        <div className="flex items-end">
-          <Button type="submit" className="w-full" disabled={isApplying}>
+        <div className="flex items-end gap-2">
+          <Button type="submit" className="flex-1" disabled={isApplying}>
             Apply
           </Button>
+          <ExportMenu onExport={onExport} disabled={!canExport} isExporting={isExporting} />
         </div>
       </div>
 

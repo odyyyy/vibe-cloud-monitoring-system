@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ApiError } from '../../api/client'
-import { useMetricsQuery } from '../../api/metrics'
+import { ApiError, type ExportFormat } from '../../api/client'
+import { exportMetrics, useMetricsQuery } from '../../api/metrics'
 import { MetricChart } from '../../components/metrics/MetricChart'
 import { MetricsFilterPanel } from '../../components/metrics/MetricsFilterPanel'
 import { metricsQuerySchema } from '../../features/metrics/schemas'
@@ -15,6 +15,7 @@ import {
   type MetricFilters,
 } from '../../features/metrics/searchParams'
 import { TIME_RANGE_PRESETS, resolvePresetRange } from '../../features/metrics/timeRange'
+import { downloadBlob } from '../../lib/download'
 
 export default function MetricsExplorerPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -32,6 +33,7 @@ export default function MetricsExplorerPage() {
     filtersFromSearchParams(searchParams, initialFilters),
   )
   const [applyError, setApplyError] = useState<string | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
 
   useEffect(() => {
     setDraft(filtersFromSearchParams(new URLSearchParams(searchKey), initialFilters))
@@ -71,6 +73,26 @@ export default function MetricsExplorerPage() {
     setSearchParams(filtersToSearchParams(result.data))
   }
 
+  const handleExport = async (format: ExportFormat) => {
+    if (!params) {
+      toast.error('Apply filters before exporting.')
+      return
+    }
+
+    setIsExporting(true)
+    try {
+      const file = await exportMetrics(params, format)
+      downloadBlob(file.blob, file.filename ?? `metrics-export.${format}`)
+      if (file.truncated) {
+        toast.warning('Export limited to first 10,000 rows. Refine your filters.')
+      }
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Could not export metrics.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   const validationError = parsed.error ?? applyError
 
   return (
@@ -87,8 +109,11 @@ export default function MetricsExplorerPage() {
         draft={draft}
         onChange={handleChange}
         onApply={handleApply}
+        onExport={handleExport}
         error={validationError}
         isApplying={query.isFetching}
+        isExporting={isExporting}
+        canExport={params !== null}
       />
 
       {params ? (

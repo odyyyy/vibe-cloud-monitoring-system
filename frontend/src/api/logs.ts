@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/authStore'
-import { apiRequest } from './client'
+import { apiDownload, apiRequest, type DownloadResponse, type ExportFormat } from './client'
 
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
 
@@ -36,6 +36,16 @@ function authToken(): string | null {
 }
 
 export function getLogs(params: LogsQueryParams): Promise<LogsPageResponse> {
+  return apiRequest<LogsPageResponse>(`/v1/logs?${buildLogsSearch(params).toString()}`, { token: authToken() })
+}
+
+export function exportLogs(params: LogsQueryParams, format: ExportFormat): Promise<DownloadResponse> {
+  const search = buildLogsSearch(params)
+  search.set('format', format)
+  return apiDownload(`/v1/logs?${search.toString()}`, { token: authToken() })
+}
+
+function buildLogsSearch(params: LogsQueryParams): URLSearchParams {
   const search = new URLSearchParams({
     applicationId: String(params.applicationId),
     from: params.from,
@@ -49,8 +59,7 @@ export function getLogs(params: LogsQueryParams): Promise<LogsPageResponse> {
   if (params.searchText) {
     search.set('searchText', params.searchText)
   }
-
-  return apiRequest<LogsPageResponse>(`/v1/logs?${search.toString()}`, { token: authToken() })
+  return search
 }
 
 export const logsQueryKey = (params: LogsQueryParams | null) =>

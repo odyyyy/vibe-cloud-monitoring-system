@@ -4,6 +4,7 @@ import com.monitoring.collector.dto.request.LogsQueryRequest;
 import com.monitoring.common.dto.response.PageResponse;
 import com.monitoring.collector.dto.response.LogEventResponse;
 import com.monitoring.collector.entity.LogEvent;
+import com.monitoring.collector.export.ExportData;
 import com.monitoring.collector.repository.LogEventRepository;
 import com.monitoring.apps.service.ApplicationService;
 import jakarta.persistence.criteria.Predicate;
@@ -51,6 +52,33 @@ public class LogQueryService {
         Page<LogEvent> page = logEventRepository.findAll(toSpecification(request), pageable);
 
         return PageResponse.of(page, LogEventResponse::fromEntity);
+    }
+
+    /**
+     * Selects up to {@code limit} rows for a synchronous export, using the same filters,
+     * ordering and tenant check as {@link #query}. The repository reports the total number of
+     * matching rows, so callers can detect that the export was truncated without loading the
+     * remaining rows into memory.
+     */
+    public ExportData<LogEventResponse> exportRows(Long organizationId, LogsQueryRequest request, int limit) {
+        if (limit < 1) {
+            throw new IllegalArgumentException("Export limit must be positive");
+        }
+
+        applicationService.getOwnedApplication(request.getApplicationId(), organizationId);
+
+        Pageable pageable = PageRequest.of(
+                0,
+                limit,
+                Sort.by(Sort.Order.desc("timestamp"), Sort.Order.desc("id"))
+        );
+
+        Page<LogEvent> page = logEventRepository.findAll(toSpecification(request), pageable);
+        List<LogEventResponse> rows = page.getContent().stream()
+                .map(LogEventResponse::fromEntity)
+                .toList();
+
+        return new ExportData<>(rows, page.getTotalElements());
     }
 
     private Specification<LogEvent> toSpecification(LogsQueryRequest request) {

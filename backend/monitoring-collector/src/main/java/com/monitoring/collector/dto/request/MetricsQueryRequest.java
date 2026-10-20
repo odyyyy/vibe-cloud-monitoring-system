@@ -5,7 +5,9 @@ import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -54,6 +56,14 @@ public class MetricsQueryRequest {
 
     @NotNull(message = "aggregation is required")
     private MetricAggregation aggregation;
+
+    /**
+     * Optional tag key used to split the result into multiple series (for example
+     * {@code status}). The tag key is bounded and restricted to identifier characters.
+     */
+    @Size(max = 100, message = "groupByTag must be at most 100 characters")
+    @Pattern(regexp = "[A-Za-z0-9_.-]*", message = "groupByTag contains unsupported characters")
+    private String groupByTag;
 
     @NotNull(message = "intervalMinutes is required")
     @Min(value = 1, message = "intervalMinutes must be greater than 0")
