@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { WidgetType } from '../../api/dashboards'
 
-export const WIDGET_TYPES = ['METRIC_CHART', 'LOG_TABLE', 'STATUS'] as const
+export const WIDGET_TYPES = ['METRIC_CHART', 'GAUGE', 'LOG_TABLE', 'STATUS'] as const
 export const widgetTypeSchema = z.enum(WIDGET_TYPES)
 
 export const AGGREGATIONS = ['AVG', 'MAX', 'MIN', 'SUM'] as const
@@ -58,6 +58,20 @@ export const metricChartConfigSchema = z.object({
     .int()
     .positive('Interval must be greater than 0'),
   timeRangeHours: timeRangeHoursSchema,
+  groupByTag: z
+    .string()
+    .trim()
+    .max(100, 'Group tag is too long')
+    .regex(/^[A-Za-z0-9_.-]+$/, 'Group tag contains unsupported characters')
+    .optional(),
+})
+
+export const gaugeConfigSchema = z.object({
+  applicationId: applicationIdSchema,
+  metricName: z.string().trim().min(1, 'Metric name is required').max(255, 'Metric name is too long'),
+  label: z.string().trim().max(100, 'Label is too long').optional(),
+  unit: z.string().trim().max(32, 'Unit is too long').optional(),
+  timeRangeHours: timeRangeHoursSchema,
 })
 
 export const logTableConfigSchema = z.object({
@@ -77,11 +91,13 @@ export const statusConfigSchema = z.object({
 })
 
 export type MetricChartConfig = z.infer<typeof metricChartConfigSchema>
+export type GaugeConfig = z.infer<typeof gaugeConfigSchema>
 export type LogTableConfig = z.infer<typeof logTableConfigSchema>
 export type StatusConfig = z.infer<typeof statusConfigSchema>
 
 export type ParsedWidgetConfig =
   | { type: 'METRIC_CHART'; config: MetricChartConfig }
+  | { type: 'GAUGE'; config: GaugeConfig }
   | { type: 'LOG_TABLE'; config: LogTableConfig }
   | { type: 'STATUS'; config: StatusConfig }
 
@@ -107,6 +123,13 @@ export function parseWidgetConfig(type: WidgetType, raw: string): WidgetConfigPa
     return result.success
       ? { success: true, data: { type, config: result.data } }
       : { success: false, error: result.error.issues[0]?.message ?? 'Invalid chart config.' }
+  }
+
+  if (type === 'GAUGE') {
+    const result = gaugeConfigSchema.safeParse(json)
+    return result.success
+      ? { success: true, data: { type, config: result.data } }
+      : { success: false, error: result.error.issues[0]?.message ?? 'Invalid gauge config.' }
   }
 
   if (type === 'LOG_TABLE') {

@@ -6,6 +6,7 @@ package com.monitoring.dashboards.entity;
  */
 public enum WidgetType {
     METRIC_CHART,
+    GAUGE,
     LOG_TABLE,
     STATUS
 }

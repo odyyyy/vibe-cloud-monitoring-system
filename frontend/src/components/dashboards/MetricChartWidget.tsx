@@ -1,7 +1,7 @@
 import { MetricChart } from '../metrics/MetricChart'
 import type { MetricChartConfig } from '../../features/dashboards/schemas'
 import { useMetricChartWidget } from '../../features/dashboards/useWidgetData'
-import { metricColor } from '../../features/metrics/catalog'
+import { metricColor, metricLabel } from '../../features/metrics/catalog'
 
 interface MetricChartWidgetProps {
   widgetId: number
@@ -19,7 +19,7 @@ export function MetricChartWidget({ widgetId, config, refetchInterval, shareToke
     <MetricChart
       bare
       heightClass="h-full"
-      title={config.metricName}
+      title={metricLabel(config.metricName)}
       accentColor={metricColor(config.metricName)}
       data={query.data ?? []}
       isLoading={query.isLoading}

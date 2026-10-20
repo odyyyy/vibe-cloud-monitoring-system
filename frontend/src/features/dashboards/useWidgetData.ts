@@ -5,7 +5,7 @@ import type { AggregatedMetricPoint } from '../../api/metrics'
 import { getMetricsQuery } from '../../api/metrics'
 import { getSharedWidgetLogs, getSharedWidgetMetrics } from '../../api/dashboards'
 import { resolvePresetRange } from '../metrics/timeRange'
-import type { LogTableConfig, MetricChartConfig } from './schemas'
+import type { GaugeConfig, LogTableConfig, MetricChartConfig } from './schemas'
 
 const WIDGET_LOGS_PAGE_SIZE = 10
 
@@ -24,7 +24,7 @@ export function useMetricChartWidget(
   refetchInterval: number,
   shareToken?: string,
 ) {
-  const { applicationId, metricName, aggregation, intervalMinutes, timeRangeHours } = config
+  const { applicationId, metricName, aggregation, intervalMinutes, timeRangeHours, groupByTag } = config
 
   return useQuery<AggregatedMetricPoint[]>({
     queryKey: [
@@ -36,6 +36,7 @@ export function useMetricChartWidget(
       aggregation,
       intervalMinutes,
       timeRangeHours,
+      groupByTag ?? null,
       shareToken ?? null,
     ] as const,
     queryFn: () => {
@@ -43,7 +44,47 @@ export function useMetricChartWidget(
       if (shareToken) {
         return getSharedWidgetMetrics(shareToken, widgetId, { from, to })
       }
-      return getMetricsQuery({ applicationId, metricName, from, to, aggregation, intervalMinutes })
+      return getMetricsQuery({ applicationId, metricName, from, to, aggregation, intervalMinutes, groupByTag })
+    },
+    refetchInterval,
+  })
+}
+
+/**
+ * Data hook for a GAUGE widget: the same time-series query with a small step, reduced to the
+ * most recent non-null point by the renderer.
+ */
+export function useGaugeWidget(
+  widgetId: number,
+  config: GaugeConfig,
+  refetchInterval: number,
+  shareToken?: string,
+) {
+  const { applicationId, metricName, timeRangeHours } = config
+
+  return useQuery<AggregatedMetricPoint[]>({
+    queryKey: [
+      'dashboard-widget',
+      'gauge',
+      widgetId,
+      applicationId,
+      metricName,
+      timeRangeHours,
+      shareToken ?? null,
+    ] as const,
+    queryFn: () => {
+      const { from, to } = relativeRange(timeRangeHours)
+      if (shareToken) {
+        return getSharedWidgetMetrics(shareToken, widgetId, { from, to })
+      }
+      return getMetricsQuery({
+        applicationId,
+        metricName,
+        from,
+        to,
+        aggregation: 'MAX',
+        intervalMinutes: 1,
+      })
     },
     refetchInterval,
   })

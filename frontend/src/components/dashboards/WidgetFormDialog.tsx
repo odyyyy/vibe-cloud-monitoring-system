@@ -7,6 +7,7 @@ import {
   MAX_CONFIG_LENGTH,
   TIME_RANGE_HOURS_OPTIONS,
   WIDGET_TYPES,
+  gaugeConfigSchema,
   logTableConfigSchema,
   metricChartConfigSchema,
   parseWidgetConfig,
@@ -25,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 const INTERVALS = [1, 5, 15, 60, 1440]
 const WIDGET_TYPE_LABELS: Record<WidgetType, string> = {
   METRIC_CHART: 'Metric chart',
+  GAUGE: 'Gauge',
   LOG_TABLE: 'Log table',
   STATUS: 'Status',
 }
@@ -49,6 +51,7 @@ export function WidgetFormDialog({ open, onOpenChange, widget, onSubmit }: Widge
   const [metricName, setMetricName] = useState('')
   const [aggregation, setAggregation] = useState<Aggregation>('AVG')
   const [intervalMinutes, setIntervalMinutes] = useState(5)
+  const [groupByTag, setGroupByTag] = useState('')
   const [level, setLevel] = useState<LevelFilter>('ALL')
   const [searchText, setSearchText] = useState('')
   const [timeRangeHours, setTimeRangeHours] = useState<number>(DEFAULT_TIME_RANGE_HOURS)
@@ -66,6 +69,7 @@ export function WidgetFormDialog({ open, onOpenChange, widget, onSubmit }: Widge
     setMetricName('')
     setAggregation('AVG')
     setIntervalMinutes(5)
+    setGroupByTag('')
     setLevel('ALL')
     setSearchText('')
     setTimeRangeHours(DEFAULT_TIME_RANGE_HOURS)
@@ -78,6 +82,11 @@ export function WidgetFormDialog({ open, onOpenChange, widget, onSubmit }: Widge
           setMetricName(parsed.data.config.metricName)
           setAggregation(parsed.data.config.aggregation)
           setIntervalMinutes(parsed.data.config.intervalMinutes)
+          setGroupByTag(parsed.data.config.groupByTag ?? '')
+          setTimeRangeHours(parsed.data.config.timeRangeHours)
+        } else if (parsed.data.type === 'GAUGE') {
+          setApplicationId(parsed.data.config.applicationId)
+          setMetricName(parsed.data.config.metricName)
           setTimeRangeHours(parsed.data.config.timeRangeHours)
         } else if (parsed.data.type === 'LOG_TABLE') {
           setApplicationId(parsed.data.config.applicationId)
@@ -102,9 +111,16 @@ export function WidgetFormDialog({ open, onOpenChange, widget, onSubmit }: Widge
             metricName: metricName.trim(),
             aggregation,
             intervalMinutes,
+            groupByTag: groupByTag.trim() === '' ? undefined : groupByTag.trim(),
             timeRangeHours,
           }
-        : type === 'LOG_TABLE'
+        : type === 'GAUGE'
+          ? {
+              applicationId: applicationId ?? undefined,
+              metricName: metricName.trim(),
+              timeRangeHours,
+            }
+          : type === 'LOG_TABLE'
           ? {
               applicationId: applicationId ?? undefined,
               level: level === 'ALL' ? undefined : level,
@@ -114,7 +130,13 @@ export function WidgetFormDialog({ open, onOpenChange, widget, onSubmit }: Widge
           : { applicationId: applicationId ?? undefined, timeRangeHours }
 
     const schema =
-      type === 'METRIC_CHART' ? metricChartConfigSchema : type === 'LOG_TABLE' ? logTableConfigSchema : statusConfigSchema
+      type === 'METRIC_CHART'
+        ? metricChartConfigSchema
+        : type === 'GAUGE'
+          ? gaugeConfigSchema
+          : type === 'LOG_TABLE'
+            ? logTableConfigSchema
+            : statusConfigSchema
     const result = schema.safeParse(candidate)
 
     if (!result.success) {
@@ -184,17 +206,20 @@ export function WidgetFormDialog({ open, onOpenChange, widget, onSubmit }: Widge
             />
           </div>
 
+          {type === 'METRIC_CHART' || type === 'GAUGE' ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="widget-metric">Metric name</Label>
+              <MetricNameSelect
+                id="widget-metric"
+                applicationId={applicationId}
+                value={metricName}
+                onChange={setMetricName}
+              />
+            </div>
+          ) : null}
+
           {type === 'METRIC_CHART' ? (
             <>
-              <div className="space-y-1.5">
-                <Label htmlFor="widget-metric">Metric name</Label>
-                <MetricNameSelect
-                  id="widget-metric"
-                  applicationId={applicationId}
-                  value={metricName}
-                  onChange={setMetricName}
-                />
-              </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="widget-aggregation">Aggregation</Label>
@@ -226,6 +251,17 @@ export function WidgetFormDialog({ open, onOpenChange, widget, onSubmit }: Widge
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="widget-group">Group by tag (optional)</Label>
+                <Input
+                  id="widget-group"
+                  placeholder="e.g. status"
+                  autoComplete="off"
+                  value={groupByTag}
+                  onChange={(event) => setGroupByTag(event.target.value)}
+                />
+                <p className="text-xs text-slate-500">Renders one line per tag value.</p>
               </div>
             </>
           ) : null}

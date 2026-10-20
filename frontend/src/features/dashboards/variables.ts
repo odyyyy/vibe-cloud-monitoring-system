@@ -57,6 +57,12 @@ export function interpolateWidgetConfig(
       config: { ...parsed.config, metricName: interpolate(parsed.config.metricName, values) },
     }
   }
+  if (parsed.type === 'GAUGE') {
+    return {
+      type: 'GAUGE',
+      config: { ...parsed.config, metricName: interpolate(parsed.config.metricName, values) },
+    }
+  }
   if (parsed.type === 'LOG_TABLE') {
     const { searchText } = parsed.config
     return {

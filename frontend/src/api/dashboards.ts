@@ -4,7 +4,7 @@ import { apiRequest, ApiError } from './client'
 import type { LogsPageResponse } from './logs'
 import type { AggregatedMetricPoint } from './metrics'
 
-export type WidgetType = 'METRIC_CHART' | 'LOG_TABLE' | 'STATUS'
+export type WidgetType = 'METRIC_CHART' | 'GAUGE' | 'LOG_TABLE' | 'STATUS'
 
 export interface Widget {
   id: number
@@ -35,6 +35,7 @@ export interface Dashboard {
   widgets: Widget[]
   shareToken?: string
   isPublic?: boolean
+  isSystem?: boolean
 }
 
 export interface DashboardLayout {

@@ -4,9 +4,10 @@ import type { Widget, WidgetType } from '../../api/dashboards'
 import { useDashboardVariableValues } from '../../features/dashboards/DashboardVariablesContext'
 import { parseWidgetConfig } from '../../features/dashboards/schemas'
 import { interpolateWidgetConfig } from '../../features/dashboards/variables'
-import { metricColor } from '../../features/metrics/catalog'
+import { metricColor, metricLabel } from '../../features/metrics/catalog'
 import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
+import { GaugeWidget } from './GaugeWidget'
 import { LogTableWidget } from './LogTableWidget'
 import { MetricChartWidget } from './MetricChartWidget'
 import { StatusWidget } from './StatusWidget'
@@ -14,6 +15,7 @@ import { WidgetErrorBoundary } from './WidgetErrorBoundary'
 
 const TYPE_LABELS: Record<WidgetType, string> = {
   METRIC_CHART: 'Chart',
+  GAUGE: 'Gauge',
   LOG_TABLE: 'Logs',
   STATUS: 'Status',
 }
@@ -40,13 +42,18 @@ export function DashboardWidget({ widget, showActions, refetchInterval, onEdit, 
 
   const title = resolved
     ? resolved.type === 'METRIC_CHART'
-      ? resolved.config.metricName
-      : resolved.type === 'LOG_TABLE'
-        ? 'Logs'
-        : 'Status'
+      ? metricLabel(resolved.config.metricName)
+      : resolved.type === 'GAUGE'
+        ? resolved.config.label ?? resolved.config.metricName
+        : resolved.type === 'LOG_TABLE'
+          ? 'Logs'
+          : 'Status'
     : TYPE_LABELS[widget.type]
 
-  const accent = resolved && resolved.type === 'METRIC_CHART' ? metricColor(resolved.config.metricName) : null
+  const accent =
+    resolved && (resolved.type === 'METRIC_CHART' || resolved.type === 'GAUGE')
+      ? metricColor(resolved.config.metricName)
+      : null
 
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-panel/60">
@@ -98,6 +105,13 @@ export function DashboardWidget({ widget, showActions, refetchInterval, onEdit, 
             </div>
           ) : resolved === null ? null : resolved.type === 'METRIC_CHART' ? (
             <MetricChartWidget
+              widgetId={widget.id}
+              config={resolved.config}
+              refetchInterval={refetchInterval}
+              shareToken={shareToken}
+            />
+          ) : resolved.type === 'GAUGE' ? (
+            <GaugeWidget
               widgetId={widget.id}
               config={resolved.config}
               refetchInterval={refetchInterval}
