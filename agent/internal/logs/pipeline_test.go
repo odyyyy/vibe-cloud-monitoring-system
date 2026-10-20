@@ -1,12 +1,14 @@
 package logs
 
 import (
+	"encoding/json"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vibemonitoring/agent/internal/config"
 	"github.com/vibemonitoring/agent/internal/transport"
@@ -295,5 +297,112 @@ func TestPipelineRedactsAndSetsContext(t *testing.T) {
 	}
 	if !strings.Contains(p.buffer[0].Context, "checkout") {
 		t.Fatalf("service name missing from context: %q", p.buffer[0].Context)
+	}
+}
+
+func TestPipelineParsesMixedJSONAndTextLines(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.log")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+
+	p := newTestPipeline(t, filepath.Join(dir, "state.json"), config.LogSource{
+		Path:        path,
+		ServiceName: "checkout",
+		Format:      config.LogFormatAuto,
+	})
+	src := p.sources[0]
+	p.pollSource(src)
+
+	appendLine(t, path, `{"time":"2023-10-01T12:00:00Z","level":"error","msg":"failed","user_id":123}`+"\n")
+	appendLine(t, path, "2024-05-06T07:08:10Z WARN slow request\n")
+	p.pollSource(src)
+
+	if len(p.buffer) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(p.buffer))
+	}
+
+	structured := p.buffer[0]
+	if structured.Level != "ERROR" || structured.Message != "failed" {
+		t.Fatalf("unexpected JSON event: %+v", structured)
+	}
+	if !structured.Timestamp.Equal(time.Date(2023, 10, 1, 12, 0, 0, 0, time.UTC)) {
+		t.Errorf("timestamp = %s, want 2023-10-01T12:00:00Z", structured.Timestamp)
+	}
+
+	var context map[string]interface{}
+	if err := json.Unmarshal([]byte(structured.Context), &context); err != nil {
+		t.Fatalf("context is not valid JSON: %v (%q)", err, structured.Context)
+	}
+	if context["user_id"] != float64(123) {
+		t.Errorf("context[user_id] = %v, want 123", context["user_id"])
+	}
+	if context["host"] != p.hostname {
+		t.Errorf("context[host] = %v, want %q", context["host"], p.hostname)
+	}
+	if context["service"] != "checkout" {
+		t.Errorf("context[service] = %v, want checkout", context["service"])
+	}
+
+	plain := p.buffer[1]
+	if plain.Level != "WARN" || plain.Message != "2024-05-06T07:08:10Z WARN slow request" {
+		t.Fatalf("unexpected plain-text event: %+v", plain)
+	}
+}
+
+func TestPipelineTextFormatDisablesJSONParsing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.log")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+
+	p := newTestPipeline(t, filepath.Join(dir, "state.json"), config.LogSource{
+		Path:        path,
+		ServiceName: "checkout",
+		Format:      config.LogFormatText,
+	})
+	src := p.sources[0]
+	p.pollSource(src)
+
+	const raw = `{"level":"error","msg":"failed","user_id":123}`
+	appendLine(t, path, raw+"\n")
+	p.pollSource(src)
+
+	if len(p.buffer) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(p.buffer))
+	}
+	if p.buffer[0].Message != raw {
+		t.Errorf("message = %q, want the raw line", p.buffer[0].Message)
+	}
+	if strings.Contains(p.buffer[0].Context, "user_id") {
+		t.Errorf("text format must not parse JSON fields into context: %q", p.buffer[0].Context)
+	}
+}
+
+func TestPipelineFallsBackForDeeplyNestedJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.log")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+
+	p := newTestPipeline(t, filepath.Join(dir, "state.json"), config.LogSource{Path: path, ServiceName: "checkout"})
+	src := p.sources[0]
+	p.pollSource(src)
+
+	const raw = `{"level":"error","a":{"b":{"c":{"d":"too deep"}}}}`
+	appendLine(t, path, raw+"\n")
+	p.pollSource(src)
+
+	if len(p.buffer) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(p.buffer))
+	}
+	if p.buffer[0].Message != raw {
+		t.Errorf("deeply nested line must fall back to the raw message, got %q", p.buffer[0].Message)
+	}
+	if strings.Contains(p.buffer[0].Context, "too deep") {
+		t.Errorf("deeply nested content leaked into context: %q", p.buffer[0].Context)
 	}
 }

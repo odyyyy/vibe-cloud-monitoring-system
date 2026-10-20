@@ -1,10 +1,44 @@
 package logs
 
 import (
+	"encoding/json"
+	"io"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
+
+const (
+	// maxJSONDepth bounds nested JSON objects and arrays. Logs are untrusted and
+	// deeply nested payloads would otherwise allocate unbounded structures.
+	maxJSONDepth = 3
+)
+
+// Standard JSON log fields, in priority order. Common aliases are accepted so
+// agents work with typical application and platform log schemas.
+var (
+	jsonTimestampKeys = []string{"timestamp", "time", "ts", "@timestamp"}
+	jsonLevelKeys     = []string{"level", "severity", "lvl"}
+	jsonMessageKeys   = []string{"message", "msg"}
+	jsonStandardKeys  = []string{
+		"timestamp", "time", "ts", "@timestamp",
+		"level", "severity", "lvl",
+		"message", "msg",
+	}
+)
+
+// jsonLog is the result of parsing one JSON log line. Fields holds the
+// non-standard keys that are forwarded as context.
+type jsonLog struct {
+	Fields       map[string]interface{}
+	Level        string
+	HasLevel     bool
+	Message      string
+	HasMessage   bool
+	Timestamp    time.Time
+	HasTimestamp bool
+}
 
 // defaultLevelPattern matches common severity tokens as standalone words. It is
 // used when a source does not define its own level_pattern.
@@ -115,4 +149,192 @@ func extractTimestamp(line string) (time.Time, bool) {
 		}
 	}
 	return time.Time{}, false
+}
+
+// parseJSONLog parses a single line as a JSON object. It returns false for
+// non-object JSON (arrays, scalars, null), malformed JSON and objects nested
+// deeper than maxJSONDepth; callers then fall back to plain-text parsing.
+func parseJSONLog(raw string, levelRe *regexp.Regexp) (jsonLog, bool) {
+	fields, ok := decodeJSONObject(raw)
+	if !ok {
+		return jsonLog{}, false
+	}
+
+	parsed := jsonLog{Fields: fields}
+
+	if v, ok := firstJSONValue(fields, jsonLevelKeys); ok {
+		if level := strings.TrimSpace(scalarToString(v)); level != "" {
+			parsed.Level = normalizeLevel(level)
+			parsed.HasLevel = true
+		}
+	}
+	if v, ok := firstJSONValue(fields, jsonMessageKeys); ok {
+		parsed.Message = scalarToString(v)
+		parsed.HasMessage = true
+	}
+	if v, ok := firstJSONValue(fields, jsonTimestampKeys); ok {
+		if ts, ok := parseJSONTimestamp(v); ok {
+			parsed.Timestamp = ts.UTC()
+			parsed.HasTimestamp = true
+		}
+	}
+
+	// Standard fields are represented by dedicated Event fields, never duplicated
+	// in context. Removing every alias also prevents a second alias from smuggling
+	// an untrusted value into the context map.
+	for _, key := range jsonStandardKeys {
+		delete(parsed.Fields, key)
+	}
+
+	if parsed.Level == "" {
+		parsed.Level = inferLevel(levelRe, raw)
+	}
+	return parsed, true
+}
+
+func decodeJSONObject(raw string) (map[string]interface{}, bool) {
+	if !withinJSONDepth(raw, maxJSONDepth) {
+		return nil, false
+	}
+
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	var fields map[string]interface{}
+	if err := decoder.Decode(&fields); err != nil || fields == nil {
+		return nil, false
+	}
+	// Reject trailing data after the first value so "{"a":1} garbage" is treated
+	// as plain text rather than silently dropping the suffix.
+	var extra interface{}
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return nil, false
+	}
+	return fields, true
+}
+
+// withinJSONDepth tokenizes the payload without building nested maps, which
+// keeps a hostile deeply nested line from allocating a large object graph.
+func withinJSONDepth(raw string, maxDepth int) bool {
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+
+	depth := 0
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			return true
+		}
+		if err != nil {
+			return false
+		}
+		switch token {
+		case json.Delim('{'), json.Delim('['):
+			depth++
+			if depth > maxDepth {
+				return false
+			}
+		case json.Delim('}'), json.Delim(']'):
+			depth--
+			if depth < 0 {
+				return false
+			}
+		}
+	}
+}
+
+func firstJSONValue(fields map[string]interface{}, keys []string) (interface{}, bool) {
+	for _, key := range keys {
+		if value, ok := fields[key]; ok {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+// scalarToString renders a JSON value as the text the backend stores. Objects and
+// arrays are serialized compactly; they are bounded by maxJSONDepth and the
+// line size.
+func scalarToString(value interface{}) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return v
+	case json.Number:
+		return v.String()
+	default:
+		encoded, err := json.Marshal(v)
+		if err != nil {
+			return ""
+		}
+		return string(encoded)
+	}
+}
+
+func parseJSONTimestamp(value interface{}) (time.Time, bool) {
+	switch v := value.(type) {
+	case string:
+		s := strings.TrimSpace(v)
+		if s == "" {
+			return time.Time{}, false
+		}
+		for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05", "2006-01-02 15:04:05"} {
+			if ts, err := time.Parse(layout, s); err == nil {
+				return ts.UTC(), true
+			}
+		}
+		if epoch, err := strconv.ParseInt(s, 10, 64); err == nil {
+			return epochTime(epoch), true
+		}
+	case json.Number:
+		if epoch, err := strconv.ParseInt(v.String(), 10, 64); err == nil {
+			return epochTime(epoch), true
+		}
+		if seconds, err := v.Float64(); err == nil {
+			return epochFloatTime(seconds), true
+		}
+	case float64:
+		return epochFloatTime(v), true
+	}
+	return time.Time{}, false
+}
+
+// epochTime interprets an integer timestamp by magnitude: seconds, milliseconds,
+// microseconds or nanoseconds. This covers the common JSON log encoders without
+// requiring per-source configuration.
+func epochTime(value int64) time.Time {
+	abs := value
+	if abs < 0 {
+		abs = -abs
+	}
+	switch {
+	case abs >= 1e17:
+		return time.Unix(0, value)
+	case abs >= 1e14:
+		return time.Unix(value/1e6, (value%1e6)*1e3)
+	case abs >= 1e11:
+		return time.Unix(value/1e3, (value%1e3)*1e6)
+	default:
+		return time.Unix(value, 0)
+	}
+}
+
+func epochFloatTime(value float64) time.Time {
+	abs := value
+	if abs < 0 {
+		abs = -abs
+	}
+	switch {
+	case abs >= 1e17:
+		return time.Unix(0, int64(value))
+	case abs >= 1e14:
+		micros := int64(value)
+		return time.Unix(micros/1e6, (micros%1e6)*1e3)
+	case abs >= 1e11:
+		millis := int64(value)
+		return time.Unix(millis/1e3, (millis%1e3)*1e6)
+	default:
+		seconds := int64(value)
+		return time.Unix(seconds, int64((value-float64(seconds))*1e9))
+	}
 }

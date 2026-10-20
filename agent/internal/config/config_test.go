@@ -35,6 +35,9 @@ logs:
 	if cfg.Logs[0].Path != "/var/log/app.log" || cfg.Logs[0].ServiceName != "checkout" {
 		t.Fatalf("unexpected log source: %+v", cfg.Logs[0])
 	}
+	if cfg.Logs[0].Format != LogFormatAuto {
+		t.Errorf("default format = %q, want %q", cfg.Logs[0].Format, LogFormatAuto)
+	}
 	if cfg.LogBatchSize != defaultLogBatchSize {
 		t.Errorf("default log_batch_size = %d, want %d", cfg.LogBatchSize, defaultLogBatchSize)
 	}
@@ -198,5 +201,77 @@ logs:
 `)
 	if _, err := LoadConfig(path); err == nil {
 		t.Fatal("expected error for missing logs[].path")
+	}
+}
+
+func TestLoadConfigParsesNetworkInterfaceAllowList(t *testing.T) {
+	path := writeConfigFile(t, `
+backend_url: http://localhost:8080
+api_key: app_test
+metrics:
+  network:
+    interfaces:
+      - eth0
+      - lo
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if len(cfg.Metrics.Network.Interfaces) != 2 {
+		t.Fatalf("expected 2 interfaces, got %d", len(cfg.Metrics.Network.Interfaces))
+	}
+	if cfg.Metrics.Network.Interfaces[0] != "eth0" || cfg.Metrics.Network.Interfaces[1] != "lo" {
+		t.Errorf("unexpected interfaces: %v", cfg.Metrics.Network.Interfaces)
+	}
+}
+
+func TestLoadConfigDefaultsNetworkToEmptyAllowList(t *testing.T) {
+	path := writeConfigFile(t, "backend_url: http://localhost:8080\napi_key: app_test\n")
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if len(cfg.Metrics.Network.Interfaces) != 0 {
+		t.Errorf("expected empty interface list, got %v", cfg.Metrics.Network.Interfaces)
+	}
+}
+
+func TestLoadConfigParsesLogFormat(t *testing.T) {
+	path := writeConfigFile(t, `
+backend_url: http://localhost:8080
+api_key: app_test
+logs:
+  - path: /var/log/json.log
+    format: "JSON"
+  - path: /var/log/text.log
+    format: text
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Logs[0].Format != LogFormatJSON {
+		t.Errorf("first format = %q, want %q", cfg.Logs[0].Format, LogFormatJSON)
+	}
+	if cfg.Logs[1].Format != LogFormatText {
+		t.Errorf("second format = %q, want %q", cfg.Logs[1].Format, LogFormatText)
+	}
+}
+
+func TestLoadConfigRejectsUnknownLogFormat(t *testing.T) {
+	path := writeConfigFile(t, `
+backend_url: http://localhost:8080
+api_key: app_test
+logs:
+  - path: /var/log/app.log
+    format: xml
+`)
+
+	if _, err := LoadConfig(path); err == nil {
+		t.Fatal("expected error for unknown logs[].format")
 	}
 }

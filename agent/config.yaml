@@ -12,6 +12,7 @@ interval_seconds: 15
 #     - path: /var/log/my-app/app.log     # exact file, never a directory
 #       service_name: my-app              # optional; defaults to the file name
 #       level_pattern: 'level=(\w+)'      # optional; first capture group is the level
+#       format: auto                      # auto (default), json or text
 #
 # Batching: a batch is flushed every log_flush_seconds, or immediately once
 # log_batch_size events are buffered (backend allows at most 1000 per request).
@@ -36,3 +37,17 @@ kubernetes:
   enabled: false
   namespace: ""
   label_selector: ""
+
+# Host metric collection. By default the agent reports physical interfaces
+# only (eth*, ens*, enp*, wlan*) and skips loopback and virtual/bridge
+# interfaces (lo, docker0, veth*, br-*). List interface names explicitly to
+# override the selection, e.g. to include the loopback interface:
+#
+#   metrics:
+#     network:
+#       interfaces:
+#         - eth0
+#         - lo
+metrics:
+  network:
+    interfaces: []

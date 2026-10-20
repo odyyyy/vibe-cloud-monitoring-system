@@ -12,6 +12,7 @@ interval_seconds: 15
 logs:
   - path: /var/log/myapp/app.log
     service_name: my-app
+    format: auto
 
 log_batch_size: 500
 log_flush_seconds: 5
@@ -25,3 +26,17 @@ kubernetes:
   enabled: false
   namespace: ""
   label_selector: ""
+
+# Host metric collection. By default the agent reports physical interfaces
+# only (eth*, ens*, enp*, wlan*) and skips loopback and virtual/bridge
+# interfaces (lo, docker0, veth*, br-*). List interface names explicitly to
+# override the selection, e.g. to include the loopback interface:
+#
+#   metrics:
+#     network:
+#       interfaces:
+#         - eth0
+#         - lo
+metrics:
+  network:
+    interfaces: []

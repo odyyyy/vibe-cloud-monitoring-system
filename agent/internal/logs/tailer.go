@@ -161,6 +161,42 @@ func (p *Pipeline) emitLine(s *source, raw string) {
 // buildEvent parses a single line into an Event. Redaction is applied before the
 // message is buffered so secrets never leave the host.
 func (p *Pipeline) buildEvent(s *source, raw string) (Event, bool) {
+	if s.cfg.EffectiveFormat() != config.LogFormatText {
+		if parsed, ok := parseJSONLog(raw, s.levelRe); ok {
+			return p.buildJSONEvent(s, raw, parsed)
+		}
+	}
+	return p.buildTextEvent(s, raw)
+}
+
+func (p *Pipeline) buildJSONEvent(s *source, raw string, parsed jsonLog) (Event, bool) {
+	message := parsed.Message
+	if !parsed.HasMessage || strings.TrimSpace(message) == "" {
+		message = raw
+	}
+	message = truncateRunes(redact(message), maxMessageRunes)
+	if strings.TrimSpace(message) == "" {
+		return Event{}, false
+	}
+
+	timestamp := parsed.Timestamp
+	if !parsed.HasTimestamp {
+		if extracted, ok := extractTimestamp(raw); ok {
+			timestamp = extracted
+		} else {
+			timestamp = time.Now().UTC()
+		}
+	}
+
+	return Event{
+		Level:     parsed.Level,
+		Message:   message,
+		Timestamp: timestamp.UTC(),
+		Context:   buildEventContext(s.cfg, p.hostname, parsed.Fields),
+	}, true
+}
+
+func (p *Pipeline) buildTextEvent(s *source, raw string) (Event, bool) {
 	message := truncateRunes(redact(raw), maxMessageRunes)
 	if strings.TrimSpace(message) == "" {
 		return Event{}, false
@@ -175,6 +211,6 @@ func (p *Pipeline) buildEvent(s *source, raw string) (Event, bool) {
 		Level:     inferLevel(s.levelRe, raw),
 		Message:   message,
 		Timestamp: timestamp.UTC(),
-		Context:   buildEventContext(s.cfg, p.hostname),
+		Context:   buildEventContext(s.cfg, p.hostname, nil),
 	}, true
 }

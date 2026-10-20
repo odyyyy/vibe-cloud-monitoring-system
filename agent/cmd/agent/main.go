@@ -36,7 +36,7 @@ func main() {
 	defer stop()
 
 	httpClient := transport.NewClient(cfg.BackendURL, cfg.APIKey)
-	collector := metrics.NewCollector()
+	collector := metrics.NewCollector(cfg.Metrics.Network)
 	metricsClient := metrics.NewClient(httpClient)
 
 	logger.Printf("starting: backend=%s interval=%s api_key=%s",

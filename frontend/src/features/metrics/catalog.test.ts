@@ -7,6 +7,16 @@ describe('BUILT_IN_METRICS', () => {
       'system.cpu.usage',
       'system.memory.usage',
       'system.disk.usage',
+      'system.load.1',
+      'system.load.5',
+      'system.load.15',
+      'system.uptime',
+      'system.network.bytes_sent',
+      'system.network.bytes_recv',
+      'system.network.packets_sent',
+      'system.network.packets_recv',
+      'system.network.drop_in',
+      'system.network.drop_out',
     ])
   })
 

@@ -19,6 +19,15 @@ import (
 // of an empty watch.
 var namespacePattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
+// Supported log source formats. Auto parses a line as JSON when it is a JSON
+// object and falls back to plain text otherwise; text disables JSON parsing;
+// json also falls back to plain text for lines that are not valid JSON objects.
+const (
+	LogFormatAuto = "auto"
+	LogFormatJSON = "json"
+	LogFormatText = "text"
+)
+
 const (
 	defaultIntervalSeconds = 15
 	defaultLogBatchSize    = 500
@@ -47,12 +56,43 @@ type LogSource struct {
 	// LevelPattern is an optional regex used to extract the severity. When it has a
 	// capturing group, group 1 is used; otherwise the whole match is used.
 	LevelPattern string `yaml:"level_pattern"`
+	// Format controls line parsing. "auto" (the default) parses JSON objects and
+	// falls back to plain text; "json" always attempts JSON with a plain-text
+	// fallback; "text" disables JSON parsing.
+	Format string `yaml:"format"`
 	// Kubernetes is set for sources created by pod discovery.
 	Kubernetes *KubernetesMetadata `yaml:"-"`
 	// FromBeginning makes a newly discovered source read existing content instead
 	// of skipping to the end. Pod discovery sets it so startup logs written
 	// before the watch event are not lost.
 	FromBeginning bool `yaml:"-"`
+}
+
+// EffectiveFormat returns the normalized format used for a source that was not
+// necessarily validated (runtime-discovered pod sources). An empty value means
+// auto detection, which preserves the plain-text behavior for non-JSON lines.
+func (s LogSource) EffectiveFormat() string {
+	f := strings.ToLower(strings.TrimSpace(s.Format))
+	if f == "" {
+		return LogFormatAuto
+	}
+	return f
+}
+
+// NetworkConfig controls which network interfaces the agent reports metrics
+// for. The zero value selects the default auto mode.
+type NetworkConfig struct {
+	// Interfaces is an explicit allow-list of interface names reported by the
+	// agent. When empty (default) the agent auto-selects physical interfaces
+	// (eth*, ens*, enp*, wlan*) and skips loopback and virtual/bridge
+	// interfaces (lo, docker0, veth*, br-*). Entries are matched exactly, so
+	// "lo" must be listed explicitly to report the loopback interface.
+	Interfaces []string `yaml:"interfaces"`
+}
+
+// MetricsConfig controls host metric collection.
+type MetricsConfig struct {
+	Network NetworkConfig `yaml:"network"`
 }
 
 // KubernetesConfig controls automatic discovery of pod logs from the Kubernetes
@@ -97,6 +137,7 @@ type Config struct {
 	LogBatchSize    int              `yaml:"log_batch_size"`
 	LogFlushSeconds int              `yaml:"log_flush_seconds"`
 	StateFile       string           `yaml:"state_file"`
+	Metrics         MetricsConfig    `yaml:"metrics"`
 	Kubernetes      KubernetesConfig `yaml:"kubernetes"`
 }
 
@@ -199,6 +240,12 @@ func (c *Config) validate() error {
 				return fmt.Errorf("logs[%d].level_pattern is not a valid regex: %w", i, err)
 			}
 		}
+		format := src.EffectiveFormat()
+		if format != LogFormatAuto && format != LogFormatJSON && format != LogFormatText {
+			return fmt.Errorf("logs[%d].format must be one of %q, %q or %q, got %q",
+				i, LogFormatAuto, LogFormatJSON, LogFormatText, src.Format)
+		}
+		c.Logs[i].Format = format
 	}
 
 	namespace := strings.TrimSpace(c.Kubernetes.Namespace)
