@@ -337,7 +337,7 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `config.yaml` / `AGENT_BACKEND_URL` | `backend_url` | Базовый URL backend (http/https) |
 | `config.yaml` / `AGENT_API_KEY` | `api_key` | Scoped API-ключ приложения |
 | `config.yaml` / `AGENT_INTERVAL_SECONDS` | `interval_seconds` | Интервал сбора (по умолчанию 15с) |
-| `config.yaml` | `logs` | Список tail-источников `{ path, service_name, level_pattern }` (только файл) |
+| `config.yaml` | `logs` | Список tail-источников `{ path, service_name, level_pattern, format }` (только файл) |
 | `config.yaml` / `AGENT_LOG_BATCH_SIZE` | `log_batch_size` | Размер батча логов, 1..1000 (по умолчанию 500) |
 | `config.yaml` / `AGENT_LOG_FLUSH_SECONDS` | `log_flush_seconds` | Интервал принудительной отправки логов (по умолчанию 5с) |
 | `config.yaml` / `AGENT_STATE_FILE` | `state_file` | Файл с offset'ами чтения логов (по умолчанию `.agent_state.json`) |
@@ -353,9 +353,20 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 Агент собирает базовые метрики хоста через `gopsutil` и отправляет их в облако по
 `POST /api/v1/ingest/metrics` с заголовком `X-API-Key`.
 
-Собираемые метрики: `system.cpu.usage`, `system.memory.usage`, `system.disk.usage`
-(с тегами `host` и `version`). Тег `host` используется для отображения агента в разделе
+Собираемые метрики (с тегами `host` и `version`): `system.cpu.usage`,
+`system.memory.usage`, `system.disk.usage`, `system.load.1`, `system.load.5`,
+`system.load.15`, `system.uptime`, а также сетевые счётчики
+`system.network.bytes_sent`, `system.network.bytes_recv`,
+`system.network.packets_sent`, `system.network.packets_recv`,
+`system.network.drop_in`, `system.network.drop_out` с тегом `interface`
+(например, `interface="eth0"`). Тег `host` используется для отображения агента в разделе
 **Agent fleet**, `version` — для показа версии сборки агента.
+
+По умолчанию агент отчитывается только по физическим интерфейсам (`eth*`, `ens*`,
+`enp*`, `wlan*`) и пропускает loopback и виртуальные/bridge-интерфейсы (`lo`,
+`docker0`, `veth*`, `br-*`). Секция `metrics.network.interfaces` в `config.yaml`
+задаёт явный список интерфейсов. Сетевые метрики отправляются как абсолютные
+счётчики — скорости (байты/с, пакеты/с) вычисляет backend при запросе.
 
 ### 1. Получите API-ключ
 
@@ -395,6 +406,7 @@ logs:
   - path: /var/log/my-app/app.log     # точный файл, не директория
     service_name: my-app              # необязательно; по умолчанию имя файла
     level_pattern: 'level=(\w+)'      # необязательно; 1-я группа regex = уровень
+    format: auto                      # auto (по умолчанию), json или text
 log_batch_size: 500
 log_flush_seconds: 5
 state_file: ".agent_state.json"
@@ -405,11 +417,21 @@ state_file: ".agent_state.json"
   продолжает с последней позиции.
 - Ротация (`app.log` → `app.log.1`, либо truncate) обрабатывается: новый файл читается
   с начала без падения агента.
+- `format: auto` (по умолчанию) распознаёт JSON-объекты и извлекает стандартные поля:
+  `timestamp`/`time`/`ts`/`@timestamp`, `level`/`severity`/`lvl`, `message`/`msg`.
+  Остальные ключи попадают в `context`; метаданные агента (`host`, `service`, `source`,
+  `k8s.*`) всегда имеют приоритет и не могут быть перезаписаны содержимым лога.
+  Строки, которые не являются JSON-объектом, обрабатываются как обычный текст.
+- `format: json` принудительно пытается разобрать JSON, но также откатывается к тексту
+  для некорректных строк; `format: text` отключает JSON-разбор.
 - Уровень определяется по regex (`level_pattern` или встроенный:
   TRACE/DEBUG/INFO/WARN/WARNING/ERROR/FATAL/CRITICAL), иначе `INFO`.
-- Время события берётся из начала строки по нескольким форматам, иначе — текущее UTC.
+- Время события берётся из стандартного JSON-поля или из начала строки по нескольким
+  форматам, иначе — текущее UTC.
+- JSON-контекст ограничен глубиной вложенности 3 уровня и 4 KiB сериализованного JSON;
+  лишние ключи отбрасываются.
 - Перед отправкой выполняется redaction: `password=...`, `token=...`, `api_key=...`,
-  `Bearer ...`, `app_...` и AWS-ключи маскируются.
+  `Bearer ...`, `app_...` и AWS-ключи маскируются (в том числе внутри JSON `context`).
 
 Запуск контейнера с монтированием каталога логов и writable volume для state:
 
@@ -736,7 +758,9 @@ range в форме виджета, по умолчанию 1 час) до те�
 `metric_samples` за сутки плюс сохранённый объём (`sample_count`) агрегатов, логи — по
 `log_events`, трейсы — по `trace_spans`; границы суток — UTC. Лимиты задаются в
 `monitoring.usage.*` (метрики/логи/трейсы в месяц) и отдаются в поле `limit`; `percentage`
-рассчитывается на бэкенде. Используется страницей **Usage** (`/app/usage`), где прогресс-бары
+рассчитывается по `used`/`limit` (на бэкенде, а также на странице для устойчивости к
+округлению), поэтому малая, но ненулевая доля не превращается в `0%`. Используется страницей
+**Usage** (`/app/usage`), где прогресс-бары
 подсвечиваются по порогам (зелёный < 70%, жёлтый 70–90%, красный ≥ 90%) и рисуется график
 дневного потребления.
 
@@ -765,12 +789,13 @@ range в форме виджета, по умолчанию 1 час) до те�
 автоматически по завершении перетаскивания/ресайза (`PUT .../widgets/{widgetId}`), а
 кнопка **Add widget** доступна постоянно. Имя метрики в форме виджета и в Metrics
 Explorer выбирается из списка: сначала идут встроенные метрики, которые собирает агент
-(`system.cpu.usage`, `system.memory.usage`, `system.disk.usage`), затем имена, реально
-полученные от выбранного приложения (`GET /api/v1/metrics/names`); вариант **Custom metric
-name…** оставляет свободный ввод произвольного имени.
+(`system.cpu.usage`, `system.memory.usage`, `system.disk.usage`, `system.load.1`,
+`system.load.5`, `system.load.15`, `system.uptime`, `system.network.*`), затем имена,
+реально полученные от выбранного приложения (`GET /api/v1/metrics/names`); вариант
+**Custom metric name…** оставляет свободный ввод произвольного имени.
 
 Каждой метрике соответствует свой цвет линии на графике, выбранный из палитры интерфейса
-(cyan/violet/lime/amber и их светлые варианты): встроенные метрики имеют фиксированный цвет,
+(accent, status и chart-шкалы): встроенные метрики имеют фиксированный цвет,
 произвольные — детерминированный по имени. Тот же цвет показан маркером рядом с названием
 метрики в списке, в заголовке графика и в заголовке виджета дашборда.
 
