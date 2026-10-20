@@ -7,6 +7,7 @@ import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
 import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
 import com.monitoring.alerts.dto.response.NotificationChannelResponse;
 import com.monitoring.alerts.dto.request.UpdateAlertRuleRequest;
+import com.monitoring.alerts.dto.request.UpdateIncidentNotesRequest;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertIncident;
 import com.monitoring.alerts.entity.AlertRule;
@@ -15,13 +16,18 @@ import com.monitoring.alerts.entity.IncidentStatus;
 import com.monitoring.alerts.entity.LogicOperator;
 import com.monitoring.alerts.entity.NotificationChannel;
 import com.monitoring.alerts.entity.NotificationChannelType;
+import com.monitoring.alerts.exception.AlertIncidentAccessDeniedException;
+import com.monitoring.alerts.exception.AlertIncidentNotFoundException;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
 import com.monitoring.alerts.exception.AlertRuleNotFoundException;
 import com.monitoring.alerts.exception.InvalidAlertRuleException;
+import com.monitoring.alerts.exception.InvalidIncidentNoteException;
+import com.monitoring.alerts.exception.InvalidIncidentStateException;
 import com.monitoring.alerts.exception.InvalidWebhookUrlException;
 import com.monitoring.alerts.repository.AlertIncidentRepository;
 import com.monitoring.alerts.repository.AlertRuleRepository;
 import com.monitoring.alerts.repository.NotificationChannelRepository;
+import com.monitoring.auth.repository.UserRepository;
 import com.monitoring.healthcheck.dto.response.HealthCheckResultResponse;
 import com.monitoring.healthcheck.entity.HealthStatus;
 import com.monitoring.healthcheck.service.HealthCheckService;
@@ -53,6 +59,7 @@ class AlertServiceTest {
     private AlertRuleRepository ruleRepository;
     private NotificationChannelRepository channelRepository;
     private AlertIncidentRepository incidentRepository;
+    private UserRepository userRepository;
     private ApplicationService applicationService;
     private HealthCheckService healthCheckService;
     private AlertNotificationDispatcher notificationDispatcher;
@@ -63,11 +70,14 @@ class AlertServiceTest {
         ruleRepository = Mockito.mock(AlertRuleRepository.class);
         channelRepository = Mockito.mock(NotificationChannelRepository.class);
         incidentRepository = Mockito.mock(AlertIncidentRepository.class);
+        userRepository = Mockito.mock(UserRepository.class);
         applicationService = Mockito.mock(ApplicationService.class);
         healthCheckService = Mockito.mock(HealthCheckService.class);
         notificationDispatcher = Mockito.mock(AlertNotificationDispatcher.class);
-        service = new AlertService(ruleRepository, channelRepository, incidentRepository,
+        service = new AlertService(ruleRepository, channelRepository, incidentRepository, userRepository,
                 applicationService, healthCheckService, new SsrfGuard(), notificationDispatcher);
+        when(incidentRepository.save(any(AlertIncident.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         when(ruleRepository.save(any(AlertRule.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(channelRepository.save(any(NotificationChannel.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -229,7 +239,8 @@ class AlertServiceTest {
                 .organizationId(OWNER_ID)
                 .status(IncidentStatus.FIRING)
                 .build();
-        when(incidentRepository.findByRule_IdAndStatus(9L, IncidentStatus.FIRING))
+        when(incidentRepository.findByRule_IdAndStatusIn(
+                9L, List.of(IncidentStatus.FIRING, IncidentStatus.ACKNOWLEDGED)))
                 .thenReturn(List.of(firing));
 
         AlertRuleResponse response = service.updateRule(OWNER_ID, 9L,
@@ -251,6 +262,126 @@ class AlertServiceTest {
         verify(incidentRepository).findByOrganizationIdOrderByTriggeredAtDesc(
                 org.mockito.ArgumentMatchers.eq(OWNER_ID),
                 org.mockito.ArgumentMatchers.argThat(page -> page.getPageSize() == AlertService.MAX_INCIDENTS_LIMIT));
+    }
+
+    private AlertIncident incident(IncidentStatus status, Long organizationId) {
+        AlertRule rule = AlertRule.builder()
+                .id(9L)
+                .organizationId(organizationId)
+                .name("High CPU")
+                .build();
+        return AlertIncident.builder()
+                .id(3L)
+                .rule(rule)
+                .organizationId(organizationId)
+                .status(status)
+                .triggeredAt(java.time.Instant.parse("2026-10-17T10:00:00Z"))
+                .build();
+    }
+
+    @Test
+    void acknowledgeIncidentRecordsUserAndTimestamp() {
+        AlertIncident firing = incident(IncidentStatus.FIRING, OWNER_ID);
+        when(incidentRepository.findById(3L)).thenReturn(Optional.of(firing));
+
+        AlertIncidentResponse response = service.acknowledgeIncident(OWNER_ID, 42L, 3L);
+
+        assertEquals(IncidentStatus.ACKNOWLEDGED, response.getStatus());
+        assertEquals(42L, response.getAcknowledgedBy());
+        assertTrue(response.getAcknowledgedAt() != null);
+        assertEquals(IncidentStatus.ACKNOWLEDGED, firing.getStatus());
+    }
+
+    @Test
+    void acknowledgeResolvedIncidentIsRejected() {
+        AlertIncident resolved = incident(IncidentStatus.RESOLVED, OWNER_ID);
+        when(incidentRepository.findById(3L)).thenReturn(Optional.of(resolved));
+
+        assertThrows(InvalidIncidentStateException.class,
+                () -> service.acknowledgeIncident(OWNER_ID, 42L, 3L));
+        verify(incidentRepository, never()).save(any());
+    }
+
+    @Test
+    void acknowledgeIncidentFromAnotherOrganizationIsDenied() {
+        AlertIncident foreign = incident(IncidentStatus.FIRING, 999L);
+        when(incidentRepository.findById(3L)).thenReturn(Optional.of(foreign));
+
+        assertThrows(AlertIncidentAccessDeniedException.class,
+                () -> service.acknowledgeIncident(OWNER_ID, 42L, 3L));
+    }
+
+    @Test
+    void resolveIncidentRecordsUserAndTimestamp() {
+        AlertIncident acknowledged = incident(IncidentStatus.ACKNOWLEDGED, OWNER_ID);
+        when(incidentRepository.findById(3L)).thenReturn(Optional.of(acknowledged));
+
+        AlertIncidentResponse response = service.resolveIncident(OWNER_ID, 42L, 3L);
+
+        assertEquals(IncidentStatus.RESOLVED, response.getStatus());
+        assertEquals(42L, response.getResolvedBy());
+        assertTrue(response.getResolvedAt() != null);
+    }
+
+    @Test
+    void resolvingAlreadyResolvedIncidentIsRejected() {
+        AlertIncident resolved = incident(IncidentStatus.RESOLVED, OWNER_ID);
+        when(incidentRepository.findById(3L)).thenReturn(Optional.of(resolved));
+
+        assertThrows(InvalidIncidentStateException.class,
+                () -> service.resolveIncident(OWNER_ID, 42L, 3L));
+        verify(incidentRepository, never()).save(any());
+    }
+
+    @Test
+    void missingIncidentRaisesNotFound() {
+        when(incidentRepository.findById(3L)).thenReturn(Optional.empty());
+
+        assertThrows(AlertIncidentNotFoundException.class,
+                () -> service.resolveIncident(OWNER_ID, 42L, 3L));
+    }
+
+    @Test
+    void notesRejectMarkupAndKeepPlainText() {
+        AlertIncident firing = incident(IncidentStatus.FIRING, OWNER_ID);
+        when(incidentRepository.findById(3L)).thenReturn(Optional.of(firing));
+
+        assertThrows(InvalidIncidentNoteException.class,
+                () -> service.updateIncidentNotes(OWNER_ID, 3L,
+                        UpdateIncidentNotesRequest.builder().notes("<script>alert(1)</script>").build()));
+
+        AlertIncidentResponse response = service.updateIncidentNotes(OWNER_ID, 3L,
+                UpdateIncidentNotesRequest.builder().notes("  Cache stampede.  ").build());
+
+        assertEquals("Cache stampede.", response.getNotes());
+        assertEquals("Cache stampede.", firing.getNotes());
+    }
+
+    @Test
+    void emptyNotesClearTheValue() {
+        AlertIncident resolved = incident(IncidentStatus.RESOLVED, OWNER_ID);
+        resolved.setNotes("old");
+        when(incidentRepository.findById(3L)).thenReturn(Optional.of(resolved));
+
+        AlertIncidentResponse response = service.updateIncidentNotes(OWNER_ID, 3L,
+                UpdateIncidentNotesRequest.builder().notes("   ").build());
+
+        assertEquals(null, response.getNotes());
+    }
+
+    @Test
+    void listIncidentsResolvesActorNames() {
+        AlertIncident acknowledged = incident(IncidentStatus.ACKNOWLEDGED, OWNER_ID);
+        acknowledged.setAcknowledgedBy(42L);
+        when(incidentRepository.findByOrganizationIdOrderByTriggeredAtDesc(any(), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(acknowledged)));
+        com.monitoring.auth.entity.User user = com.monitoring.auth.entity.User.builder()
+                .id(42L).username("oncall").build();
+        when(userRepository.findAllById(any())).thenReturn(List.of(user));
+
+        List<AlertIncidentResponse> incidents = service.listIncidents(OWNER_ID, 10);
+
+        assertEquals("oncall", incidents.get(0).getAcknowledgedByName());
     }
 
     @Test

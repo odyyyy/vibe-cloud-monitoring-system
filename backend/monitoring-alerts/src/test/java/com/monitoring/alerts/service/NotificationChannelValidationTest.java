@@ -9,6 +9,7 @@ import com.monitoring.alerts.repository.AlertIncidentRepository;
 import com.monitoring.alerts.repository.AlertRuleRepository;
 import com.monitoring.alerts.repository.NotificationChannelRepository;
 import com.monitoring.apps.service.ApplicationService;
+import com.monitoring.auth.repository.UserRepository;
 import com.monitoring.healthcheck.service.HealthCheckService;
 import com.monitoring.healthcheck.service.SsrfGuard;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +43,7 @@ class NotificationChannelValidationTest {
         AlertRuleRepository ruleRepository = Mockito.mock(AlertRuleRepository.class);
         channelRepository = Mockito.mock(NotificationChannelRepository.class);
         AlertIncidentRepository incidentRepository = Mockito.mock(AlertIncidentRepository.class);
+        UserRepository userRepository = Mockito.mock(UserRepository.class);
         ApplicationService applicationService = Mockito.mock(ApplicationService.class);
         HealthCheckService healthCheckService = Mockito.mock(HealthCheckService.class);
         AlertNotificationDispatcher dispatcher = Mockito.mock(AlertNotificationDispatcher.class);
@@ -49,7 +51,7 @@ class NotificationChannelValidationTest {
         SsrfGuard ssrfGuard = Mockito.mock(SsrfGuard.class);
         when(ssrfGuard.parse(anyString())).thenAnswer(invocation -> new URI(invocation.getArgument(0)));
 
-        service = new AlertService(ruleRepository, channelRepository, incidentRepository,
+        service = new AlertService(ruleRepository, channelRepository, incidentRepository, userRepository,
                 applicationService, healthCheckService, ssrfGuard, dispatcher);
         when(channelRepository.save(any(NotificationChannel.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));

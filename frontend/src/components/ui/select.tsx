@@ -39,13 +39,13 @@ const SelectContent = React.forwardRef<
       ref={ref}
       position={position}
       className={cn(
-        'z-50 max-h-72 min-w-[10rem] overflow-hidden rounded-xl border border-white/10 bg-panel p-1.5 text-slate-200 shadow-2xl shadow-black/60',
+        'z-50 max-h-96 min-w-[10rem] overflow-hidden rounded-xl border border-white/10 bg-panel p-1.5 text-slate-200 shadow-2xl shadow-black/60',
         position === 'popper' && 'data-[side=bottom]:translate-y-1',
         className,
       )}
       {...props}
     >
-      <SelectPrimitive.Viewport className="p-0">{children}</SelectPrimitive.Viewport>
+      <SelectPrimitive.Viewport className="p-0 overflow-y-auto scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">{children}</SelectPrimitive.Viewport>
     </SelectPrimitive.Content>
   </SelectPrimitive.Portal>
 ))

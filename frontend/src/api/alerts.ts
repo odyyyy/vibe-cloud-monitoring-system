@@ -4,7 +4,7 @@ import { apiRequest } from './client'
 
 export type AlertRuleType = 'METRIC_THRESHOLD' | 'HEALTH_CHECK'
 export type AlertCondition = 'GREATER_THAN' | 'LESS_THAN' | 'EQUAL'
-export type IncidentStatus = 'FIRING' | 'RESOLVED'
+export type IncidentStatus = 'FIRING' | 'ACKNOWLEDGED' | 'RESOLVED'
 export type NotificationChannelType = 'WEBHOOK' | 'SLACK' | 'EMAIL'
 export type LogicOperator = 'AND' | 'OR'
 
@@ -49,7 +49,13 @@ export interface AlertIncident {
   ruleName: string
   status: IncidentStatus
   triggeredAt: string
+  acknowledgedBy: number | null
+  acknowledgedByName: string | null
+  acknowledgedAt: string | null
+  resolvedBy: number | null
+  resolvedByName: string | null
   resolvedAt: string | null
+  notes: string | null
 }
 
 export interface CreateAlertRuleRequest {
@@ -80,7 +86,7 @@ export type UpdateNotificationChannelRequest = Partial<CreateNotificationChannel
 
 const RULES_PATH = '/v1/alert-rules'
 const CHANNELS_PATH = '/v1/notification-channels'
-const INCIDENTS_PATH = '/v1/alert-incidents'
+const INCIDENTS_PATH = '/v1/incidents'
 
 function authToken(): string | null {
   return useAuthStore.getState().token
@@ -126,14 +132,44 @@ export function testNotificationChannel(id: number): Promise<void> {
   return apiRequest<void>(`${CHANNELS_PATH}/${id}/test`, { method: 'POST', token: authToken() })
 }
 
-export function getAlertIncidents(limit?: number): Promise<AlertIncident[]> {
-  const query = limit === undefined ? '' : `?limit=${encodeURIComponent(String(limit))}`
+export function getAlertIncidents(limit?: number, status?: IncidentStatus): Promise<AlertIncident[]> {
+  const params = new URLSearchParams()
+  if (limit !== undefined) {
+    params.set('limit', String(limit))
+  }
+  if (status) {
+    params.set('status', status)
+  }
+  const query = params.toString() === '' ? '' : `?${params.toString()}`
   return apiRequest<AlertIncident[]>(`${INCIDENTS_PATH}${query}`, { token: authToken() })
+}
+
+export function acknowledgeIncident(id: number): Promise<AlertIncident> {
+  return apiRequest<AlertIncident>(`${INCIDENTS_PATH}/${id}/acknowledge`, {
+    method: 'POST',
+    token: authToken(),
+  })
+}
+
+export function resolveIncident(id: number): Promise<AlertIncident> {
+  return apiRequest<AlertIncident>(`${INCIDENTS_PATH}/${id}/resolve`, {
+    method: 'POST',
+    token: authToken(),
+  })
+}
+
+export function updateIncidentNotes(id: number, notes: string): Promise<AlertIncident> {
+  return apiRequest<AlertIncident>(`${INCIDENTS_PATH}/${id}/notes`, {
+    method: 'PUT',
+    body: { notes },
+    token: authToken(),
+  })
 }
 
 export const alertRulesQueryKey = ['alert-rules'] as const
 export const notificationChannelsQueryKey = ['notification-channels'] as const
-export const alertIncidentsQueryKey = (limit: number) => ['alert-incidents', limit] as const
+export const alertIncidentsQueryKey = (limit: number, status?: IncidentStatus) =>
+  ['alert-incidents', limit, status ?? 'ALL'] as const
 
 export function useAlertRulesQuery() {
   return useQuery({ queryKey: alertRulesQueryKey, queryFn: getAlertRules })
@@ -231,6 +267,52 @@ export function useTestNotificationChannelMutation() {
   })
 }
 
-export function useAlertIncidentsQuery(limit = 100) {
-  return useQuery({ queryKey: alertIncidentsQueryKey(limit), queryFn: () => getAlertIncidents(limit) })
+function replaceIncidentInCaches(
+  queryClient: ReturnType<typeof useQueryClient>,
+  updated: AlertIncident,
+): void {
+  queryClient.setQueriesData<AlertIncident[]>(
+    { queryKey: ['alert-incidents'] },
+    (current) => current?.map((incident) => (incident.id === updated.id ? updated : incident)),
+  )
+}
+
+export function useAlertIncidentsQuery(limit = 100, status?: IncidentStatus) {
+  return useQuery({
+    queryKey: alertIncidentsQueryKey(limit, status),
+    queryFn: () => getAlertIncidents(limit, status),
+  })
+}
+
+export function useAcknowledgeIncidentMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => acknowledgeIncident(id),
+    onSuccess: (incident) => {
+      replaceIncidentInCaches(queryClient, incident)
+      void queryClient.invalidateQueries({ queryKey: ['alert-incidents'] })
+    },
+  })
+}
+
+export function useResolveIncidentMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => resolveIncident(id),
+    onSuccess: (incident) => {
+      replaceIncidentInCaches(queryClient, incident)
+      void queryClient.invalidateQueries({ queryKey: ['alert-incidents'] })
+    },
+  })
+}
+
+export function useUpdateIncidentNotesMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, notes }: { id: number; notes: string }) => updateIncidentNotes(id, notes),
+    onSuccess: (incident) => {
+      replaceIncidentInCaches(queryClient, incident)
+      void queryClient.invalidateQueries({ queryKey: ['alert-incidents'] })
+    },
+  })
 }

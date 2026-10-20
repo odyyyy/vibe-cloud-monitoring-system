@@ -94,8 +94,8 @@ class AlertEvaluationServiceTest {
     }
 
     private void noOpenIncident(long ruleId) {
-        when(incidentRepository.findFirstByRule_IdAndStatusOrderByTriggeredAtDesc(ruleId, IncidentStatus.FIRING))
-                .thenReturn(Optional.empty());
+        when(incidentRepository.findFirstByRule_IdAndStatusInOrderByTriggeredAtDesc(
+                eq(ruleId), any())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -155,7 +155,7 @@ class AlertEvaluationServiceTest {
                 .status(IncidentStatus.FIRING)
                 .triggeredAt(NOW.minusSeconds(120))
                 .build();
-        when(incidentRepository.findFirstByRule_IdAndStatusOrderByTriggeredAtDesc(1L, IncidentStatus.FIRING))
+        when(incidentRepository.findFirstByRule_IdAndStatusInOrderByTriggeredAtDesc(eq(1L), any()))
                 .thenReturn(Optional.of(firing));
 
         Optional<AlertEvent> event = service.evaluate(1L, NOW);
@@ -165,6 +165,55 @@ class AlertEvaluationServiceTest {
         assertEquals(IncidentStatus.RESOLVED, firing.getStatus());
         assertEquals(NOW, firing.getResolvedAt());
         assertNull(rule.getBreachStartedAt());
+    }
+
+    @Test
+    void acknowledgedIncidentIsTreatedAsOpenAndResolvedOnRecovery() {
+        AlertRule rule = metricRule();
+        rule.setBreachStartedAt(NOW.minusSeconds(120));
+        when(ruleRepository.findById(1L)).thenReturn(Optional.of(rule));
+        latestValue(10.0);
+
+        AlertIncident acknowledged = AlertIncident.builder()
+                .id(5L)
+                .rule(rule)
+                .organizationId(OWNER_ID)
+                .status(IncidentStatus.ACKNOWLEDGED)
+                .triggeredAt(NOW.minusSeconds(120))
+                .acknowledgedBy(42L)
+                .build();
+        when(incidentRepository.findFirstByRule_IdAndStatusInOrderByTriggeredAtDesc(eq(1L), any()))
+                .thenReturn(Optional.of(acknowledged));
+
+        Optional<AlertEvent> event = service.evaluate(1L, NOW);
+
+        assertTrue(event.isPresent());
+        assertEquals(IncidentStatus.RESOLVED, event.get().status());
+        assertEquals(IncidentStatus.RESOLVED, acknowledged.getStatus());
+        assertNull(acknowledged.getResolvedBy());
+    }
+
+    @Test
+    void acknowledgedIncidentPreventsDuplicateFiring() {
+        AlertRule rule = metricRule();
+        rule.setBreachStartedAt(NOW.minusSeconds(120));
+        when(ruleRepository.findById(1L)).thenReturn(Optional.of(rule));
+        latestValue(95.0);
+
+        AlertIncident acknowledged = AlertIncident.builder()
+                .id(5L)
+                .rule(rule)
+                .organizationId(OWNER_ID)
+                .status(IncidentStatus.ACKNOWLEDGED)
+                .triggeredAt(NOW.minusSeconds(120))
+                .build();
+        when(incidentRepository.findFirstByRule_IdAndStatusInOrderByTriggeredAtDesc(eq(1L), any()))
+                .thenReturn(Optional.of(acknowledged));
+
+        Optional<AlertEvent> event = service.evaluate(1L, NOW);
+
+        assertTrue(event.isEmpty());
+        verify(incidentRepository, never()).save(any());
     }
 
     @Test
@@ -242,7 +291,7 @@ class AlertEvaluationServiceTest {
                 .organizationId(OWNER_ID)
                 .status(IncidentStatus.FIRING)
                 .build();
-        when(incidentRepository.findFirstByRule_IdAndStatusOrderByTriggeredAtDesc(2L, IncidentStatus.FIRING))
+        when(incidentRepository.findFirstByRule_IdAndStatusInOrderByTriggeredAtDesc(eq(2L), any()))
                 .thenReturn(Optional.of(firing));
 
         Optional<AlertEvent> event = service.evaluate(2L, NOW);

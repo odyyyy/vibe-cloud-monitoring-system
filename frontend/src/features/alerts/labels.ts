@@ -19,6 +19,7 @@ const CONDITION_SYMBOLS: Record<AlertCondition, string> = {
 
 const STATUS_LABELS: Record<IncidentStatus, string> = {
   FIRING: 'Firing',
+  ACKNOWLEDGED: 'Acknowledged',
   RESOLVED: 'Resolved',
 }
 

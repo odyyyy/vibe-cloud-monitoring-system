@@ -155,6 +155,50 @@ class AlertsIntegrationTest {
     }
 
     @Test
+    void incidentLifecycleAcknowledgesNotesResolvesAndFilters() {
+        Application application = createApplication(OWNER_ID, "web");
+        AlertRuleResponse rule = createMetricRule(OWNER_ID, application.getId());
+
+        metricSampleRepository.save(MetricSample.builder()
+                .application(application)
+                .name(METRIC)
+                .value(95.0)
+                .timestamp(NOW)
+                .receivedAt(NOW)
+                .build());
+
+        assertTrue(evaluationService.evaluate(rule.getId(), NOW).isEmpty());
+        evaluationService.evaluate(rule.getId(), NOW.plusSeconds(61)).orElseThrow();
+
+        AlertIncidentResponse firing = alertService.listIncidents(OWNER_ID, null,
+                IncidentStatus.FIRING).get(0);
+
+        AlertIncidentResponse acknowledged = alertService.acknowledgeIncident(
+                OWNER_ID, OWNER_ID, firing.getId());
+        assertEquals(IncidentStatus.ACKNOWLEDGED, acknowledged.getStatus());
+        assertEquals(OWNER_ID, acknowledged.getAcknowledgedBy());
+        assertTrue(acknowledged.getAcknowledgedAt() != null);
+
+        AlertIncidentResponse noted = alertService.updateIncidentNotes(OWNER_ID, firing.getId(),
+                com.monitoring.alerts.dto.request.UpdateIncidentNotesRequest.builder()
+                        .notes("Root cause: cache stampede.")
+                        .build());
+        assertEquals("Root cause: cache stampede.", noted.getNotes());
+
+        assertEquals(1, alertService.listIncidents(OWNER_ID, null,
+                IncidentStatus.ACKNOWLEDGED).size());
+
+        AlertIncidentResponse resolved = alertService.resolveIncident(
+                OWNER_ID, OWNER_ID, firing.getId());
+        assertEquals(IncidentStatus.RESOLVED, resolved.getStatus());
+        assertEquals(OWNER_ID, resolved.getResolvedBy());
+        assertTrue(resolved.getResolvedAt() != null);
+
+        assertThrows(com.monitoring.alerts.exception.InvalidIncidentStateException.class,
+                () -> alertService.resolveIncident(OWNER_ID, OWNER_ID, firing.getId()));
+    }
+
+    @Test
     void healthCheckRuleFiresWhenCheckIsDown() {
         HealthCheckResponse check = healthCheckService.create(OWNER_ID, CreateHealthCheckRequest.builder()
                 .name("API")

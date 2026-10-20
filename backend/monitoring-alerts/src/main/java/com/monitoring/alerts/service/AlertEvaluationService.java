@@ -57,6 +57,10 @@ public class AlertEvaluationService {
     /** Absolute tolerance used for {@link AlertCondition#EQUAL} comparisons. */
     private static final double EQUALITY_EPSILON = 1e-9;
 
+    /** Incidents that still represent an active breach (manual resolution closes them). */
+    private static final List<IncidentStatus> OPEN_STATUSES =
+            List.of(IncidentStatus.FIRING, IncidentStatus.ACKNOWLEDGED);
+
     private final AlertRuleRepository ruleRepository;
     private final AlertIncidentRepository incidentRepository;
     private final MetricQueryService metricQueryService;
@@ -113,7 +117,7 @@ public class AlertEvaluationService {
         }
 
         if (incidentRepository
-                .findFirstByRule_IdAndStatusOrderByTriggeredAtDesc(rule.getId(), IncidentStatus.FIRING)
+                .findFirstByRule_IdAndStatusInOrderByTriggeredAtDesc(rule.getId(), OPEN_STATUSES)
                 .isPresent()) {
             return Optional.empty();
         }
@@ -137,13 +141,15 @@ public class AlertEvaluationService {
         }
 
         Optional<AlertIncident> open = incidentRepository
-                .findFirstByRule_IdAndStatusOrderByTriggeredAtDesc(rule.getId(), IncidentStatus.FIRING);
+                .findFirstByRule_IdAndStatusInOrderByTriggeredAtDesc(rule.getId(), OPEN_STATUSES);
         if (open.isEmpty()) {
             return Optional.empty();
         }
 
         AlertIncident incident = open.get();
+        // Automatic recovery is not attributed to a human actor.
         incident.setStatus(IncidentStatus.RESOLVED);
+        incident.setResolvedBy(null);
         incident.setResolvedAt(now);
         incidentRepository.save(incident);
 

@@ -4,6 +4,7 @@ import com.monitoring.alerts.dto.request.AlertConditionRequest;
 import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
 import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
 import com.monitoring.alerts.dto.request.UpdateAlertRuleRequest;
+import com.monitoring.alerts.dto.request.UpdateIncidentNotesRequest;
 import com.monitoring.alerts.dto.request.UpdateNotificationChannelRequest;
 import com.monitoring.alerts.dto.response.AlertIncidentResponse;
 import com.monitoring.alerts.dto.response.AlertRuleResponse;
@@ -18,9 +19,13 @@ import com.monitoring.alerts.entity.LogicOperator;
 import com.monitoring.alerts.entity.NotificationChannel;
 import com.monitoring.alerts.entity.NotificationChannelType;
 import com.monitoring.alerts.event.AlertEvent;
+import com.monitoring.alerts.exception.AlertIncidentAccessDeniedException;
+import com.monitoring.alerts.exception.AlertIncidentNotFoundException;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
 import com.monitoring.alerts.exception.AlertRuleNotFoundException;
 import com.monitoring.alerts.exception.InvalidAlertRuleException;
+import com.monitoring.alerts.exception.InvalidIncidentNoteException;
+import com.monitoring.alerts.exception.InvalidIncidentStateException;
 import com.monitoring.alerts.exception.InvalidNotificationChannelException;
 import com.monitoring.alerts.exception.InvalidWebhookUrlException;
 import com.monitoring.alerts.exception.NotificationChannelAccessDeniedException;
@@ -33,6 +38,8 @@ import com.monitoring.healthcheck.exception.HealthCheckNotFoundException;
 import com.monitoring.healthcheck.service.HealthCheckService;
 import com.monitoring.healthcheck.service.SsrfGuard;
 import com.monitoring.apps.service.ApplicationService;
+import com.monitoring.auth.entity.User;
+import com.monitoring.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -41,8 +48,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
@@ -74,6 +85,7 @@ public class AlertService {
     private final AlertRuleRepository ruleRepository;
     private final NotificationChannelRepository channelRepository;
     private final AlertIncidentRepository incidentRepository;
+    private final UserRepository userRepository;
     private final ApplicationService applicationService;
     private final HealthCheckService healthCheckService;
     private final SsrfGuard ssrfGuard;
@@ -258,17 +270,126 @@ public class AlertService {
 
     @Transactional(readOnly = true)
     public List<AlertIncidentResponse> listIncidents(Long organizationId, Integer limit) {
+        return listIncidents(organizationId, limit, null);
+    }
+
+    /** Incident history, optionally restricted to one lifecycle status. */
+    @Transactional(readOnly = true)
+    public List<AlertIncidentResponse> listIncidents(
+            Long organizationId, Integer limit, IncidentStatus status) {
         int effectiveLimit = limit == null ? DEFAULT_INCIDENTS_LIMIT : limit;
         effectiveLimit = Math.max(1, Math.min(effectiveLimit, MAX_INCIDENTS_LIMIT));
-        return incidentRepository
-                .findByOrganizationIdOrderByTriggeredAtDesc(organizationId, PageRequest.of(0, effectiveLimit)).stream()
-                .map(AlertIncidentResponse::fromEntity)
+        PageRequest page = PageRequest.of(0, effectiveLimit);
+        List<AlertIncident> incidents = (status == null
+                ? incidentRepository.findByOrganizationIdOrderByTriggeredAtDesc(organizationId, page)
+                : incidentRepository.findByOrganizationIdAndStatusOrderByTriggeredAtDesc(
+                        organizationId, status, page))
+                .getContent();
+        Map<Long, String> userNames = userNames(incidents);
+        return incidents.stream()
+                .map(incident -> AlertIncidentResponse.fromEntity(incident, userNames))
                 .toList();
+    }
+
+    /**
+     * Moves a firing incident to {@link IncidentStatus#ACKNOWLEDGED} and records who did it.
+     * A resolved or already acknowledged incident is rejected with a conflict.
+     */
+    @Transactional
+    public AlertIncidentResponse acknowledgeIncident(Long organizationId, Long userId, Long incidentId) {
+        AlertIncident incident = getOwnedIncident(organizationId, incidentId);
+        if (incident.getStatus() == IncidentStatus.RESOLVED) {
+            throw new InvalidIncidentStateException("A resolved incident cannot be acknowledged");
+        }
+        if (incident.getStatus() == IncidentStatus.ACKNOWLEDGED) {
+            throw new InvalidIncidentStateException("The incident is already acknowledged");
+        }
+
+        incident.setStatus(IncidentStatus.ACKNOWLEDGED);
+        incident.setAcknowledgedBy(userId);
+        incident.setAcknowledgedAt(Instant.now());
+        return toResponse(incidentRepository.save(incident));
+    }
+
+    /**
+     * Manually closes an incident. Both firing and acknowledged incidents may be resolved, but
+     * an already resolved incident is never modified again.
+     */
+    @Transactional
+    public AlertIncidentResponse resolveIncident(Long organizationId, Long userId, Long incidentId) {
+        AlertIncident incident = getOwnedIncident(organizationId, incidentId);
+        if (incident.getStatus() == IncidentStatus.RESOLVED) {
+            throw new InvalidIncidentStateException("The incident is already resolved");
+        }
+
+        incident.setStatus(IncidentStatus.RESOLVED);
+        incident.setResolvedBy(userId);
+        incident.setResolvedAt(Instant.now());
+        return toResponse(incidentRepository.save(incident));
+    }
+
+    /** Replaces the plain-text notes. An empty value clears them. */
+    @Transactional
+    public AlertIncidentResponse updateIncidentNotes(
+            Long organizationId, Long incidentId, UpdateIncidentNotesRequest request) {
+        AlertIncident incident = getOwnedIncident(organizationId, incidentId);
+        incident.setNotes(sanitizeNotes(request == null ? null : request.getNotes()));
+        return toResponse(incidentRepository.save(incident));
     }
 
     // ---------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------
+
+    private AlertIncident getOwnedIncident(Long organizationId, Long incidentId) {
+        AlertIncident incident = incidentRepository.findById(incidentId)
+                .orElseThrow(() -> new AlertIncidentNotFoundException(incidentId));
+        if (!incident.getOrganizationId().equals(organizationId)) {
+            throw new AlertIncidentAccessDeniedException();
+        }
+        return incident;
+    }
+
+    /**
+     * Rejects markup instead of storing it. The frontend renders notes as text, so escaping is
+     * also in place, but keeping HTML out of the database removes the risk at the source.
+     */
+    private String sanitizeNotes(String rawNotes) {
+        if (rawNotes == null) {
+            throw new InvalidIncidentNoteException("Notes are required");
+        }
+        String notes = rawNotes.trim();
+        if (notes.length() > AlertIncident.MAX_NOTES_LENGTH) {
+            throw new InvalidIncidentNoteException(
+                    "Notes must be at most " + AlertIncident.MAX_NOTES_LENGTH + " characters");
+        }
+        if (notes.indexOf('<') >= 0 || notes.indexOf('>') >= 0) {
+            throw new InvalidIncidentNoteException("Notes must be plain text without HTML");
+        }
+        return notes.isEmpty() ? null : notes;
+    }
+
+    private AlertIncidentResponse toResponse(AlertIncident incident) {
+        return AlertIncidentResponse.fromEntity(incident, userNames(List.of(incident)));
+    }
+
+    private Map<Long, String> userNames(Collection<AlertIncident> incidents) {
+        List<Long> userIds = incidents.stream()
+                .flatMap(incident -> java.util.stream.Stream.of(
+                        incident.getAcknowledgedBy(), incident.getResolvedBy()))
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, String> names = new HashMap<>();
+        for (User user : userRepository.findAllById(userIds)) {
+            names.put(user.getId(), user.getUsername());
+        }
+        return names;
+    }
 
     private AlertRule getOwnedRule(Long organizationId, Long id) {
         AlertRule rule = ruleRepository.findById(id)
@@ -491,8 +612,11 @@ public class AlertService {
 
     private void resolveOpenIncidents(Long ruleId) {
         Instant now = Instant.now();
-        for (AlertIncident incident : incidentRepository.findByRule_IdAndStatus(ruleId, IncidentStatus.FIRING)) {
+        List<AlertIncident> open = incidentRepository.findByRule_IdAndStatusIn(
+                ruleId, List.of(IncidentStatus.FIRING, IncidentStatus.ACKNOWLEDGED));
+        for (AlertIncident incident : open) {
             incident.setStatus(IncidentStatus.RESOLVED);
+            incident.setResolvedBy(null);
             incident.setResolvedAt(now);
             incidentRepository.save(incident);
         }

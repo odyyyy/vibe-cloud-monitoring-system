@@ -44,6 +44,8 @@ import java.time.Instant;
 @Builder
 public class AlertIncident {
 
+    public static final int MAX_NOTES_LENGTH = 1000;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -63,6 +65,21 @@ public class AlertIncident {
     @Column(name = "triggered_at", nullable = false)
     private Instant triggeredAt;
 
+    /** User who first acknowledged the incident; {@code null} while it is only firing. */
+    @Column(name = "acknowledged_by")
+    private Long acknowledgedBy;
+
+    @Column(name = "acknowledged_at")
+    private Instant acknowledgedAt;
+
+    /** User who closed the incident, or {@code null} when it was resolved automatically. */
+    @Column(name = "resolved_by")
+    private Long resolvedBy;
+
     @Column(name = "resolved_at")
     private Instant resolvedAt;
+
+    /** Plain-text team notes; arbitrary HTML is rejected by the service. */
+    @Column(length = 1000)
+    private String notes;
 }
