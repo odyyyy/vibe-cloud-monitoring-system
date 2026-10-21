@@ -1,10 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react'
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import { useMetricAlertRulesQuery } from '../../api/alerts'
 import type { AggregatedMetricPoint } from '../../api/metrics'
 import { cn } from '../../lib/utils'
 import { Button } from '../ui/button'
 import { Skeleton } from '../ui/skeleton'
+import { Switch } from '../ui/switch'
 import {
   clampDomain,
   domainsEqual,
@@ -13,6 +25,10 @@ import {
   zoomDomain,
   type Domain,
 } from '../../features/metrics/chartZoom'
+import {
+  buildAlertThresholdLines,
+  computeThresholdYAxisDomain,
+} from '../../features/metrics/alertThresholds'
 
 interface MetricChartProps {
   data: AggregatedMetricPoint[]
@@ -24,6 +40,9 @@ interface MetricChartProps {
   heightClass?: string
   /** Line color; callers pass the accent color of the metric being drawn. */
   accentColor?: string
+  /** When set together with `metricName`, matching alert thresholds are overlaid on the chart. */
+  applicationId?: number | null
+  metricName?: string
 }
 
 interface ChartRow {
@@ -144,6 +163,8 @@ export function MetricChart({
   bare = false,
   heightClass,
   accentColor,
+  applicationId = null,
+  metricName,
 }: MetricChartProps) {
   const height = heightClass ?? 'h-72'
   const accent = accentColor ?? DEFAULT_ACCENT_COLOR
@@ -151,6 +172,29 @@ export function MetricChart({
     () => toChartData(data, accent, title),
     [data, accent, title],
   )
+
+  const thresholdsQuery = useMetricAlertRulesQuery(applicationId, metricName ?? null)
+  const thresholdLines = useMemo(
+    () => buildAlertThresholdLines(thresholdsQuery.data ?? [], metricName),
+    [thresholdsQuery.data, metricName],
+  )
+  const [showThresholds, setShowThresholds] = useState(true)
+  const visibleThresholds = showThresholds ? thresholdLines : []
+
+  const yAxisDomain = useMemo(() => {
+    const values: number[] = []
+    for (const row of chartData) {
+      for (const [key, value] of Object.entries(row)) {
+        if (key !== 'timestamp' && typeof value === 'number' && Number.isFinite(value)) {
+          values.push(value)
+        }
+      }
+    }
+    return computeThresholdYAxisDomain(
+      values,
+      visibleThresholds.map((line) => line.value),
+    )
+  }, [chartData, visibleThresholds])
 
   const bounds = useMemo<Domain | null>(() => {
     if (chartData.length < 2) {
@@ -300,46 +344,60 @@ export function MetricChart({
       onMouseDown={canInteract ? handleMouseDown : undefined}
       onDoubleClick={isZoomed ? () => setDomain(null) : undefined}
     >
-      {canInteract ? (
+      {canInteract || thresholdLines.length > 0 ? (
         <div
-          className="absolute right-1 top-1 z-10 flex items-center gap-0.5 rounded-lg border border-white/10 bg-panel/80 p-0.5 backdrop-blur"
+          className="absolute right-1 top-1 z-10 flex items-center gap-1 rounded-lg border border-white/10 bg-panel/80 p-0.5 backdrop-blur"
           onMouseDown={(event) => event.stopPropagation()}
           onDoubleClick={(event) => event.stopPropagation()}
         >
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            aria-label="Zoom in"
-            title="Zoom in"
-            onClick={() => zoomAt(ZOOM_STEP, 0.5)}
-          >
-            <ZoomIn className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            aria-label="Zoom out"
-            title="Zoom out"
-            onClick={() => zoomAt(1 / ZOOM_STEP, 0.5)}
-          >
-            <ZoomOut className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            aria-label="Reset zoom"
-            title="Reset zoom"
-            disabled={!isZoomed}
-            onClick={() => setDomain(null)}
-          >
-            <Maximize2 className="h-3.5 w-3.5" />
-          </Button>
+          {thresholdLines.length > 0 ? (
+            <label className="flex cursor-pointer items-center gap-1.5 px-1.5 text-[11px] text-slate-400">
+              <Switch
+                checked={showThresholds}
+                onCheckedChange={setShowThresholds}
+                aria-label="Show alert thresholds"
+              />
+              <span className="hidden sm:inline">Thresholds</span>
+            </label>
+          ) : null}
+          {canInteract ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                aria-label="Zoom in"
+                title="Zoom in"
+                onClick={() => zoomAt(ZOOM_STEP, 0.5)}
+              >
+                <ZoomIn className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                aria-label="Zoom out"
+                title="Zoom out"
+                onClick={() => zoomAt(1 / ZOOM_STEP, 0.5)}
+              >
+                <ZoomOut className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                aria-label="Reset zoom"
+                title="Reset zoom"
+                disabled={!isZoomed}
+                onClick={() => setDomain(null)}
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          ) : null}
         </div>
       ) : null}
       <ResponsiveContainer width="100%" height="100%">
@@ -356,7 +414,7 @@ export function MetricChart({
             fontSize={11}
             minTickGap={32}
           />
-          <YAxis stroke="#64748b" fontSize={11} width={Y_AXIS_WIDTH} />
+          <YAxis stroke="#64748b" fontSize={11} width={Y_AXIS_WIDTH} domain={yAxisDomain} />
           <Tooltip content={<ChartTooltip accentColor={accent} />} />
           {series.length > 1 ? (
             <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
@@ -372,6 +430,21 @@ export function MetricChart({
               dot={false}
               isAnimationActive={false}
               connectNulls={false}
+            />
+          ))}
+          {visibleThresholds.map((line) => (
+            <ReferenceLine
+              key={line.key}
+              y={line.value}
+              stroke={line.color}
+              strokeDasharray="3 3"
+              ifOverflow="extendDomain"
+              label={{
+                value: `Alert: ${line.label}`,
+                position: 'insideTopRight',
+                fill: line.color,
+                fontSize: 10,
+              }}
             />
           ))}
         </LineChart>

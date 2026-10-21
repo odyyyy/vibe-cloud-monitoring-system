@@ -96,6 +96,19 @@ export function getAlertRules(): Promise<AlertRule[]> {
   return apiRequest<AlertRule[]>(RULES_PATH, { token: authToken() })
 }
 
+/**
+ * Active metric-threshold rules for one application, optionally narrowed to those referencing
+ * `metricName`. Used to overlay alert thresholds on a metric chart; the backend keeps the result
+ * scoped to the caller's organization.
+ */
+export function getMetricAlertRules(applicationId: number, metricName?: string): Promise<AlertRule[]> {
+  const params = new URLSearchParams({ applicationId: String(applicationId) })
+  if (metricName) {
+    params.set('metricName', metricName)
+  }
+  return apiRequest<AlertRule[]>(`${RULES_PATH}?${params.toString()}`, { token: authToken() })
+}
+
 export function createAlertRule(data: CreateAlertRuleRequest): Promise<AlertRule> {
   return apiRequest<AlertRule>(RULES_PATH, { method: 'POST', body: data, token: authToken() })
 }
@@ -173,6 +186,22 @@ export const alertIncidentsQueryKey = (limit: number, status?: IncidentStatus) =
 
 export function useAlertRulesQuery() {
   return useQuery({ queryKey: alertRulesQueryKey, queryFn: getAlertRules })
+}
+
+export const metricAlertRulesQueryKey = (applicationId: number | null, metricName: string | null) =>
+  ['alert-rules', 'metric', applicationId ?? null, metricName ?? null] as const
+
+/**
+ * Fetches the alert rules that apply to one metric. Disabled until both the application and the
+ * metric name are known so the explorer's empty state does not fire a request.
+ */
+export function useMetricAlertRulesQuery(applicationId: number | null, metricName: string | null) {
+  const enabled = applicationId !== null && metricName !== null && metricName !== ''
+  return useQuery({
+    queryKey: metricAlertRulesQueryKey(applicationId, metricName),
+    queryFn: () => getMetricAlertRules(applicationId as number, metricName as string),
+    enabled,
+  })
 }
 
 export function useCreateAlertRuleMutation() {

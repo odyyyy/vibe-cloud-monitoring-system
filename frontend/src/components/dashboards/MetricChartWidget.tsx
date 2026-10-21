@@ -15,6 +15,10 @@ export function MetricChartWidget({ widgetId, config, refetchInterval, shareToke
   const query = useMetricChartWidget(widgetId, config, refetchInterval, shareToken)
   const error = query.error instanceof Error ? query.error : null
 
+  // Public (share-token) views have no session, so alert rules are only overlaid for
+  // authenticated dashboard viewers.
+  const canLoadThresholds = shareToken === undefined
+
   return (
     <MetricChart
       bare
@@ -24,6 +28,8 @@ export function MetricChartWidget({ widgetId, config, refetchInterval, shareToke
       data={query.data ?? []}
       isLoading={query.isLoading}
       error={error}
+      applicationId={canLoadThresholds ? config.applicationId : null}
+      metricName={canLoadThresholds ? config.metricName : undefined}
     />
   )
 }

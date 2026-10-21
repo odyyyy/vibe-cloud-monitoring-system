@@ -83,13 +83,26 @@ class AlertRuleControllerTest {
 
     @Test
     void list_returnsOwnRules() throws Exception {
-        when(alertService.listRules(USER_ID)).thenReturn(List.of(sampleRule()));
+        when(alertService.listRules(USER_ID, null, null)).thenReturn(List.of(sampleRule()));
 
         mockMvc.perform(get("/api/v1/alert-rules"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(5))
                 .andExpect(jsonPath("$[0].isActive").value(true))
                 .andExpect(jsonPath("$[0].condition").value("GREATER_THAN"));
+    }
+
+    @Test
+    void list_forwardsMetricFilterToService() throws Exception {
+        when(alertService.listRules(USER_ID, 7L, "system.cpu.usage")).thenReturn(List.of(sampleRule()));
+
+        mockMvc.perform(get("/api/v1/alert-rules")
+                        .param("applicationId", "7")
+                        .param("metricName", "system.cpu.usage"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].target").value("system.cpu.usage"));
+
+        verify(alertService).listRules(USER_ID, 7L, "system.cpu.usage");
     }
 
     @Test

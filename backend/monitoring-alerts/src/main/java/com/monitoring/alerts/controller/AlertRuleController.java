@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
@@ -34,9 +35,17 @@ public class AlertRuleController {
     private final AlertService alertService;
     private final CurrentTenantService currentTenantService;
 
+    /**
+     * Lists the tenant's rules. The optional {@code applicationId} and {@code metricName} filters
+     * back the chart threshold overlay: they narrow the result to active metric rules for one
+     * application that reference a given metric. The tenant scope is still resolved from the JWT.
+     */
     @GetMapping
-    public ResponseEntity<List<AlertRuleResponse>> list() {
-        return ResponseEntity.ok(alertService.listRules(currentTenantService.requireOrganizationId()));
+    public ResponseEntity<List<AlertRuleResponse>> list(
+            @RequestParam(required = false) Long applicationId,
+            @RequestParam(required = false) String metricName) {
+        return ResponseEntity.ok(alertService.listRules(
+                currentTenantService.requireOrganizationId(), applicationId, metricName));
     }
 
     @PostMapping

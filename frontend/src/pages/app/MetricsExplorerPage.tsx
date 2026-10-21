@@ -123,6 +123,8 @@ export default function MetricsExplorerPage() {
           data={query.data ?? []}
           isLoading={query.isLoading}
           error={query.error instanceof ApiError ? query.error : null}
+          applicationId={params.applicationId}
+          metricName={params.metricName}
         />
       ) : (
         <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-panel/40">

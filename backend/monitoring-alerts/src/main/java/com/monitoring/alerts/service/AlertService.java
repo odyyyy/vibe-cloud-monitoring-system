@@ -97,9 +97,37 @@ public class AlertService {
 
     @Transactional(readOnly = true)
     public List<AlertRuleResponse> listRules(Long organizationId) {
-        return ruleRepository.findByOrganizationIdOrderByCreatedAtDesc(organizationId).stream()
+        return listRules(organizationId, null, null);
+    }
+
+    /**
+     * Lists rules scoped to the authenticated tenant. When {@code applicationId} is supplied only
+     * active metric rules for that application are returned, and an optional {@code metricName}
+     * narrows the result to rules that reference the metric in any condition (or in the legacy
+     * target column). This backs the chart threshold overlay without exposing another tenant's
+     * rules: the organization is always part of the query.
+     */
+    @Transactional(readOnly = true)
+    public List<AlertRuleResponse> listRules(Long organizationId, Long applicationId, String metricName) {
+        List<AlertRule> rules = applicationId == null
+                ? ruleRepository.findByOrganizationIdOrderByCreatedAtDesc(organizationId)
+                : ruleRepository.findByOrganizationIdAndApplicationIdAndActiveTrueOrderByCreatedAtDesc(
+                        organizationId, applicationId);
+
+        String metricFilter = metricName == null || metricName.isBlank() ? null : metricName.trim();
+        return rules.stream()
+                .filter(rule -> metricFilter == null || referencesMetric(rule, metricFilter))
                 .map(AlertRuleResponse::fromEntity)
                 .toList();
+    }
+
+    /** True when the rule compares against {@code metricName} in any condition or legacy column. */
+    private boolean referencesMetric(AlertRule rule, String metricName) {
+        if (metricName.equals(rule.getTarget())) {
+            return true;
+        }
+        return rule.getConditions().stream()
+                .anyMatch(condition -> metricName.equals(condition.getTarget()));
     }
 
     @Transactional

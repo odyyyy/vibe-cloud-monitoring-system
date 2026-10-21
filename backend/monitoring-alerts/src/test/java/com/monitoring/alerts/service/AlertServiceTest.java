@@ -11,6 +11,7 @@ import com.monitoring.alerts.dto.request.UpdateIncidentNotesRequest;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertIncident;
 import com.monitoring.alerts.entity.AlertRule;
+import com.monitoring.alerts.entity.AlertRuleCondition;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.IncidentStatus;
 import com.monitoring.alerts.entity.LogicOperator;
@@ -427,5 +428,82 @@ class AlertServiceTest {
 
         assertThrows(InvalidAlertRuleException.class, () -> service.createRule(OWNER_ID, request));
         verify(ruleRepository, never()).save(any());
+    }
+
+    private AlertRule metricRule(String name, String target, double threshold, boolean active) {
+        return AlertRule.builder()
+                .id((long) name.hashCode())
+                .organizationId(OWNER_ID)
+                .applicationId(APP_ID)
+                .name(name)
+                .type(AlertRuleType.METRIC_THRESHOLD)
+                .target(target)
+                .condition(AlertCondition.GREATER_THAN)
+                .threshold(threshold)
+                .active(active)
+                .build();
+    }
+
+    @Test
+    void listRulesForMetricReturnsOnlyActiveRulesReferencingIt() {
+        AlertRule cpu = metricRule("High CPU", "system.cpu.usage", 90.0, true);
+        AlertRule memory = metricRule("High memory", "system.memory.usage", 85.0, true);
+        when(ruleRepository.findByOrganizationIdAndApplicationIdAndActiveTrueOrderByCreatedAtDesc(OWNER_ID, APP_ID))
+                .thenReturn(List.of(cpu, memory));
+
+        List<AlertRuleResponse> result = service.listRules(OWNER_ID, APP_ID, "system.cpu.usage");
+
+        assertEquals(1, result.size());
+        assertEquals("High CPU", result.get(0).getName());
+    }
+
+    @Test
+    void listRulesMatchesCompoundConditionTargets() {
+        AlertRule compound = AlertRule.builder()
+                .id(11L)
+                .organizationId(OWNER_ID)
+                .applicationId(APP_ID)
+                .name("CPU or memory")
+                .type(AlertRuleType.METRIC_THRESHOLD)
+                .target("system.cpu.usage")
+                .condition(AlertCondition.GREATER_THAN)
+                .threshold(90.0)
+                .conditions(List.of(
+                        AlertRuleCondition.builder()
+                                .target("system.cpu.usage").operator(AlertCondition.GREATER_THAN).threshold(90.0).build(),
+                        AlertRuleCondition.builder()
+                                .target("system.memory.usage").operator(AlertCondition.GREATER_THAN).threshold(85.0).build()))
+                .logicOperator(LogicOperator.OR)
+                .active(true)
+                .build();
+        when(ruleRepository.findByOrganizationIdAndApplicationIdAndActiveTrueOrderByCreatedAtDesc(OWNER_ID, APP_ID))
+                .thenReturn(List.of(compound));
+
+        List<AlertRuleResponse> result = service.listRules(OWNER_ID, APP_ID, "system.memory.usage");
+
+        assertEquals(1, result.size());
+        assertEquals("CPU or memory", result.get(0).getName());
+    }
+
+    @Test
+    void listRulesWithoutFiltersUsesTenantScopedQuery() {
+        when(ruleRepository.findByOrganizationIdOrderByCreatedAtDesc(OWNER_ID))
+                .thenReturn(List.of(metricRule("High CPU", "system.cpu.usage", 90.0, true)));
+
+        List<AlertRuleResponse> result = service.listRules(OWNER_ID);
+
+        assertEquals(1, result.size());
+        verify(ruleRepository).findByOrganizationIdOrderByCreatedAtDesc(OWNER_ID);
+    }
+
+    @Test
+    void listRulesFilterNeverMatchesForeignApplication() {
+        when(ruleRepository.findByOrganizationIdAndApplicationIdAndActiveTrueOrderByCreatedAtDesc(OWNER_ID, APP_ID))
+                .thenReturn(List.of(metricRule("High CPU", "system.cpu.usage", 90.0, true)));
+
+        List<AlertRuleResponse> result = service.listRules(9_999L, APP_ID, "system.cpu.usage");
+
+        assertTrue(result.isEmpty());
+        verify(ruleRepository).findByOrganizationIdAndApplicationIdAndActiveTrueOrderByCreatedAtDesc(9_999L, APP_ID);
     }
 }
