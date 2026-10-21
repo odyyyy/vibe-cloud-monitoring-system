@@ -59,7 +59,7 @@ Backend собран как Maven multi-module проект:
 | `monitoring-collector` | Приём метрик/логов (`/api/v1/ingest`) и запросы метрик/логов (`/api/v1/metrics/query`, `/api/v1/metrics/names`, `/api/v1/logs`), сохранённые представления логов (`/api/v1/saved-log-views`), учёт потребления и квот (`/api/v1/usage`) |
 | `monitoring-dashboards` | CRUD дашбордов и виджетов (`/api/v1/dashboards`) |
 | `monitoring-healthcheck` | Синтетические HTTP health-checks: CRUD, scheduler, SSRF-защита, история результатов (`/api/v1/health-checks`) |
-| `monitoring-alerts` | Правила алертов (метрики/health-checks) с составными условиями AND/OR, плановый evaluator, уведомления webhook/Slack/email (SSRF-защита, rate limit) и инциденты (`/api/v1/alert-rules`, `/api/v1/notification-channels`, `/api/v1/alert-incidents`) |
+| `monitoring-alerts` | Правила алертов (метрики/health-checks) с составными условиями AND/OR, плановый evaluator, уведомления webhook/Slack/email (SSRF-защита, rate limit), инциденты и окна обслуживания (`/api/v1/alert-rules`, `/api/v1/notification-channels`, `/api/v1/alert-incidents`, `/api/v1/maintenance-windows`) |
 | `monitoring-audit` | Аудит-лог: запись событий через AOP (`@AuditLog`) и read-only API (`/api/v1/audit-events`) |
 | `monitoring-common` | Общие типы без домена: пагинация (`PageResponse`), тело ошибки (`ApiError`) |
 | `monitoring-api` | Точка входа, конфигурация, композиция модулей, Actuator, OpenAPI |
@@ -318,6 +318,8 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `MONITORING_RETENTION_LOGS_DAYS` | Срок хранения логов, дней | `14` |
 | `MONITORING_RETENTION_METRICS_DAYS` | Срок хранения агрегатов метрик, дней | `90` |
 | `MONITORING_RETENTION_BATCH_SIZE` | Размер батча удаления устаревших записей | `10000` |
+| `MONITORING_PLATFORM_METRICS_ENABLED` | Сбор собственных метрик платформы (dogfooding) | `true` |
+| `MONITORING_PLATFORM_ADMIN_USERNAME` | Логин пользователя, которому на старте выдаётся роль `PLATFORM_ADMIN` (пусто — платформенного администратора нет) | |
 
 ### Frontend
 
@@ -340,6 +342,9 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `config.yaml` | `logs` | Список tail-источников `{ path, service_name, level_pattern, format }` (только файл) |
 | `config.yaml` / `AGENT_LOG_BATCH_SIZE` | `log_batch_size` | Размер батча логов, 1..1000 (по умолчанию 500) |
 | `config.yaml` / `AGENT_LOG_FLUSH_SECONDS` | `log_flush_seconds` | Интервал принудительной отправки логов (по умолчанию 5с) |
+| `config.yaml` / `AGENT_LOG_MAX_PER_SECOND` | `log_throttling.max_logs_per_second` | Потолок логов на источник в секунду; `0` выключает throttling (по умолчанию 500) |
+| `config.yaml` / `AGENT_LOG_SAMPLE_RATE` | `log_throttling.sample_rate` | Доля (0..1) избыточных логов, которые всё же отправляются (по умолчанию 0.1) |
+| `config.yaml` / `AGENT_LOG_ALWAYS_FORWARD_LEVELS` | `log_throttling.always_forward_levels` | Уровни через запятую, обходящие throttling (по умолчанию `FATAL,CRITICAL`) |
 | `config.yaml` / `AGENT_STATE_FILE` | `state_file` | Файл с offset'ами чтения логов (по умолчанию `.agent_state.json`) |
 | `config.yaml` / `AGENT_KUBERNETES_ENABLED` | `kubernetes.enabled` | Включить автообнаружение логов подов (по умолчанию `false`) |
 | `config.yaml` / `AGENT_KUBERNETES_NAMESPACE` | `kubernetes.namespace` | Namespace или `all`; пусто — все namespace |
@@ -435,6 +440,30 @@ state_file: ".agent_state.json"
   лишние ключи отбрасываются.
 - Перед отправкой выполняется redaction: `password=...`, `token=...`, `api_key=...`,
   `Bearer ...`, `app_...` и AWS-ключи маскируются (в том числе внутри JSON `context`).
+
+#### Throttling и sampling логов
+
+Если приложение уходит в цикл и пишет тысячи строк в секунду, агент ограничивает
+скорость отправки, чтобы не перегрузить backend и не раздуть локальный буфер.
+Ограничение действует **на каждый источник отдельно**, поэтому шумный файл не
+блокирует логи тихого, но критичного сервиса:
+
+```yaml
+log_throttling:
+  max_logs_per_second: 500          # потолок на источник; 0 выключает throttling
+  sample_rate: 0.1                  # отправлять 10% логов сверх потолка
+  always_forward_levels: ["FATAL", "CRITICAL"]
+```
+
+- Первые `max_logs_per_second` событий в секунду по каждому источнику отправляются
+  всегда (используется скользящее окно).
+- Уровни из `always_forward_levels` обходят лимит и не сэмплируются. `FATAL` и
+  `CRITICAL` сохраняются отдельно от `ERROR`, поэтому поток обычных ошибок всё ещё
+  ограничивается, а падения не теряются.
+- Остальные «избыточные» события отправляются с вероятностью `sample_rate`,
+  а отброшенные увеличивают счётчик `agent.logs.dropped_total`.
+- Агент отправляет накопленное значение `agent.logs.dropped_total` в облако вместе
+  с host-метриками (теги `host` и `version`), поэтому throttling виден на графиках.
 
 Запуск контейнера с монтированием каталога логов и writable volume для state:
 
@@ -747,6 +776,12 @@ Online/Offline вычисляется на фронтенде по `lastSeenAt` 
 scope приложения, поэтому один тенант не может перечислить метрики другого.
 Используется фронтендом для выбора имени метрики вместо ручного ввода.
 
+На графике Metrics Explorer отображаются горизонтальные линии порогов активных
+метрических правил (`GET /api/v1/alert-rules?applicationId=…&metricName=…`): самое
+высокое значение — красным, остальные — жёлтым. Переключатель «Thresholds» скрывает
+линии без повторной загрузки данных, а ось Y расширяется так, чтобы линия порога
+всегда была видна.
+
 Пример приёма метрик:
 
 ```json
@@ -927,6 +962,31 @@ Explorer выбирается из списка: сначала идут вст�
 (роли ADMIN/OWNER). Динамические `query`-переменные (загрузка опций с бэкенда) и связанные
 переменные не реализованы.
 
+### Платформенное администрирование — `/api/v1/admin`
+
+| Метод | Путь | Описание | Доступ |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/admin/platform-health` | Системный дашборд «Platform Health» | JWT с ролью `PLATFORM_ADMIN` |
+
+Роль `PLATFORM_ADMIN` — платформенная (не организационная): она не выдаётся через API
+управления участниками организации, поэтому владелец организации не может выдать её ни себе,
+ни другому пользователю. Роль назначается оператором через переменную окружения
+`MONITORING_PLATFORM_ADMIN_USERNAME`: аккаунт с таким логином получает роль при старте
+приложения (идемпотентно).
+
+Системный дашборд принадлежит скрытой организации `System` и изолирован от пользовательских
+дашбордов: `GET /api/v1/dashboards` его не возвращает, `GET /api/v1/dashboards/{id}` и
+изменение/удаление отвечают `403` даже при известном id, а публичная ссылка (share) для
+системного дашборда недоступна. Те же метрики платформы недоступны обычному пользователю
+через `GET /api/v1/metrics/query`. В интерфейсе дашборд открыт по адресу
+`/admin/platform-health` (только для `PLATFORM_ADMIN`), а в боковом меню пункт
+**Platform Health** появляется только у таких пользователей.
+
+Собственные метрики платформы (JVM, пул соединений БД, частота и p95 задержки ингеста)
+пишутся тем же конвейером ингеста, что и метрики агентов, в скрытое системное приложение;
+на дашборд попадают только числовые агрегаты — тела запросов, заголовки и логи клиентов
+не экспортируются.
+
 ### Health checks — `/api/v1/health-checks`
 
 | Метод | Путь | Описание | Доступ |
@@ -960,7 +1020,7 @@ link-local, CGNAT, multicast, `169.254.169.254` и т.п. отклоняются
 
 | Метод | Путь | Описание | Доступ |
 | --- | --- | --- | --- |
-| `GET` | `/api/v1/alert-rules` | Список правил пользователя | JWT (владелец) |
+| `GET` | `/api/v1/alert-rules` | Список правил пользователя (опц. `applicationId`, `metricName` — активные metric-правила для графика) | JWT (владелец) |
 | `POST` | `/api/v1/alert-rules` | Создать правило | JWT |
 | `PUT` | `/api/v1/alert-rules/{id}` | Обновить (частично) | JWT (владелец) |
 | `DELETE` | `/api/v1/alert-rules/{id}` | Удалить правило и его инциденты | JWT (владелец) |
@@ -1003,6 +1063,31 @@ email использует `spring-boot-starter-mail` (нужен `spring.mail.h
 диалог создания/редактирования (несколько условий с переключателем AND/OR) и настройку
 notification-каналов (webhook/Slack/email с кнопкой тестовой отправки); страница **Incidents**
 (`/app/incidents`) — таблицу инцидентов (новые первыми) с автообновлением раз в 30 секунд.
+
+### Maintenance windows — `/api/v1/maintenance-windows`
+
+| Метод | Путь | Описание | Доступ |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/maintenance-windows` | Окна обслуживания организации (новые первыми) | JWT |
+| `POST` | `/api/v1/maintenance-windows` | Создать окно | JWT (`ADMIN`/`OWNER`) |
+| `PUT` | `/api/v1/maintenance-windows/{id}` | Частично обновить окно или завершить его (`isActive=false`) | JWT (`ADMIN`/`OWNER`) |
+| `DELETE` | `/api/v1/maintenance-windows/{id}` | Удалить окно | JWT (`ADMIN`/`OWNER`) |
+
+Окно: `name` (1–100), `scopeType` (`GLOBAL|APPLICATION|SPECIFIC_RULE`), `scopeId`
+(applicationId или ruleId; для `GLOBAL` — `null`), `startTime`, `endTime` (UTC) и `isActive`.
+Все чтения и записи ограничены `organizationId` из JWT; ссылки на приложение или правило
+проверяются на принадлежность той же организации. `startTime` может быть не более чем на час
+в прошлом, `endTime` — только в будущем и позже `startTime`. Интервал действует как
+`[startTime, endTime)`, при этом `isActive` должен быть `true`.
+
+Пока окно активно и подходит правилу по области, evaluator не создаёт новые инциденты и не
+отправляет уведомления. Если инцидент уже существует, recovery закрывает его, но уведомление
+об этом подавляется. После окончания окна алерты снова работают штатно. Окно можно завершить
+досрочно через `PUT` с `isActive=false` или удалить. Повторяющиеся окна не поддерживаются.
+
+Страница **Maintenance** (`/app/maintenance`) показывает активные, предстоящие и завершённые
+окна, позволяет создавать/редактировать/отключать/удалять их; при активном окне на страницах
+**Alerts** и **Incidents** выводится предупреждающий баннер.
 
 ### Audit — `/api/v1/audit-events`
 
@@ -1092,6 +1177,9 @@ H2, frontend-тесты — jsdom.
 
 ## Текущие ограничения
 
+- Роль `PLATFORM_ADMIN` выдаётся только оператором через `MONITORING_PLATFORM_ADMIN_USERNAME`
+  при старте приложения: API назначения роли нет намеренно (иначе владелец организации мог бы
+  выдать доступ к внутренним метрикам платформы).
 - Виджет **Status** в дашбордах — плейсхолдер (ещё не связан с health-checks API).
 - Письма подтверждения email и сброса пароля не отправляются по SMTP: ссылка пишется в
   лог backend, если включён `app.auth.log-emails` (по умолчанию выключено, в профиле `dev`
