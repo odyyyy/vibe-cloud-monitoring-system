@@ -28,8 +28,11 @@ import com.monitoring.alerts.exception.AlertRuleNotFoundException;
 import com.monitoring.alerts.exception.InvalidAlertRuleException;
 import com.monitoring.alerts.exception.InvalidIncidentNoteException;
 import com.monitoring.alerts.exception.InvalidIncidentStateException;
+import com.monitoring.alerts.exception.InvalidMaintenanceWindowException;
 import com.monitoring.alerts.exception.InvalidNotificationChannelException;
 import com.monitoring.alerts.exception.InvalidWebhookUrlException;
+import com.monitoring.alerts.exception.MaintenanceWindowAccessDeniedException;
+import com.monitoring.alerts.exception.MaintenanceWindowNotFoundException;
 import com.monitoring.alerts.exception.NotificationChannelAccessDeniedException;
 import com.monitoring.alerts.exception.NotificationChannelNotFoundException;
 import com.monitoring.healthcheck.exception.HealthCheckAccessDeniedException;
@@ -41,6 +44,7 @@ import com.monitoring.apps.exception.ApplicationNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -95,6 +99,16 @@ public class ApiExceptionHandler {
                 .body(new ApiError(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
     }
 
+    /**
+     * Insufficient privileges, for example a missing platform role on an administration
+     * endpoint. The message is written by the platform and never contains internals.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiError> handleAccessDenied(AccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiError(HttpStatus.FORBIDDEN.value(), "You do not have permission to perform this action"));
+    }
+
     /** Unknown, revoked or mismatched public share link. */
     @ExceptionHandler(SharedDashboardNotFoundException.class)
     public ResponseEntity<ApiError> handleSharedDashboardNotFound(SharedDashboardNotFoundException ex) {
@@ -141,14 +155,14 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler({AlertRuleNotFoundException.class, NotificationChannelNotFoundException.class,
-            AlertIncidentNotFoundException.class})
+            AlertIncidentNotFoundException.class, MaintenanceWindowNotFoundException.class})
     public ResponseEntity<ApiError> handleAlertNotFound(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
     }
 
     @ExceptionHandler({AlertRuleAccessDeniedException.class, NotificationChannelAccessDeniedException.class,
-            AlertIncidentAccessDeniedException.class})
+            AlertIncidentAccessDeniedException.class, MaintenanceWindowAccessDeniedException.class})
     public ResponseEntity<ApiError> handleAlertAccessDenied(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(new ApiError(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
@@ -156,7 +170,8 @@ public class ApiExceptionHandler {
 
     /** Inconsistent alert rule payloads and blocked webhook/Slack/email destinations. */
     @ExceptionHandler({InvalidAlertRuleException.class, InvalidWebhookUrlException.class,
-            InvalidNotificationChannelException.class, InvalidIncidentNoteException.class})
+            InvalidNotificationChannelException.class, InvalidIncidentNoteException.class,
+            InvalidMaintenanceWindowException.class})
     public ResponseEntity<ApiError> handleInvalidAlertRequest(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));

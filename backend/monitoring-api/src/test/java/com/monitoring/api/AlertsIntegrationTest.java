@@ -4,19 +4,25 @@ import com.monitoring.alerts.dto.response.AlertIncidentResponse;
 import com.monitoring.alerts.dto.response.AlertRuleResponse;
 import com.monitoring.alerts.dto.request.AlertConditionRequest;
 import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
+import com.monitoring.alerts.dto.request.CreateMaintenanceWindowRequest;
 import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
+import com.monitoring.alerts.dto.request.UpdateMaintenanceWindowRequest;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.IncidentStatus;
 import com.monitoring.alerts.entity.LogicOperator;
+import com.monitoring.alerts.entity.MaintenanceScopeType;
 import com.monitoring.alerts.entity.NotificationChannelType;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
 import com.monitoring.alerts.exception.InvalidWebhookUrlException;
+import com.monitoring.alerts.exception.MaintenanceWindowAccessDeniedException;
 import com.monitoring.alerts.repository.AlertIncidentRepository;
 import com.monitoring.alerts.repository.AlertRuleRepository;
+import com.monitoring.alerts.repository.MaintenanceWindowRepository;
 import com.monitoring.alerts.repository.NotificationChannelRepository;
 import com.monitoring.alerts.service.AlertEvaluationService;
 import com.monitoring.alerts.service.AlertService;
+import com.monitoring.alerts.service.MaintenanceWindowService;
 import com.monitoring.collector.entity.MetricSample;
 import com.monitoring.collector.repository.MetricSampleRepository;
 import com.monitoring.healthcheck.dto.request.CreateHealthCheckRequest;
@@ -71,6 +77,12 @@ class AlertsIntegrationTest {
     private AlertEvaluationService evaluationService;
 
     @Autowired
+    private MaintenanceWindowService maintenanceWindowService;
+
+    @Autowired
+    private MaintenanceWindowRepository maintenanceWindowRepository;
+
+    @Autowired
     private AlertRuleRepository ruleRepository;
 
     @Autowired
@@ -99,6 +111,7 @@ class AlertsIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        maintenanceWindowRepository.deleteAll();
         incidentRepository.deleteAll();
         ruleRepository.deleteAll();
         channelRepository.deleteAll();
@@ -242,6 +255,54 @@ class AlertsIntegrationTest {
     }
 
     @Test
+    void metricRuleLookupFiltersByApplicationMetricAndTenant() {
+        Application application = createApplication(OWNER_ID, "web");
+        Application otherApplication = createApplication(OWNER_ID, "api");
+        createMetricRule(OWNER_ID, application.getId());
+
+        // Same application, different metric: must not match.
+        alertService.createRule(OWNER_ID, CreateAlertRuleRequest.builder()
+                .name("High memory")
+                .applicationId(application.getId())
+                .type(AlertRuleType.METRIC_THRESHOLD)
+                .target("system.memory.usage")
+                .condition(AlertCondition.GREATER_THAN)
+                .threshold(85.0)
+                .durationMinutes(1)
+                .active(true)
+                .build());
+        // Same metric, different application: must not match.
+        alertService.createRule(OWNER_ID, CreateAlertRuleRequest.builder()
+                .name("CPU on api")
+                .applicationId(otherApplication.getId())
+                .type(AlertRuleType.METRIC_THRESHOLD)
+                .target(METRIC)
+                .condition(AlertCondition.GREATER_THAN)
+                .threshold(80.0)
+                .durationMinutes(1)
+                .active(true)
+                .build());
+        // Same application and metric but deactivated: must not match.
+        alertService.createRule(OWNER_ID, CreateAlertRuleRequest.builder()
+                .name("Muted CPU")
+                .applicationId(application.getId())
+                .type(AlertRuleType.METRIC_THRESHOLD)
+                .target(METRIC)
+                .condition(AlertCondition.GREATER_THAN)
+                .threshold(70.0)
+                .durationMinutes(1)
+                .active(false)
+                .build());
+
+        List<AlertRuleResponse> matches = alertService.listRules(OWNER_ID, application.getId(), METRIC);
+
+        assertEquals(1, matches.size());
+        assertEquals("High CPU", matches.get(0).getName());
+        // Another tenant never sees the rule for the same application id.
+        assertEquals(0, alertService.listRules(OTHER_ID, application.getId(), METRIC).size());
+    }
+
+    @Test
     void webhookChannelRequiresHttpsAndPublicHost() {
         var created = alertService.createChannel(OWNER_ID, CreateNotificationChannelRequest.builder()
                 .type(NotificationChannelType.WEBHOOK)
@@ -304,5 +365,75 @@ class AlertsIntegrationTest {
         assertEquals(NotificationChannelType.EMAIL, created.getType());
         assertEquals("oncall@example.com", created.getEmailAddress());
         assertEquals(1, alertService.listChannels(OWNER_ID).size());
+    }
+
+    @Test
+    void maintenanceWindowSuppressesIncidentAndResumesAfterItEnds() {
+        Instant base = Instant.now();
+        Application application = createApplication(OWNER_ID, "web");
+        AlertRuleResponse rule = createMetricRule(OWNER_ID, application.getId());
+
+        metricSampleRepository.save(MetricSample.builder()
+                .application(application)
+                .name(METRIC)
+                .value(95.0)
+                .timestamp(base)
+                .receivedAt(base)
+                .build());
+
+        maintenanceWindowService.create(OWNER_ID, CreateMaintenanceWindowRequest.builder()
+                .name("Deploy")
+                .scopeType(MaintenanceScopeType.APPLICATION)
+                .scopeId(application.getId())
+                .startTime(base.minusSeconds(60))
+                .endTime(base.plusSeconds(120))
+                .build());
+
+        assertTrue(evaluationService.evaluate(rule.getId(), base).isEmpty());
+        assertTrue(evaluationService.evaluate(rule.getId(), base.plusSeconds(61)).isEmpty());
+        assertEquals(0, alertService.listIncidents(OWNER_ID, null).size());
+
+        var event = evaluationService.evaluate(rule.getId(), base.plusSeconds(130));
+
+        assertTrue(event.isPresent());
+        assertEquals(IncidentStatus.FIRING, event.get().status());
+        assertEquals(1, alertService.listIncidents(OWNER_ID, null).size());
+    }
+
+    @Test
+    void maintenanceWindowCanBeEndedEarlyAndIsTenantScoped() {
+        Instant base = Instant.now();
+        Application application = createApplication(OWNER_ID, "web");
+        AlertRuleResponse rule = createMetricRule(OWNER_ID, application.getId());
+
+        metricSampleRepository.save(MetricSample.builder()
+                .application(application)
+                .name(METRIC)
+                .value(95.0)
+                .timestamp(base)
+                .receivedAt(base)
+                .build());
+
+        var window = maintenanceWindowService.create(OWNER_ID, CreateMaintenanceWindowRequest.builder()
+                .name("Deploy")
+                .scopeType(MaintenanceScopeType.SPECIFIC_RULE)
+                .scopeId(rule.getId())
+                .startTime(base.minusSeconds(60))
+                .endTime(base.plusSeconds(7200))
+                .build());
+
+        assertEquals(0, maintenanceWindowService.list(OTHER_ID).size());
+        assertThrows(MaintenanceWindowAccessDeniedException.class,
+                () -> maintenanceWindowService.update(OTHER_ID, window.getId(),
+                        UpdateMaintenanceWindowRequest.builder().active(false).build()));
+
+        assertTrue(evaluationService.evaluate(rule.getId(), base).isEmpty());
+        maintenanceWindowService.update(OWNER_ID, window.getId(),
+                UpdateMaintenanceWindowRequest.builder().active(false).build());
+
+        var event = evaluationService.evaluate(rule.getId(), base.plusSeconds(61));
+
+        assertTrue(event.isPresent());
+        assertEquals(IncidentStatus.FIRING, event.get().status());
     }
 }

@@ -65,6 +65,7 @@ public class AlertEvaluationService {
     private final AlertIncidentRepository incidentRepository;
     private final MetricQueryService metricQueryService;
     private final HealthCheckService healthCheckService;
+    private final MaintenanceWindowService maintenanceWindowService;
     private final long metricLookbackMinutes;
     private final long healthFreshnessMinutes;
 
@@ -73,12 +74,14 @@ public class AlertEvaluationService {
             AlertIncidentRepository incidentRepository,
             MetricQueryService metricQueryService,
             HealthCheckService healthCheckService,
+            MaintenanceWindowService maintenanceWindowService,
             @Value("${monitoring.alerts.metric-lookback-minutes:5}") long metricLookbackMinutes,
             @Value("${monitoring.alerts.health-freshness-minutes:10}") long healthFreshnessMinutes) {
         this.ruleRepository = ruleRepository;
         this.incidentRepository = incidentRepository;
         this.metricQueryService = metricQueryService;
         this.healthCheckService = healthCheckService;
+        this.maintenanceWindowService = maintenanceWindowService;
         this.metricLookbackMinutes = metricLookbackMinutes;
         this.healthFreshnessMinutes = healthFreshnessMinutes;
     }
@@ -99,12 +102,16 @@ public class AlertEvaluationService {
             return Optional.empty();
         }
 
+        boolean muted = maintenanceWindowService.isMuted(
+                rule.getOrganizationId(), rule.getApplicationId(), rule.getId(), now);
+
         return observation.get().breaching()
-                ? handleBreach(rule, observation.get(), now)
-                : handleClear(rule, observation.get(), now);
+                ? handleBreach(rule, observation.get(), now, muted)
+                : handleClear(rule, observation.get(), now, muted);
     }
 
-    private Optional<AlertEvent> handleBreach(AlertRule rule, Observation observation, Instant now) {
+    private Optional<AlertEvent> handleBreach(
+            AlertRule rule, Observation observation, Instant now, boolean muted) {
         if (rule.getBreachStartedAt() == null) {
             rule.setBreachStartedAt(now);
             ruleRepository.save(rule);
@@ -113,6 +120,12 @@ public class AlertEvaluationService {
 
         Instant dueAt = rule.getBreachStartedAt().plusSeconds(rule.getDurationMinutes() * 60L);
         if (now.isBefore(dueAt)) {
+            return Optional.empty();
+        }
+
+        if (muted) {
+            // The breach is real, but the user asked the platform to stay quiet during the window.
+            log.info("Alert rule {} ({}) is muted by a maintenance window", rule.getId(), rule.getName());
             return Optional.empty();
         }
 
@@ -133,7 +146,8 @@ public class AlertEvaluationService {
         return Optional.of(toEvent(rule, incident, observation, now));
     }
 
-    private Optional<AlertEvent> handleClear(AlertRule rule, Observation observation, Instant now) {
+    private Optional<AlertEvent> handleClear(
+            AlertRule rule, Observation observation, Instant now, boolean muted) {
         boolean hadBreach = rule.getBreachStartedAt() != null;
         if (hadBreach) {
             rule.setBreachStartedAt(null);
@@ -152,6 +166,13 @@ public class AlertEvaluationService {
         incident.setResolvedBy(null);
         incident.setResolvedAt(now);
         incidentRepository.save(incident);
+
+        if (muted) {
+            // State is updated, but the recovery notification is suppressed as well.
+            log.info("Alert rule {} ({}) resolved silently by a maintenance window",
+                    rule.getId(), rule.getName());
+            return Optional.empty();
+        }
 
         log.info("Alert rule {} ({}) resolved", rule.getId(), rule.getName());
         return Optional.of(toEvent(rule, incident, observation, now));

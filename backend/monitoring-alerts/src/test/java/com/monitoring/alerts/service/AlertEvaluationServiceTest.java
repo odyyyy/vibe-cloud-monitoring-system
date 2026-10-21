@@ -45,6 +45,7 @@ class AlertEvaluationServiceTest {
     private AlertIncidentRepository incidentRepository;
     private MetricQueryService metricQueryService;
     private HealthCheckService healthCheckService;
+    private MaintenanceWindowService maintenanceWindowService;
     private AlertEvaluationService service;
 
     @BeforeEach
@@ -53,8 +54,9 @@ class AlertEvaluationServiceTest {
         incidentRepository = Mockito.mock(AlertIncidentRepository.class);
         metricQueryService = Mockito.mock(MetricQueryService.class);
         healthCheckService = Mockito.mock(HealthCheckService.class);
+        maintenanceWindowService = Mockito.mock(MaintenanceWindowService.class);
         service = new AlertEvaluationService(ruleRepository, incidentRepository,
-                metricQueryService, healthCheckService, 5L, 10L);
+                metricQueryService, healthCheckService, maintenanceWindowService, 5L, 10L);
         when(incidentRepository.save(any(AlertIncident.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(ruleRepository.save(any(AlertRule.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -214,6 +216,46 @@ class AlertEvaluationServiceTest {
 
         assertTrue(event.isEmpty());
         verify(incidentRepository, never()).save(any());
+    }
+
+    @Test
+    void mutedBreachDoesNotCreateIncident() {
+        AlertRule rule = metricRule();
+        rule.setBreachStartedAt(NOW.minusSeconds(120));
+        when(ruleRepository.findById(1L)).thenReturn(Optional.of(rule));
+        latestValue(95.0);
+        when(maintenanceWindowService.isMuted(OWNER_ID, APP_ID, 1L, NOW)).thenReturn(true);
+
+        Optional<AlertEvent> event = service.evaluate(1L, NOW);
+
+        assertTrue(event.isEmpty());
+        verify(incidentRepository, never()).save(any());
+    }
+
+    @Test
+    void mutedRecoveryResolvesIncidentButSuppressesNotification() {
+        AlertRule rule = metricRule();
+        rule.setBreachStartedAt(NOW.minusSeconds(120));
+        when(ruleRepository.findById(1L)).thenReturn(Optional.of(rule));
+        latestValue(10.0);
+        when(maintenanceWindowService.isMuted(OWNER_ID, APP_ID, 1L, NOW)).thenReturn(true);
+
+        AlertIncident firing = AlertIncident.builder()
+                .id(9L)
+                .rule(rule)
+                .organizationId(OWNER_ID)
+                .status(IncidentStatus.FIRING)
+                .triggeredAt(NOW.minusSeconds(120))
+                .build();
+        when(incidentRepository.findFirstByRule_IdAndStatusInOrderByTriggeredAtDesc(eq(1L), any()))
+                .thenReturn(Optional.of(firing));
+
+        Optional<AlertEvent> event = service.evaluate(1L, NOW);
+
+        assertTrue(event.isEmpty());
+        assertEquals(IncidentStatus.RESOLVED, firing.getStatus());
+        assertEquals(NOW, firing.getResolvedAt());
+        assertNull(rule.getBreachStartedAt());
     }
 
     @Test

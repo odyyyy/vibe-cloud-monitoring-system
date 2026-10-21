@@ -10,6 +10,7 @@ import {
 } from '../../api/alerts'
 import { ApiError } from '../../api/client'
 import { IncidentStatusBadge } from '../../components/alerts/IncidentStatusBadge'
+import { MaintenanceStatusBanner } from '../../components/alerts/MaintenanceStatusBanner'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import {
@@ -172,6 +173,8 @@ export default function IncidentsPage() {
           </div>
         ) : null}
       </header>
+
+      <MaintenanceStatusBanner />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-slate-500">

@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import { GuestOnlyRoute } from './components/auth/GuestOnlyRoute'
 import { RequireAuth } from './components/auth/RequireAuth'
+import { RequireRole } from './components/auth/RequireRole'
 import { AppLayout } from './components/layout/AppLayout'
 import LandingPage from './pages/LandingPage'
 import CheckEmailPage from './pages/auth/CheckEmailPage'
@@ -19,11 +20,13 @@ import DashboardViewPage from './pages/app/DashboardViewPage'
 import HealthChecksPage from './pages/app/HealthChecksPage'
 import IncidentsPage from './pages/app/IncidentsPage'
 import LogExplorerPage from './pages/app/LogExplorerPage'
+import MaintenancePage from './pages/app/MaintenancePage'
 import MetricsExplorerPage from './pages/app/MetricsExplorerPage'
 import OverviewPage from './pages/app/OverviewPage'
 import OrganizationSettingsPage from './pages/app/OrganizationSettingsPage'
 import PublicDashboardViewPage from './pages/app/PublicDashboardViewPage'
 import RegisterPage from './pages/auth/RegisterPage'
+import PlatformHealthPage from './pages/admin/PlatformHealthPage'
 import SettingsPage from './pages/app/SettingsPage'
 import UsagePage from './pages/app/UsagePage'
 
@@ -93,12 +96,32 @@ const router = createBrowserRouter([
       { path: 'health', element: <HealthChecksPage /> },
       { path: 'alerts', element: <AlertsPage /> },
       { path: 'incidents', element: <IncidentsPage /> },
+      { path: 'maintenance', element: <MaintenancePage /> },
       { path: 'dashboards', element: <DashboardsPage /> },
       { path: 'dashboards/:id', element: <DashboardViewPage /> },
       { path: 'audit', element: <AuditLogPage /> },
       { path: 'organization', element: <OrganizationSettingsPage /> },
       { path: 'usage', element: <UsagePage /> },
       { path: 'settings', element: <SettingsPage /> },
+    ],
+  },
+  {
+    path: '/admin',
+    element: (
+      <RequireAuth>
+        <AppLayout />
+      </RequireAuth>
+    ),
+    children: [
+      { index: true, element: <Navigate to="/admin/platform-health" replace /> },
+      {
+        path: 'platform-health',
+        element: (
+          <RequireRole role="PLATFORM_ADMIN">
+            <PlatformHealthPage />
+          </RequireRole>
+        ),
+      },
     ],
   },
   {

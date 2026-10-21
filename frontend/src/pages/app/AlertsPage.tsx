@@ -7,6 +7,7 @@ import { ApiError } from '../../api/client'
 import { useHealthChecksListQuery } from '../../api/healthchecks'
 import { useApplicationsQuery } from '../../api/useApplications'
 import { AlertRuleFormDialog } from '../../components/alerts/AlertRuleFormDialog'
+import { MaintenanceStatusBanner } from '../../components/alerts/MaintenanceStatusBanner'
 import { NotificationChannelsDialog } from '../../components/alerts/NotificationChannelsDialog'
 import {
   AlertDialog,
@@ -124,6 +125,8 @@ export default function AlertsPage() {
           ) : null}
         </div>
       </header>
+
+      <MaintenanceStatusBanner />
 
       {rulesQuery.isLoading ? (
         <AlertsSkeleton />
