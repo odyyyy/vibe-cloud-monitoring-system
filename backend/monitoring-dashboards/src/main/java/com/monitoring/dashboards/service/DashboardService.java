@@ -59,14 +59,45 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public List<DashboardResponse> listDashboards(Long organizationId) {
-        return dashboardRepository.findAllVisibleByOrganizationId(organizationId).stream()
+        return dashboardRepository.findAllWithWidgetsByOrganizationId(organizationId).stream()
                 .map(this::toResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public DashboardResponse getDashboard(Long organizationId, Long dashboardId) {
-        return toResponse(getReadableDashboard(organizationId, dashboardId));
+        return getDashboard(organizationId, dashboardId, false);
+    }
+
+    /**
+     * Reads a dashboard. A tenant sees only its own dashboards; a platform administrator may
+     * additionally read a system dashboard.
+     */
+    @Transactional(readOnly = true)
+    public DashboardResponse getDashboard(Long organizationId, Long dashboardId, boolean platformAdmin) {
+        Dashboard dashboard = findDashboard(dashboardId);
+        if (dashboard.isSystem()) {
+            if (!platformAdmin) {
+                throw new DashboardAccessDeniedException();
+            }
+            return toResponse(dashboard);
+        }
+        if (!dashboard.getOrganizationId().equals(organizationId)) {
+            throw new DashboardAccessDeniedException();
+        }
+        return toResponse(dashboard);
+    }
+
+    /**
+     * Loads a platform-managed dashboard for the administration API. The caller is authorized
+     * by {@code @PreAuthorize("hasRole('PLATFORM_ADMIN')")} on the controller.
+     */
+    @Transactional(readOnly = true)
+    public DashboardResponse getSystemDashboard(String systemDashboardType) {
+        Dashboard dashboard = dashboardRepository.findBySystemDashboardType(systemDashboardType)
+                .orElseThrow(() -> new DashboardNotFoundException(
+                        "System dashboard '" + systemDashboardType + "' was not found"));
+        return toResponse(dashboard);
     }
 
     @Transactional
@@ -79,8 +110,18 @@ public class DashboardService {
     }
 
     @Transactional
-    public DashboardResponse updateDashboard(Long organizationId, Long dashboardId, UpdateDashboardRequest request) {
-        Dashboard dashboard = getOwnedDashboard(organizationId, dashboardId);
+    public DashboardResponse updateDashboard(Long organizationId,
+                                             Long dashboardId,
+                                             UpdateDashboardRequest request) {
+        return updateDashboard(organizationId, dashboardId, request, false);
+    }
+
+    @Transactional
+    public DashboardResponse updateDashboard(Long organizationId,
+                                             Long dashboardId,
+                                             UpdateDashboardRequest request,
+                                             boolean platformAdmin) {
+        Dashboard dashboard = getEditableDashboard(organizationId, dashboardId, platformAdmin);
         dashboard.setName(request.getName().trim());
         if (request.getVariables() != null) {
             dashboard.setVariables(validateAndSerializeVariables(request.getVariables()));
@@ -90,12 +131,27 @@ public class DashboardService {
 
     @Transactional
     public void deleteDashboard(Long organizationId, Long dashboardId) {
-        dashboardRepository.delete(getOwnedDashboard(organizationId, dashboardId));
+        deleteDashboard(organizationId, dashboardId, false);
     }
 
     @Transactional
-    public WidgetResponse addWidget(Long organizationId, Long dashboardId, CreateWidgetRequest request) {
-        Dashboard dashboard = getOwnedDashboard(organizationId, dashboardId);
+    public void deleteDashboard(Long organizationId, Long dashboardId, boolean platformAdmin) {
+        dashboardRepository.delete(getEditableDashboard(organizationId, dashboardId, platformAdmin));
+    }
+
+    @Transactional
+    public WidgetResponse addWidget(Long organizationId,
+                                    Long dashboardId,
+                                    CreateWidgetRequest request) {
+        return addWidget(organizationId, dashboardId, request, false);
+    }
+
+    @Transactional
+    public WidgetResponse addWidget(Long organizationId,
+                                    Long dashboardId,
+                                    CreateWidgetRequest request,
+                                    boolean platformAdmin) {
+        Dashboard dashboard = getEditableDashboard(organizationId, dashboardId, platformAdmin);
 
         if (widgetRepository.countByDashboard_Id(dashboardId) >= MAX_WIDGETS_PER_DASHBOARD) {
             throw new WidgetLimitExceededException(MAX_WIDGETS_PER_DASHBOARD);
@@ -115,8 +171,20 @@ public class DashboardService {
     }
 
     @Transactional
-    public WidgetResponse updateWidget(Long organizationId, Long dashboardId, Long widgetId, UpdateWidgetRequest request) {
-        getOwnedDashboard(organizationId, dashboardId);
+    public WidgetResponse updateWidget(Long organizationId,
+                                       Long dashboardId,
+                                       Long widgetId,
+                                       UpdateWidgetRequest request) {
+        return updateWidget(organizationId, dashboardId, widgetId, request, false);
+    }
+
+    @Transactional
+    public WidgetResponse updateWidget(Long organizationId,
+                                       Long dashboardId,
+                                       Long widgetId,
+                                       UpdateWidgetRequest request,
+                                       boolean platformAdmin) {
+        getEditableDashboard(organizationId, dashboardId, platformAdmin);
         Widget widget = getWidget(widgetId, dashboardId);
 
         if (request.getType() != null) {
@@ -143,7 +211,12 @@ public class DashboardService {
 
     @Transactional
     public void deleteWidget(Long organizationId, Long dashboardId, Long widgetId) {
-        getOwnedDashboard(organizationId, dashboardId);
+        deleteWidget(organizationId, dashboardId, widgetId, false);
+    }
+
+    @Transactional
+    public void deleteWidget(Long organizationId, Long dashboardId, Long widgetId, boolean platformAdmin) {
+        getEditableDashboard(organizationId, dashboardId, platformAdmin);
         widgetRepository.delete(getWidget(widgetId, dashboardId));
     }
 
@@ -153,7 +226,7 @@ public class DashboardService {
      */
     @Transactional
     public DashboardResponse generateShareToken(Long organizationId, Long dashboardId) {
-        Dashboard dashboard = getOwnedDashboard(organizationId, dashboardId);
+        Dashboard dashboard = getTenantDashboard(organizationId, dashboardId);
         dashboard.generateShareToken();
         return toResponse(dashboardRepository.save(dashboard));
     }
@@ -164,7 +237,7 @@ public class DashboardService {
      */
     @Transactional
     public DashboardResponse revokeShareToken(Long organizationId, Long dashboardId) {
-        Dashboard dashboard = getOwnedDashboard(organizationId, dashboardId);
+        Dashboard dashboard = getTenantDashboard(organizationId, dashboardId);
         dashboard.revokeShareToken();
         return toResponse(dashboardRepository.save(dashboard));
     }
@@ -190,25 +263,38 @@ public class DashboardService {
     }
 
     /**
-     * Loads a dashboard for a read: it must belong to the tenant or be a built-in system
-     * dashboard, which is readable but never writable by tenants.
+     * Loads a customer dashboard for a read or a share operation. System dashboards are not
+     * reachable through the regular dashboard API, even when their id is known.
      */
-    private Dashboard getReadableDashboard(Long organizationId, Long dashboardId) {
-        Dashboard dashboard = dashboardRepository.findById(dashboardId)
-                .orElseThrow(() -> new DashboardNotFoundException(dashboardId));
-        if (!dashboard.isSystem() && !dashboard.getOrganizationId().equals(organizationId)) {
+    private Dashboard getTenantDashboard(Long organizationId, Long dashboardId) {
+        Dashboard dashboard = findDashboard(dashboardId);
+        if (dashboard.isSystem() || !dashboard.getOrganizationId().equals(organizationId)) {
             throw new DashboardAccessDeniedException();
         }
         return dashboard;
     }
 
-    /** Loads a dashboard that the tenant may change; system dashboards are immutable. */
-    private Dashboard getOwnedDashboard(Long organizationId, Long dashboardId) {
-        Dashboard dashboard = getReadableDashboard(organizationId, dashboardId);
+    /**
+     * Loads a dashboard for a mutation. A tenant may change only its own dashboards; a platform
+     * administrator may additionally change a system dashboard.
+     */
+    private Dashboard getEditableDashboard(Long organizationId, Long dashboardId, boolean platformAdmin) {
+        Dashboard dashboard = findDashboard(dashboardId);
         if (dashboard.isSystem()) {
+            if (!platformAdmin) {
+                throw new DashboardAccessDeniedException();
+            }
+            return dashboard;
+        }
+        if (!dashboard.getOrganizationId().equals(organizationId)) {
             throw new DashboardAccessDeniedException();
         }
         return dashboard;
+    }
+
+    private Dashboard findDashboard(Long dashboardId) {
+        return dashboardRepository.findById(dashboardId)
+                .orElseThrow(() -> new DashboardNotFoundException(dashboardId));
     }
 
     private DashboardResponse toResponse(Dashboard dashboard) {

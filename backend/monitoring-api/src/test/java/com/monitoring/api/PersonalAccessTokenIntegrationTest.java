@@ -3,6 +3,7 @@ package com.monitoring.api;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.monitoring.auth.entity.PersonalAccessToken;
+import com.monitoring.auth.entity.Role;
 import com.monitoring.auth.entity.User;
 import com.monitoring.auth.jwt.JwtTokenProvider;
 import com.monitoring.auth.repository.PersonalAccessTokenRepository;
@@ -278,7 +279,7 @@ class PersonalAccessTokenIntegrationTest {
                 .email(username + "@example.com")
                 .password("encoded-secret")
                 .emailVerified(true)
-                .role("USER")
+                .role(Role.USER)
                 .build());
         OrganizationResponse organization = organizationService.createPersonal(user.getId(), username);
         return new Account(user, organization.id());

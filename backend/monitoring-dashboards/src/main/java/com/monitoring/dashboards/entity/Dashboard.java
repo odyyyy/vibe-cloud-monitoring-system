@@ -35,7 +35,9 @@ import java.util.UUID;
         name = "dashboards",
         indexes = {
                 @Index(name = "idx_dashboards_organization_id", columnList = "organization_id"),
-                @Index(name = "idx_dashboards_share_token", columnList = "share_token", unique = true)
+                @Index(name = "idx_dashboards_share_token", columnList = "share_token", unique = true),
+                @Index(name = "idx_dashboards_system_dashboard_type",
+                        columnList = "system_dashboard_type", unique = true)
         }
 )
 @Getter
@@ -69,10 +71,17 @@ public class Dashboard {
     @Builder.Default
     private boolean isPublic = false;
 
-    /** Built-in dashboard managed by the platform; regular users can read but never modify it. */
+    /** Built-in dashboard managed by the platform; only PLATFORM_ADMIN can read or modify it. */
     @Column(name = "is_system", nullable = false)
     @Builder.Default
     private boolean isSystem = false;
+
+    /**
+     * Stable identifier of a built-in dashboard (for example {@code PLATFORM_HEALTH}).
+     * Null for customer dashboards. Unique so the bootstrap can find exactly one instance.
+     */
+    @Column(name = "system_dashboard_type", length = 64)
+    private String systemDashboardType;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

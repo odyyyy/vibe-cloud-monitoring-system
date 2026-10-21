@@ -25,6 +25,7 @@ export function useProfile() {
         username: profile.username,
         email: profile.email,
         avatarUrl: profile.avatarUrl,
+        platformRole: profile.role ?? null,
       })
     }
   }, [query.data, setUser])

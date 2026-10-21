@@ -5,6 +5,7 @@ import com.monitoring.auth.dto.response.MessageResponse;
 import com.monitoring.auth.dto.request.UpdateEmailRequest;
 import com.monitoring.auth.dto.request.UpdateUsernameRequest;
 import com.monitoring.auth.dto.response.UserProfileResponse;
+import com.monitoring.auth.entity.Role;
 import com.monitoring.auth.exception.EmailAlreadyUsedException;
 import com.monitoring.auth.exception.InvalidCredentialsException;
 import com.monitoring.auth.service.AuthService;
@@ -56,7 +57,7 @@ class ProfileControllerTest {
         request.setCurrentPassword("supersecret");
         request.setUsername("grace");
         BDDMockito.given(authService.updateUsername(USER_ID, "supersecret", "grace"))
-                .willReturn(new UserProfileResponse(USER_ID, "grace", "ada@example.com", null));
+                .willReturn(new UserProfileResponse(USER_ID, "grace", "ada@example.com", null, Role.USER));
 
         mockMvc.perform(put("/api/profile/username")
                         .principal(principal())

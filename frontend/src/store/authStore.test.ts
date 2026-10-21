@@ -25,6 +25,7 @@ describe('authStore', () => {
       username: 'ada',
       email: null,
       avatarUrl: null,
+      platformRole: null,
     })
   })
 
@@ -37,6 +38,7 @@ describe('authStore', () => {
       username: 'ada',
       email: 'ada@example.com',
       avatarUrl: 'https://cdn.example.com/ada.png',
+      platformRole: 'PLATFORM_ADMIN',
     })
 
     expect(window.localStorage.getItem('auth_user')).toBe(
@@ -45,9 +47,11 @@ describe('authStore', () => {
         username: 'ada',
         email: 'ada@example.com',
         avatarUrl: 'https://cdn.example.com/ada.png',
+        platformRole: 'PLATFORM_ADMIN',
       }),
     )
     expect(useAuthStore.getState().user?.avatarUrl).toBe('https://cdn.example.com/ada.png')
+    expect(useAuthStore.getState().user?.platformRole).toBe('PLATFORM_ADMIN')
   })
 
   it('rehydrates a stored user written before avatar support', async () => {
@@ -62,7 +66,21 @@ describe('authStore', () => {
       username: 'ada',
       email: null,
       avatarUrl: null,
+      platformRole: null,
     })
+  })
+
+  it('drops an unknown platform role when rehydrating a stored user', async () => {
+    vi.resetModules()
+    window.localStorage.setItem('token', tokenWithClaims({ sub: 'ada', uid: 7 }))
+    window.localStorage.setItem(
+      'auth_user',
+      JSON.stringify({ id: 7, username: 'ada', platformRole: 'ROOT' }),
+    )
+
+    const { useAuthStore: freshStore } = await import('./authStore')
+
+    expect(freshStore.getState().user?.platformRole).toBeNull()
   })
 
   it('persists the active organization and clears it on logout', () => {

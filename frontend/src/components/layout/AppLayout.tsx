@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '../ui/select'
-import { NAV_ITEMS, isPathActive } from './nav'
+import { NAV_ITEMS, PLATFORM_HEALTH_NAV_ITEM, isPathActive } from './nav'
 
 function Brand() {
   return (
@@ -50,6 +50,8 @@ export function AppLayout() {
 
   const username = profile?.username ?? user?.username ?? 'Account'
   const email = profile?.email ?? user?.email ?? null
+  const isPlatformAdmin = (profile?.role ?? user?.platformRole ?? null) === 'PLATFORM_ADMIN'
+  const navigationItems = isPlatformAdmin ? [...NAV_ITEMS, PLATFORM_HEALTH_NAV_ITEM] : NAV_ITEMS
 
   useEffect(() => {
     setMobileNavOpen(false)
@@ -94,7 +96,7 @@ export function AppLayout() {
 
   const navigation = (
     <nav className="flex flex-col gap-1" aria-label="Primary">
-      {NAV_ITEMS.map((item) => {
+      {navigationItems.map((item) => {
         const Icon = item.icon
         const active = isPathActive(pathname, item.to)
         return (

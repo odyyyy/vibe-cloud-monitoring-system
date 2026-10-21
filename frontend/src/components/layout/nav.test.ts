@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NAV_ITEMS, isPathActive } from './nav'
+import { NAV_ITEMS, PLATFORM_HEALTH_NAV_ITEM, isPathActive } from './nav'
 
 describe('NAV_ITEMS', () => {
   it('exposes the expected sections in order', () => {
@@ -12,6 +12,7 @@ describe('NAV_ITEMS', () => {
       'Health',
       'Alerts',
       'Incidents',
+      'Maintenance',
       'Dashboards',
       'Audit log',
       'Organization',
@@ -24,6 +25,14 @@ describe('NAV_ITEMS', () => {
     for (const item of NAV_ITEMS) {
       expect(item.to.startsWith('/app/')).toBe(true)
     }
+  })
+})
+
+describe('PLATFORM_HEALTH_NAV_ITEM', () => {
+  it('points to the platform administration route and is not part of the tenant navigation', () => {
+    expect(PLATFORM_HEALTH_NAV_ITEM.to).toBe('/admin/platform-health')
+    expect(PLATFORM_HEALTH_NAV_ITEM.label).toBe('Platform Health')
+    expect(NAV_ITEMS).not.toContainEqual(PLATFORM_HEALTH_NAV_ITEM)
   })
 })
 

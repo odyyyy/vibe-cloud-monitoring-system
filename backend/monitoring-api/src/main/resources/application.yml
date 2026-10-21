@@ -1,5 +1,11 @@
 server:
   port: 8080
+  error:
+    # Never leak internals (stack traces, exception messages, binding details) to clients:
+    # the API answers with the typed ApiError format instead.
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
 
 spring:
   application:
@@ -77,6 +83,14 @@ monitoring:
     enabled: ${MONITORING_PLATFORM_METRICS_ENABLED:true}
     interval-ms: ${MONITORING_PLATFORM_METRICS_INTERVAL_MS:60000}
     initial-delay-ms: ${MONITORING_PLATFORM_METRICS_INITIAL_DELAY_MS:30000}
+  # Platform administration. The account with this username is promoted to PLATFORM_ADMIN on
+  # startup; the role is not assignable through the organization member API, because it grants
+  # access to internal platform telemetry. Empty (the default) means there is no platform
+  # administrator and the platform health dashboard stays unreachable.
+  platform-admin:
+    username: ${MONITORING_PLATFORM_ADMIN_USERNAME:}
+    # How often the configured account is re-checked (the account may be created after startup).
+    sync-interval-ms: ${MONITORING_PLATFORM_ADMIN_SYNC_INTERVAL_MS:300000}
   downsample:
     enabled: ${MONITORING_DOWNSAMPLE_ENABLED:true}
     # Hourly, at minute 5.

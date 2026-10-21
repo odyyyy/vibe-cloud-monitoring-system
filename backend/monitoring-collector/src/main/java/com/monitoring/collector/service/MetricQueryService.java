@@ -6,6 +6,7 @@ import com.monitoring.collector.export.ExportData;
 import com.monitoring.collector.repository.MetricBucketProjection;
 import com.monitoring.collector.repository.MetricSampleRepository;
 import com.monitoring.apps.service.ApplicationService;
+import com.monitoring.auth.security.PlatformAdminAccess;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -39,9 +40,11 @@ public class MetricQueryService {
 
     private final MetricSampleRepository metricSampleRepository;
     private final ApplicationService applicationService;
+    private final PlatformAdminAccess platformAdminAccess;
 
     public List<AggregatedMetricResponse> query(Long organizationId, MetricsQueryRequest request) {
-        applicationService.getQueryableApplication(request.getApplicationId(), organizationId);
+        applicationService.getQueryableApplication(
+                request.getApplicationId(), organizationId, platformAdminAccess.isPlatformAdmin());
 
         long intervalSeconds = request.getIntervalMinutes().longValue() * SECONDS_PER_MINUTE;
         String groupByTag = normalizeGroupByTag(request.getGroupByTag());

@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -30,6 +31,7 @@ import java.util.List;
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @EnableAsync
 @RequiredArgsConstructor
 public class SecurityConfig {
@@ -92,6 +94,10 @@ public class SecurityConfig {
                 // Dashboards and widgets require an authenticated user; ownership is
                 // verified in DashboardService.
                 .requestMatchers("/api/v1/dashboards/**").authenticated()
+                // Platform administration requires an authenticated human session. The
+                // PLATFORM_ADMIN role itself is enforced with method security on the
+                // controller, so a normal authenticated account receives 403.
+                .requestMatchers("/api/v1/admin/**").authenticated()
                 // Saved log views require an authenticated user; they are scoped to the
                 // owner in SavedLogViewService.
                 .requestMatchers("/api/v1/saved-log-views/**").authenticated()
@@ -102,6 +108,9 @@ public class SecurityConfig {
                 // authenticated user; ownership is verified in AlertService.
                 .requestMatchers("/api/v1/alert-rules/**", "/api/v1/notification-channels/**",
                         "/api/v1/alert-incidents/**", "/api/v1/incidents/**").authenticated()
+                // Maintenance windows mute alerts for a tenant; ownership is verified in
+                // MaintenanceWindowService.
+                .requestMatchers("/api/v1/maintenance-windows/**").authenticated()
                 // The audit trail is read-only and scoped to the authenticated user in
                 // AuditEventService; there is no write/delete endpoint.
                 .requestMatchers("/api/v1/audit-events/**").authenticated()

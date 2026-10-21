@@ -9,6 +9,7 @@ import com.monitoring.dashboards.dto.response.WidgetResponse;
 import com.monitoring.dashboards.service.DashboardService;
 import com.monitoring.dashboards.service.SharedDashboardDataService;
 import com.monitoring.audit.annotation.AuditLog;
+import com.monitoring.auth.security.PlatformAdminAccess;
 import com.monitoring.collector.dto.response.AggregatedMetricResponse;
 import com.monitoring.collector.dto.response.LogEventResponse;
 import com.monitoring.common.dto.response.PageResponse;
@@ -45,6 +46,7 @@ public class DashboardController {
     private final DashboardService dashboardService;
     private final SharedDashboardDataService sharedDashboardDataService;
     private final CurrentTenantService currentTenantService;
+    private final PlatformAdminAccess platformAdminAccess;
 
     @GetMapping
     public ResponseEntity<List<DashboardResponse>> listDashboards() {
@@ -62,7 +64,8 @@ public class DashboardController {
 
     @GetMapping("/{id}")
     public ResponseEntity<DashboardResponse> getDashboard(@PathVariable Long id) {
-        return ResponseEntity.ok(dashboardService.getDashboard(currentTenantService.requireOrganizationId(), id));
+        return ResponseEntity.ok(dashboardService.getDashboard(
+                currentTenantService.requireOrganizationId(), id, platformAdminAccess.isPlatformAdmin()));
     }
 
     @PutMapping("/{id}")
@@ -71,14 +74,15 @@ public class DashboardController {
             @PathVariable Long id,
             @Valid @RequestBody UpdateDashboardRequest request) {
         return ResponseEntity.ok(dashboardService.updateDashboard(
-                currentTenantService.requireOrganizationId(), id, request));
+                currentTenantService.requireOrganizationId(), id, request, platformAdminAccess.isPlatformAdmin()));
     }
 
     @DeleteMapping("/{id}")
     @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     @AuditLog(action = "DASHBOARD_DELETED", resourceId = "#id")
     public ResponseEntity<Void> deleteDashboard(@PathVariable Long id) {
-        dashboardService.deleteDashboard(currentTenantService.requireOrganizationId(), id);
+        dashboardService.deleteDashboard(
+                currentTenantService.requireOrganizationId(), id, platformAdminAccess.isPlatformAdmin());
         return ResponseEntity.noContent().build();
     }
 
@@ -156,7 +160,7 @@ public class DashboardController {
             @PathVariable Long id,
             @Valid @RequestBody CreateWidgetRequest request) {
         WidgetResponse created = dashboardService.addWidget(
-                currentTenantService.requireOrganizationId(), id, request);
+                currentTenantService.requireOrganizationId(), id, request, platformAdminAccess.isPlatformAdmin());
         return ResponseEntity.created(URI.create("/api/v1/dashboards/" + id + "/widgets/" + created.getId()))
                 .body(created);
     }
@@ -168,13 +172,16 @@ public class DashboardController {
             @PathVariable Long widgetId,
             @Valid @RequestBody UpdateWidgetRequest request) {
         return ResponseEntity.ok(dashboardService.updateWidget(
-                currentTenantService.requireOrganizationId(), id, widgetId, request));
+                currentTenantService.requireOrganizationId(), id, widgetId, request,
+                platformAdminAccess.isPlatformAdmin()));
     }
 
     @DeleteMapping("/{id}/widgets/{widgetId}")
     @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
     public ResponseEntity<Void> deleteWidget(@PathVariable Long id, @PathVariable Long widgetId) {
-        dashboardService.deleteWidget(currentTenantService.requireOrganizationId(), id, widgetId);
+        dashboardService.deleteWidget(
+                currentTenantService.requireOrganizationId(), id, widgetId,
+                platformAdminAccess.isPlatformAdmin());
         return ResponseEntity.noContent().build();
     }
 }

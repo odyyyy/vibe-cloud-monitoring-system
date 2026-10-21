@@ -9,6 +9,7 @@ import com.monitoring.collector.repository.MetricSampleRepository;
 import com.monitoring.apps.entity.Application;
 import com.monitoring.apps.exception.ApplicationAccessDeniedException;
 import com.monitoring.apps.service.ApplicationService;
+import com.monitoring.auth.security.PlatformAdminAccess;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -35,13 +36,15 @@ class MetricQueryServiceTest {
 
     private MetricSampleRepository repository;
     private ApplicationService applicationService;
+    private PlatformAdminAccess platformAdminAccess;
     private MetricQueryService service;
 
     @BeforeEach
     void setUp() {
         repository = Mockito.mock(MetricSampleRepository.class);
         applicationService = Mockito.mock(ApplicationService.class);
-        service = new MetricQueryService(repository, applicationService);
+        platformAdminAccess = Mockito.mock(PlatformAdminAccess.class);
+        service = new MetricQueryService(repository, applicationService, platformAdminAccess);
     }
 
     private MetricsQueryRequest request(MetricAggregation aggregation, int intervalMinutes) {
@@ -76,7 +79,7 @@ class MetricQueryServiceTest {
 
     @Test
     void query_leftOutWhenRequesterDoesNotOwnApplication() {
-        when(applicationService.getQueryableApplication(APP_ID, USER_ID))
+        when(applicationService.getQueryableApplication(APP_ID, USER_ID, false))
                 .thenThrow(new ApplicationAccessDeniedException());
 
         assertThrows(ApplicationAccessDeniedException.class,
@@ -87,7 +90,7 @@ class MetricQueryServiceTest {
 
     @Test
     void query_mapsBucketsToIntervalStartAndValue() {
-        when(applicationService.getQueryableApplication(APP_ID, USER_ID)).thenReturn(application());
+        when(applicationService.getQueryableApplication(APP_ID, USER_ID, false)).thenReturn(application());
         when(repository.aggregateAverage(APP_ID, METRIC, FROM, TO, 300L))
                 .thenReturn(List.of(bucket(5_971_764L, 15.0), bucket(5_971_766L, 30.0)));
 
@@ -102,7 +105,7 @@ class MetricQueryServiceTest {
 
     @Test
     void query_dispatchesToRepositoryMethodMatchingAggregation() {
-        when(applicationService.getQueryableApplication(APP_ID, USER_ID)).thenReturn(application());
+        when(applicationService.getQueryableApplication(APP_ID, USER_ID, false)).thenReturn(application());
         when(repository.aggregateMaximum(APP_ID, METRIC, FROM, TO, 60L)).thenReturn(List.of());
         when(repository.aggregateMinimum(APP_ID, METRIC, FROM, TO, 60L)).thenReturn(List.of());
         when(repository.aggregateSum(APP_ID, METRIC, FROM, TO, 60L)).thenReturn(List.of());
@@ -119,7 +122,7 @@ class MetricQueryServiceTest {
 
     @Test
     void exportRows_truncatesToLimitAndReportsTotal() {
-        when(applicationService.getQueryableApplication(APP_ID, USER_ID)).thenReturn(application());
+        when(applicationService.getQueryableApplication(APP_ID, USER_ID, false)).thenReturn(application());
         when(repository.aggregateAverage(APP_ID, METRIC, FROM, TO, 300L))
                 .thenReturn(List.of(bucket(1L, 1.0), bucket(2L, 2.0), bucket(3L, 3.0)));
 
@@ -135,7 +138,7 @@ class MetricQueryServiceTest {
 
     @Test
     void exportRows_returnsAllRowsWhenUnderLimit() {
-        when(applicationService.getQueryableApplication(APP_ID, USER_ID)).thenReturn(application());
+        when(applicationService.getQueryableApplication(APP_ID, USER_ID, false)).thenReturn(application());
         when(repository.aggregateAverage(APP_ID, METRIC, FROM, TO, 300L))
                 .thenReturn(List.of(bucket(1L, 1.0)));
 

@@ -68,7 +68,13 @@ export default function SettingsPage() {
     try {
       const updated = await updateUsername(token, values)
       queryClient.setQueryData(['auth', 'me', token], updated)
-      setUser({ id: updated.id, username: updated.username, email: updated.email, avatarUrl: updated.avatarUrl })
+      setUser({
+        id: updated.id,
+        username: updated.username,
+        email: updated.email,
+        avatarUrl: updated.avatarUrl,
+        platformRole: updated.role ?? null,
+      })
       usernameForm.reset({ username: updated.username, currentPassword: '' })
       toast.success('Username updated.')
     } catch (err) {

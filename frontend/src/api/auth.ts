@@ -1,4 +1,7 @@
 import { apiRequest } from './client'
+import type { PlatformRole } from '../store/authStore'
+
+export type { PlatformRole }
 
 export interface LoginRequest {
   username: string
@@ -29,6 +32,8 @@ export interface UserProfile {
   username: string
   email: string | null
   avatarUrl: string | null
+  /** Platform-wide role; null for accounts created before the role existed. */
+  role: PlatformRole | null
 }
 
 export function login(payload: LoginRequest): Promise<AuthResponse> {

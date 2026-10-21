@@ -32,5 +32,6 @@ public class User {
     @Column(name = "email_verified_at")
     private Instant emailVerifiedAt;
 
-    private String role; // "USER", "ADMIN"
+    @Column
+    private Role role;
 }

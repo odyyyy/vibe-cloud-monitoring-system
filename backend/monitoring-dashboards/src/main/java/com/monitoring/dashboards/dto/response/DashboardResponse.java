@@ -25,6 +25,7 @@ public class DashboardResponse {
     private String shareToken;
     private Boolean isPublic;
     private Boolean isSystem;
+    private String systemDashboardType;
 
     public static DashboardResponse fromEntity(Dashboard dashboard, List<DashboardVariable> variables) {
         return DashboardResponse.builder()
@@ -37,6 +38,7 @@ public class DashboardResponse {
                 .shareToken(dashboard.getShareToken())
                 .isPublic(dashboard.isPublic())
                 .isSystem(dashboard.isSystem())
+                .systemDashboardType(dashboard.getSystemDashboardType())
                 .build();
     }
 
@@ -55,6 +57,7 @@ public class DashboardResponse {
                 .shareToken(dashboard.getShareToken())
                 .isPublic(dashboard.isPublic())
                 .isSystem(dashboard.isSystem())
+                .systemDashboardType(dashboard.getSystemDashboardType())
                 .build();
     }
 }

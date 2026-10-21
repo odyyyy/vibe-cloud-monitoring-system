@@ -2,6 +2,7 @@ package com.monitoring.api;
 
 import com.monitoring.audit.entity.AuditEvent;
 import com.monitoring.audit.repository.AuditEventRepository;
+import com.monitoring.auth.entity.Role;
 import com.monitoring.auth.entity.User;
 import com.monitoring.auth.jwt.JwtTokenProvider;
 import com.monitoring.organization.entity.Membership;
@@ -231,7 +232,7 @@ class AuditLoggingIntegrationTest {
                 .email(username + "@example.com")
                 .password("encoded-secret")
                 .emailVerified(true)
-                .role("USER")
+                .role(Role.USER)
                 .build());
         Organization organization = organizationRepository.save(
                 Organization.builder().name(username + " org").build());

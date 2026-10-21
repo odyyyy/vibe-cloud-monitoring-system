@@ -7,11 +7,18 @@ const ORGANIZATION_STORAGE_KEY = 'auth_organization'
 
 export type MembershipRole = 'OWNER' | 'ADMIN' | 'VIEWER'
 
+/**
+ * Platform-wide role of the account. It is independent of the organization role and grants
+ * access to platform internals (for example the platform self-monitoring dashboard).
+ */
+export type PlatformRole = 'USER' | 'PLATFORM_ADMIN'
+
 export interface AuthUser {
   id: number | null
   username: string
   email: string | null
   avatarUrl: string | null
+  platformRole: PlatformRole | null
 }
 
 interface AuthState {
@@ -39,7 +46,13 @@ function normalizeUser(value: unknown): AuthUser | null {
     username: candidate.username,
     email: typeof candidate.email === 'string' ? candidate.email : null,
     avatarUrl: typeof candidate.avatarUrl === 'string' ? candidate.avatarUrl : null,
+    platformRole: normalizePlatformRole(candidate.platformRole),
   }
+}
+
+/** Accepts only the roles the backend can issue; anything else is treated as "no platform role". */
+function normalizePlatformRole(value: unknown): PlatformRole | null {
+  return value === 'PLATFORM_ADMIN' || value === 'USER' ? value : null
 }
 
 function toUser(token: string): AuthUser | null {
@@ -52,6 +65,7 @@ function toUser(token: string): AuthUser | null {
     username: claims.sub,
     email: null,
     avatarUrl: null,
+    platformRole: null,
   }
 }
 

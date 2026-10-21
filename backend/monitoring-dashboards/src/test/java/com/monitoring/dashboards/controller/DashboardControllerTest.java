@@ -1,6 +1,7 @@
 package com.monitoring.dashboards.controller;
 
 import com.monitoring.organization.tenant.CurrentTenantService;
+import com.monitoring.auth.security.PlatformAdminAccess;
 import com.monitoring.dashboards.dto.DashboardVariable;
 import com.monitoring.dashboards.dto.request.CreateDashboardRequest;
 import com.monitoring.dashboards.dto.request.UpdateDashboardRequest;
@@ -39,6 +40,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,16 +58,19 @@ class DashboardControllerTest {
 
     private DashboardService dashboardService;
     private SharedDashboardDataService sharedDashboardDataService;
+    private PlatformAdminAccess platformAdminAccess;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         dashboardService = Mockito.mock(DashboardService.class);
         sharedDashboardDataService = Mockito.mock(SharedDashboardDataService.class);
+        platformAdminAccess = Mockito.mock(PlatformAdminAccess.class);
         CurrentTenantService tenantService = Mockito.mock(CurrentTenantService.class);
         when(tenantService.requireOrganizationId()).thenReturn(USER_ID);
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new DashboardController(dashboardService, sharedDashboardDataService, tenantService))
+                .standaloneSetup(new DashboardController(
+                        dashboardService, sharedDashboardDataService, tenantService, platformAdminAccess))
                 .setControllerAdvice(new TestAdvice())
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
@@ -147,7 +152,7 @@ class DashboardControllerTest {
                         .build()))
                 .widgets(List.of())
                 .build();
-        when(dashboardService.updateDashboard(eq(USER_ID), eq(5L), any(UpdateDashboardRequest.class)))
+        when(dashboardService.updateDashboard(eq(USER_ID), eq(5L), any(UpdateDashboardRequest.class), eq(false)))
                 .thenReturn(withVariables);
 
         mockMvc.perform(put("/api/v1/dashboards/5")
@@ -166,7 +171,7 @@ class DashboardControllerTest {
                         .content("{\"name\":\"Prod\",\"variables\":[{\"name\":\"env name\",\"type\":\"custom\","
                                 + "\"options\":[\"prod\"],\"defaultValue\":\"prod\"}]}"))
                 .andExpect(status().isBadRequest());
-        verify(dashboardService, Mockito.never()).updateDashboard(any(), any(), any());
+        verify(dashboardService, Mockito.never()).updateDashboard(any(), any(), any(), anyBoolean());
     }
 
     @Test
@@ -176,7 +181,7 @@ class DashboardControllerTest {
                         .content("{\"name\":\"Prod\",\"variables\":[{\"name\":\"env\",\"type\":\"sql\","
                                 + "\"options\":[\"prod\"],\"defaultValue\":\"prod\"}]}"))
                 .andExpect(status().isBadRequest());
-        verify(dashboardService, Mockito.never()).updateDashboard(any(), any(), any());
+        verify(dashboardService, Mockito.never()).updateDashboard(any(), any(), any(), anyBoolean());
     }
 
     @Test
@@ -186,19 +191,19 @@ class DashboardControllerTest {
                         .content("{\"name\":\"Prod\",\"variables\":[{\"name\":\"env\",\"type\":\"custom\","
                                 + "\"options\":[],\"defaultValue\":\"\"}]}"))
                 .andExpect(status().isBadRequest());
-        verify(dashboardService, Mockito.never()).updateDashboard(any(), any(), any());
+        verify(dashboardService, Mockito.never()).updateDashboard(any(), any(), any(), anyBoolean());
     }
 
     @Test
     void getDashboard_anotherUser_returnsForbidden() throws Exception {
-        when(dashboardService.getDashboard(USER_ID, 5L)).thenThrow(new DashboardAccessDeniedException());
+        when(dashboardService.getDashboard(USER_ID, 5L, false)).thenThrow(new DashboardAccessDeniedException());
 
         mockMvc.perform(get("/api/v1/dashboards/5")).andExpect(status().isForbidden());
     }
 
     @Test
     void getDashboard_missing_returnsNotFound() throws Exception {
-        when(dashboardService.getDashboard(USER_ID, 99L)).thenThrow(new DashboardNotFoundException(99L));
+        when(dashboardService.getDashboard(USER_ID, 99L, false)).thenThrow(new DashboardNotFoundException(99L));
 
         mockMvc.perform(get("/api/v1/dashboards/99")).andExpect(status().isNotFound());
     }
@@ -206,12 +211,12 @@ class DashboardControllerTest {
     @Test
     void deleteDashboard_success_returns204() throws Exception {
         mockMvc.perform(delete("/api/v1/dashboards/5")).andExpect(status().isNoContent());
-        verify(dashboardService).deleteDashboard(USER_ID, 5L);
+        verify(dashboardService).deleteDashboard(USER_ID, 5L, false);
     }
 
     @Test
     void addWidget_invalidConfig_returnsBadRequest() throws Exception {
-        when(dashboardService.addWidget(eq(USER_ID), eq(5L), any()))
+        when(dashboardService.addWidget(eq(USER_ID), eq(5L), any(), eq(false)))
                 .thenThrow(new InvalidWidgetConfigException("config must be valid JSON"));
 
         mockMvc.perform(post("/api/v1/dashboards/5/widgets")
@@ -228,7 +233,7 @@ class DashboardControllerTest {
                         .content("{\"type\":\"LOG_TABLE\",\"config\":\"{}\","
                                 + "\"positionX\":0,\"positionY\":0,\"width\":99,\"height\":8}"))
                 .andExpect(status().isBadRequest());
-        verify(dashboardService, Mockito.never()).addWidget(any(), any(), any());
+        verify(dashboardService, Mockito.never()).addWidget(any(), any(), any(), anyBoolean());
     }
 
     @Test
@@ -242,7 +247,7 @@ class DashboardControllerTest {
 
     @Test
     void updateWidget_partialPayload_returnsOk() throws Exception {
-        when(dashboardService.updateWidget(eq(USER_ID), eq(5L), eq(3L), any(UpdateWidgetRequest.class)))
+        when(dashboardService.updateWidget(eq(USER_ID), eq(5L), eq(3L), any(UpdateWidgetRequest.class), eq(false)))
                 .thenReturn(sampleWidget());
 
         mockMvc.perform(put("/api/v1/dashboards/5/widgets/3")
@@ -255,7 +260,7 @@ class DashboardControllerTest {
     @Test
     void deleteWidget_success_returns204() throws Exception {
         mockMvc.perform(delete("/api/v1/dashboards/5/widgets/3")).andExpect(status().isNoContent());
-        verify(dashboardService).deleteWidget(USER_ID, 5L, 3L);
+        verify(dashboardService).deleteWidget(USER_ID, 5L, 3L, false);
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.monitoring.api;
 
+import com.monitoring.auth.entity.Role;
 import com.monitoring.auth.entity.User;
 import com.monitoring.auth.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -61,7 +62,7 @@ class LoginBruteForceIntegrationTest {
                 .username(USERNAME)
                 .email("ada@example.com")
                 .password(passwordEncoder.encode(PASSWORD))
-                .role("USER")
+                .role(Role.USER)
                 .emailVerified(true)
                 .build());
     }

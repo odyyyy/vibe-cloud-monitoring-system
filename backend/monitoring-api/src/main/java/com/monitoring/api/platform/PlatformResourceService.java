@@ -25,8 +25,8 @@ import java.util.UUID;
  * Creates and owns the resources used for platform self-monitoring.
  *
  * <p>The hidden System organization and its internal application are the dogfooding data
- * source. The built-in dashboard is flagged {@code isSystem} and is exposed read-only to
- * every tenant; it is never editable through the regular dashboard API.
+ * source. The built-in dashboard is flagged {@code isSystem} with a stable
+ * {@code systemDashboardType}; it is exposed read-only only through the platform-admin API.
  */
 @Service
 @RequiredArgsConstructor
@@ -35,6 +35,7 @@ public class PlatformResourceService {
     public static final String SYSTEM_ORGANIZATION_NAME = "System";
     public static final String SYSTEM_APPLICATION_NAME = "Platform";
     public static final String PLATFORM_DASHBOARD_NAME = "Platform Health";
+    public static final String PLATFORM_HEALTH_DASHBOARD_TYPE = "PLATFORM_HEALTH";
 
     public static final String JVM_HEAP_METRIC = "jvm_memory_used_bytes";
     public static final String TOMCAT_BUSY_METRIC = "tomcat_threads_busy";
@@ -70,12 +71,13 @@ public class PlatformResourceService {
      */
     @Transactional
     public Dashboard ensurePlatformDashboard(Application systemApplication) {
-        return dashboardRepository.findFirstByIsSystemTrue()
+        return dashboardRepository.findBySystemDashboardType(PLATFORM_HEALTH_DASHBOARD_TYPE)
                 .orElseGet(() -> {
                     Dashboard dashboard = dashboardRepository.save(Dashboard.builder()
                             .name(PLATFORM_DASHBOARD_NAME)
                             .organizationId(systemApplication.getOrganizationId())
                             .isSystem(true)
+                            .systemDashboardType(PLATFORM_HEALTH_DASHBOARD_TYPE)
                             .build());
 
                     List<Widget> widgets = buildWidgets(dashboard, systemApplication.getId());

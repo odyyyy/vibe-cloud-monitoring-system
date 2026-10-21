@@ -5,6 +5,7 @@ import com.monitoring.auth.dto.request.*;
 import com.monitoring.auth.dto.response.*;
 import com.monitoring.auth.entity.AuthToken;
 import com.monitoring.auth.entity.AuthTokenType;
+import com.monitoring.auth.entity.Role;
 import com.monitoring.auth.entity.User;
 import com.monitoring.auth.exception.EmailAlreadyUsedException;
 import com.monitoring.auth.exception.EmailNotVerifiedException;
@@ -60,7 +61,7 @@ public class AuthService {
                 .username(request.getUsername())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .role("USER")
+                .role(Role.USER)
                 .emailVerified(false)
                 .build();
         User savedUser = userRepository.save(user);
@@ -255,7 +256,8 @@ public class AuthService {
     }
 
     private UserProfileResponse toProfile(User user) {
-        return new UserProfileResponse(user.getId(), user.getUsername(), user.getEmail(), user.getAvatarUrl());
+        return new UserProfileResponse(
+                user.getId(), user.getUsername(), user.getEmail(), user.getAvatarUrl(), user.getRole());
     }
 
     private void sendVerificationEmail(User user) {

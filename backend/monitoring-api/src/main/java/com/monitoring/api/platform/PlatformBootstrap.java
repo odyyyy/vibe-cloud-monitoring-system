@@ -19,11 +19,13 @@ public class PlatformBootstrap implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(PlatformBootstrap.class);
 
     private final PlatformResourceService platformResourceService;
+    private final PlatformAdminService platformAdminService;
 
     @Override
     public void run(ApplicationArguments args) {
         Application application = platformResourceService.ensureSystemApplication();
         platformResourceService.ensurePlatformDashboard(application);
+        platformAdminService.ensurePlatformAdmin();
         log.info("Platform self-monitoring initialized (system application id={})", application.getId());
     }
 }

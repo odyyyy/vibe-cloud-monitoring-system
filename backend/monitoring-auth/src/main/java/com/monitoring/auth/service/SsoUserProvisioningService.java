@@ -1,6 +1,7 @@
 package com.monitoring.auth.service;
 
 import com.monitoring.auth.config.SsoProperties;
+import com.monitoring.auth.entity.Role;
 import com.monitoring.auth.entity.User;
 import com.monitoring.auth.exception.SsoAuthenticationException;
 import com.monitoring.auth.repository.UserRepository;
@@ -93,7 +94,7 @@ public class SsoUserProvisioningService {
                 .username(uniqueUsername(email, name))
                 .email(email)
                 .password(passwordEncoder.encode(randomPassword()))
-                .role("USER")
+                .role(Role.USER)
                 .emailVerified(true)
                 .emailVerifiedAt(Instant.now())
                 .build();

@@ -1,5 +1,6 @@
 package com.monitoring.auth.dto.response;
 
+import com.monitoring.auth.entity.Role;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -10,4 +11,5 @@ public class UserProfileResponse {
     private String username;
     private String email;
     private String avatarUrl;
+    private Role role;
 }

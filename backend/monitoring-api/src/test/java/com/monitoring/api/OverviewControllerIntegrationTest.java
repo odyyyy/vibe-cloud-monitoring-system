@@ -6,6 +6,7 @@ import com.monitoring.organization.entity.MembershipRole;
 import com.monitoring.organization.entity.Organization;
 import com.monitoring.organization.repository.MembershipRepository;
 import com.monitoring.organization.repository.OrganizationRepository;
+import com.monitoring.auth.entity.Role;
 import com.monitoring.auth.entity.User;
 import com.monitoring.auth.repository.UserRepository;
 import com.monitoring.collector.entity.LogEvent;
@@ -151,7 +152,7 @@ class OverviewControllerIntegrationTest {
                 .email(username + "@example.com")
                 .password("encoded-secret")
                 .emailVerified(true)
-                .role("USER")
+                .role(Role.USER)
                 .build());
     }
 
