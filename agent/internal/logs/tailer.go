@@ -27,6 +27,10 @@ type source struct {
 	cfg     config.LogSource
 	levelRe *regexp.Regexp
 
+	// throttle is per-source so a noisy file cannot starve logs from a quiet,
+	// critical one. It is nil when throttling is disabled.
+	throttle *throttler
+
 	offset      int64
 	pending     []byte
 	lastInfo    os.FileInfo
@@ -153,18 +157,41 @@ func (p *Pipeline) emitLine(s *source, raw string) {
 	if strings.TrimSpace(raw) == "" {
 		return
 	}
-	if event, ok := p.buildEvent(s, raw); ok {
+
+	// Parse once: the severity decides whether the event is throttled and the
+	// parsed fields are reused when it is forwarded.
+	var parsed jsonLog
+	isJSON := false
+	if s.cfg.EffectiveFormat() != config.LogFormatText {
+		if result, ok := parseJSONLog(raw, s.levelRe); ok {
+			parsed = result
+			isJSON = true
+		}
+	}
+	severity := inferSeverity(s.levelRe, raw)
+	if isJSON {
+		severity = parsed.Severity
+	}
+
+	if !s.throttle.allow(severity) {
+		p.mu.Lock()
+		p.throttled++
+		p.mu.Unlock()
+		p.droppedTotal.Add(1)
+		return
+	}
+
+	if event, ok := p.buildEvent(s, raw, parsed, isJSON); ok {
 		p.emit(event)
 	}
 }
 
-// buildEvent parses a single line into an Event. Redaction is applied before the
-// message is buffered so secrets never leave the host.
-func (p *Pipeline) buildEvent(s *source, raw string) (Event, bool) {
-	if s.cfg.EffectiveFormat() != config.LogFormatText {
-		if parsed, ok := parseJSONLog(raw, s.levelRe); ok {
-			return p.buildJSONEvent(s, raw, parsed)
-		}
+// buildEvent assembles a single line into an Event, reusing the already parsed
+// JSON when present. Redaction is applied before the message is buffered so
+// secrets never leave the host.
+func (p *Pipeline) buildEvent(s *source, raw string, parsed jsonLog, isJSON bool) (Event, bool) {
+	if isJSON {
+		return p.buildJSONEvent(s, raw, parsed)
 	}
 	return p.buildTextEvent(s, raw)
 }
@@ -193,6 +220,7 @@ func (p *Pipeline) buildJSONEvent(s *source, raw string, parsed jsonLog) (Event,
 		Message:   message,
 		Timestamp: timestamp.UTC(),
 		Context:   buildEventContext(s.cfg, p.hostname, parsed.Fields),
+		severity:  parsed.Severity,
 	}, true
 }
 
@@ -207,10 +235,12 @@ func (p *Pipeline) buildTextEvent(s *source, raw string) (Event, bool) {
 		timestamp = time.Now().UTC()
 	}
 
+	severity := inferSeverity(s.levelRe, raw)
 	return Event{
-		Level:     inferLevel(s.levelRe, raw),
+		Level:     normalizeLevel(severity),
 		Message:   message,
 		Timestamp: timestamp.UTC(),
 		Context:   buildEventContext(s.cfg, p.hostname, nil),
+		severity:  severity,
 	}, true
 }

@@ -18,6 +18,10 @@ data:
     log_batch_size: 500
     log_flush_seconds: 5
     state_file: "/app/.agent_state.json"
+    log_throttling:
+      max_logs_per_second: 500
+      sample_rate: 0.1
+      always_forward_levels: ["FATAL", "CRITICAL"]
     kubernetes:
       enabled: false
 ---

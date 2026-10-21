@@ -39,7 +39,19 @@ const (
 	// maxLogBatchSize matches the backend LogIngestRequest.MAX_BATCH_SIZE. A larger
 	// batch would be rejected with HTTP 400, so it is a configuration error here.
 	maxLogBatchSize = 1000
+
+	// defaultMaxLogsPerSecond and defaultLogSampleRate protect the backend from a
+	// noisy application. A per-source ceiling of 500 logs/s keeps a single host
+	// well below the ingestion limits, and 10% of the excess is kept so the signal
+	// stays visible instead of disappearing entirely.
+	defaultMaxLogsPerSecond = 500
+	defaultLogSampleRate    = 0.1
 )
+
+// defaultAlwaysForwardLevels are the severities that bypass log throttling. FATAL
+// and CRITICAL are kept distinct from ERROR so a flood of ordinary errors is still
+// rate limited while genuine crashes are never dropped.
+var defaultAlwaysForwardLevels = []string{"FATAL", "CRITICAL"}
 
 // Supported local metric receiver protocols.
 const (
@@ -112,6 +124,21 @@ type ReceiverConfig struct {
 	Port     int    `yaml:"port"`
 }
 
+// LogThrottlingConfig controls agent-side rate limiting and sampling of log
+// events. It protects the backend and the local buffer from an application that
+// suddenly logs at an extreme rate.
+type LogThrottlingConfig struct {
+	// MaxLogsPerSecond is the per-source ceiling on forwarded log events. A value
+	// of 0 disables throttling entirely.
+	MaxLogsPerSecond int `yaml:"max_logs_per_second"`
+	// SampleRate is the fraction (0..1) of excess events kept once the ceiling is
+	// exceeded. For example 0.1 keeps 10% of the excess.
+	SampleRate float64 `yaml:"sample_rate"`
+	// AlwaysForwardLevels lists severities that bypass throttling, so critical
+	// logs are never sampled away. Entries are matched case-insensitively.
+	AlwaysForwardLevels []string `yaml:"always_forward_levels"`
+}
+
 // KubernetesConfig controls automatic discovery of pod logs from the Kubernetes
 // node the agent runs on.
 type KubernetesConfig struct {
@@ -147,16 +174,17 @@ func (k *KubernetesConfig) UnmarshalYAML(value *yaml.Node) error {
 // Config holds the agent startup configuration loaded from a YAML file and
 // optionally overridden by environment variables.
 type Config struct {
-	BackendURL      string           `yaml:"backend_url"`
-	APIKey          string           `yaml:"api_key"`
-	IntervalSeconds int              `yaml:"interval_seconds"`
-	Logs            []LogSource      `yaml:"logs"`
-	LogBatchSize    int              `yaml:"log_batch_size"`
-	LogFlushSeconds int              `yaml:"log_flush_seconds"`
-	StateFile       string           `yaml:"state_file"`
-	Metrics         MetricsConfig    `yaml:"metrics"`
-	Kubernetes      KubernetesConfig `yaml:"kubernetes"`
-	Receiver        ReceiverConfig   `yaml:"receiver"`
+	BackendURL      string              `yaml:"backend_url"`
+	APIKey          string              `yaml:"api_key"`
+	IntervalSeconds int                 `yaml:"interval_seconds"`
+	Logs            []LogSource         `yaml:"logs"`
+	LogBatchSize    int                 `yaml:"log_batch_size"`
+	LogFlushSeconds int                 `yaml:"log_flush_seconds"`
+	LogThrottling   LogThrottlingConfig `yaml:"log_throttling"`
+	StateFile       string              `yaml:"state_file"`
+	Metrics         MetricsConfig       `yaml:"metrics"`
+	Kubernetes      KubernetesConfig    `yaml:"kubernetes"`
+	Receiver        ReceiverConfig      `yaml:"receiver"`
 }
 
 // LoadConfig reads, parses, applies environment overrides and validates the
@@ -172,6 +200,11 @@ func LoadConfig(path string) (*Config, error) {
 		LogBatchSize:    defaultLogBatchSize,
 		LogFlushSeconds: defaultLogFlushSeconds,
 		StateFile:       defaultStateFile,
+		LogThrottling: LogThrottlingConfig{
+			MaxLogsPerSecond:    defaultMaxLogsPerSecond,
+			SampleRate:          defaultLogSampleRate,
+			AlwaysForwardLevels: append([]string(nil), defaultAlwaysForwardLevels...),
+		},
 	}
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse config %q: %w", path, err)
@@ -208,6 +241,25 @@ func applyEnvOverrides(cfg *Config) {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.LogFlushSeconds = n
 		}
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_LOG_MAX_PER_SECOND")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.LogThrottling.MaxLogsPerSecond = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_LOG_SAMPLE_RATE")); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.LogThrottling.SampleRate = f
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_LOG_ALWAYS_FORWARD_LEVELS")); v != "" {
+		levels := make([]string, 0)
+		for _, part := range strings.Split(v, ",") {
+			if level := strings.TrimSpace(part); level != "" {
+				levels = append(levels, level)
+			}
+		}
+		cfg.LogThrottling.AlwaysForwardLevels = levels
 	}
 	if v := strings.TrimSpace(os.Getenv("AGENT_STATE_FILE")); v != "" {
 		cfg.StateFile = v
@@ -257,6 +309,21 @@ func (c *Config) validate() error {
 	}
 	if c.LogFlushSeconds <= 0 {
 		return fmt.Errorf("log_flush_seconds must be positive, got %d", c.LogFlushSeconds)
+	}
+	if c.LogThrottling.MaxLogsPerSecond < 0 {
+		return fmt.Errorf("log_throttling.max_logs_per_second must not be negative, got %d",
+			c.LogThrottling.MaxLogsPerSecond)
+	}
+	if c.LogThrottling.SampleRate < 0 || c.LogThrottling.SampleRate > 1 {
+		return fmt.Errorf("log_throttling.sample_rate must be between 0 and 1, got %v",
+			c.LogThrottling.SampleRate)
+	}
+	for i, level := range c.LogThrottling.AlwaysForwardLevels {
+		trimmed := strings.TrimSpace(level)
+		if !isKnownSeverity(trimmed) {
+			return fmt.Errorf("log_throttling.always_forward_levels[%d] must be a known level, got %q", i, level)
+		}
+		c.LogThrottling.AlwaysForwardLevels[i] = strings.ToUpper(trimmed)
 	}
 	if c.StateFile == "" {
 		return errors.New("state_file must not be empty")
@@ -320,6 +387,17 @@ func (c *Config) validate() error {
 // Interval is the metric collection period.
 func (c *Config) Interval() time.Duration {
 	return time.Duration(c.IntervalSeconds) * time.Second
+}
+
+// isKnownSeverity reports whether token names a severity the agent understands.
+// It accepts the common aliases so always_forward_levels can use either spelling.
+func isKnownSeverity(token string) bool {
+	switch strings.ToUpper(strings.TrimSpace(token)) {
+	case "TRACE", "DEBUG", "INFO", "WARN", "WARNING", "ERROR", "ERR", "FATAL", "CRITICAL":
+		return true
+	default:
+		return false
+	}
 }
 
 // MaskKey returns a redacted representation of an API key so that logs never

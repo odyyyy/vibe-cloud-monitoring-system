@@ -60,6 +60,108 @@ func TestLoadConfigAllowsEmptyLogs(t *testing.T) {
 	}
 }
 
+func TestLoadConfigDefaultsLogThrottling(t *testing.T) {
+	path := writeConfigFile(t, "backend_url: http://localhost:8080\napi_key: app_test\n")
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.LogThrottling.MaxLogsPerSecond != defaultMaxLogsPerSecond {
+		t.Errorf("default max_logs_per_second = %d, want %d",
+			cfg.LogThrottling.MaxLogsPerSecond, defaultMaxLogsPerSecond)
+	}
+	if cfg.LogThrottling.SampleRate != defaultLogSampleRate {
+		t.Errorf("default sample_rate = %v, want %v", cfg.LogThrottling.SampleRate, defaultLogSampleRate)
+	}
+	if len(cfg.LogThrottling.AlwaysForwardLevels) != 2 ||
+		cfg.LogThrottling.AlwaysForwardLevels[0] != "FATAL" ||
+		cfg.LogThrottling.AlwaysForwardLevels[1] != "CRITICAL" {
+		t.Errorf("default always_forward_levels = %v, want [FATAL CRITICAL]",
+			cfg.LogThrottling.AlwaysForwardLevels)
+	}
+}
+
+func TestLoadConfigParsesLogThrottling(t *testing.T) {
+	path := writeConfigFile(t, `
+backend_url: http://localhost:8080
+api_key: app_test
+log_throttling:
+  max_logs_per_second: 100
+  sample_rate: 0.25
+  always_forward_levels: ["fatal", "error"]
+`)
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.LogThrottling.MaxLogsPerSecond != 100 {
+		t.Errorf("max_logs_per_second = %d, want 100", cfg.LogThrottling.MaxLogsPerSecond)
+	}
+	if cfg.LogThrottling.SampleRate != 0.25 {
+		t.Errorf("sample_rate = %v, want 0.25", cfg.LogThrottling.SampleRate)
+	}
+	if len(cfg.LogThrottling.AlwaysForwardLevels) != 2 ||
+		cfg.LogThrottling.AlwaysForwardLevels[0] != "FATAL" ||
+		cfg.LogThrottling.AlwaysForwardLevels[1] != "ERROR" {
+		t.Errorf("always_forward_levels = %v, want normalized [FATAL ERROR]",
+			cfg.LogThrottling.AlwaysForwardLevels)
+	}
+}
+
+func TestLoadConfigRejectsInvalidLogThrottling(t *testing.T) {
+	cases := map[string]string{
+		"negative rate": `
+log_throttling:
+  max_logs_per_second: -1
+`,
+		"sample rate above one": `
+log_throttling:
+  sample_rate: 1.5
+`,
+		"negative sample rate": `
+log_throttling:
+  sample_rate: -0.1
+`,
+		"unknown level": `
+log_throttling:
+  always_forward_levels: ["NOT_A_LEVEL"]
+`,
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			path := writeConfigFile(t, "backend_url: http://localhost:8080\napi_key: app_test\n"+body)
+			if _, err := LoadConfig(path); err == nil {
+				t.Fatal("expected a configuration error")
+			}
+		})
+	}
+}
+
+func TestLogThrottlingEnvOverrides(t *testing.T) {
+	t.Setenv("AGENT_LOG_MAX_PER_SECOND", "50")
+	t.Setenv("AGENT_LOG_SAMPLE_RATE", "0.5")
+	t.Setenv("AGENT_LOG_ALWAYS_FORWARD_LEVELS", "error, fatal")
+
+	path := writeConfigFile(t, "backend_url: http://localhost:8080\napi_key: app_test\n")
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.LogThrottling.MaxLogsPerSecond != 50 {
+		t.Errorf("max_logs_per_second = %d, want 50", cfg.LogThrottling.MaxLogsPerSecond)
+	}
+	if cfg.LogThrottling.SampleRate != 0.5 {
+		t.Errorf("sample_rate = %v, want 0.5", cfg.LogThrottling.SampleRate)
+	}
+	if len(cfg.LogThrottling.AlwaysForwardLevels) != 2 ||
+		cfg.LogThrottling.AlwaysForwardLevels[0] != "ERROR" ||
+		cfg.LogThrottling.AlwaysForwardLevels[1] != "FATAL" {
+		t.Errorf("always_forward_levels = %v, want [ERROR FATAL]",
+			cfg.LogThrottling.AlwaysForwardLevels)
+	}
+}
+
 func TestLoadConfigRejectsInvalidLevelPattern(t *testing.T) {
 	path := writeConfigFile(t, `
 backend_url: http://localhost:8080

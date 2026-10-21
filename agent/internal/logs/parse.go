@@ -38,6 +38,9 @@ type jsonLog struct {
 	HasMessage   bool
 	Timestamp    time.Time
 	HasTimestamp bool
+	// Severity is the canonical severity token (for example FATAL or CRITICAL),
+	// which stays distinct from the normalized Level used for throttling.
+	Severity string
 }
 
 // defaultLevelPattern matches common severity tokens as standalone words. It is
@@ -76,18 +79,26 @@ func redact(line string) string {
 // pattern (when provided) takes precedence; otherwise the default severity
 // pattern is used. Unknown or absent severities default to INFO.
 func inferLevel(custom *regexp.Regexp, line string) string {
+	return normalizeLevel(inferSeverity(custom, line))
+}
+
+// inferSeverity returns the canonical severity token for a line. Unlike the
+// normalized LogLevel sent to the backend it keeps FATAL and CRITICAL distinct, so
+// log throttling can always forward them without also bypassing ordinary ERROR
+// floods.
+func inferSeverity(custom *regexp.Regexp, line string) string {
 	if custom != nil {
-		if level, ok := matchLevel(custom, line); ok {
-			return level
+		if token, ok := matchLevelToken(custom, line); ok {
+			return canonicalSeverity(token)
 		}
 	}
-	if level, ok := matchLevel(defaultLevelPattern, line); ok {
-		return level
+	if token, ok := matchLevelToken(defaultLevelPattern, line); ok {
+		return canonicalSeverity(token)
 	}
 	return "INFO"
 }
 
-func matchLevel(re *regexp.Regexp, line string) (string, bool) {
+func matchLevelToken(re *regexp.Regexp, line string) (string, bool) {
 	m := re.FindStringSubmatch(line)
 	if m == nil {
 		return "", false
@@ -101,7 +112,7 @@ func matchLevel(re *regexp.Regexp, line string) (string, bool) {
 			break
 		}
 	}
-	return normalizeLevel(token), true
+	return token, true
 }
 
 func normalizeLevel(token string) string {
@@ -114,6 +125,30 @@ func normalizeLevel(token string) string {
 		return "ERROR"
 	default:
 		return "INFO"
+	}
+}
+
+// canonicalSeverity maps a severity token to the uppercase form used for throttle
+// comparisons and always_forward_levels. It normalizes aliases (WARNING -> WARN)
+// but keeps FATAL and CRITICAL separate from ERROR.
+func canonicalSeverity(token string) string {
+	switch strings.ToUpper(strings.TrimSpace(token)) {
+	case "WARN", "WARNING":
+		return "WARN"
+	case "ERR", "ERROR":
+		return "ERROR"
+	case "TRACE":
+		return "TRACE"
+	case "DEBUG":
+		return "DEBUG"
+	case "INFO":
+		return "INFO"
+	case "FATAL":
+		return "FATAL"
+	case "CRITICAL":
+		return "CRITICAL"
+	default:
+		return strings.ToUpper(strings.TrimSpace(token))
 	}
 }
 
@@ -165,6 +200,7 @@ func parseJSONLog(raw string, levelRe *regexp.Regexp) (jsonLog, bool) {
 	if v, ok := firstJSONValue(fields, jsonLevelKeys); ok {
 		if level := strings.TrimSpace(scalarToString(v)); level != "" {
 			parsed.Level = normalizeLevel(level)
+			parsed.Severity = canonicalSeverity(level)
 			parsed.HasLevel = true
 		}
 	}
@@ -187,7 +223,8 @@ func parseJSONLog(raw string, levelRe *regexp.Regexp) (jsonLog, bool) {
 	}
 
 	if parsed.Level == "" {
-		parsed.Level = inferLevel(levelRe, raw)
+		parsed.Severity = inferSeverity(levelRe, raw)
+		parsed.Level = normalizeLevel(parsed.Severity)
 	}
 	return parsed, true
 }

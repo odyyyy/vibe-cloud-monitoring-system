@@ -72,16 +72,18 @@ func main() {
 
 	// Pod discovery needs the pipeline even when no static log sources are
 	// configured, because sources are added at runtime.
+	var logPipeline *logs.Pipeline
 	if len(cfg.Logs) > 0 || cfg.Kubernetes.Enabled {
 		logsClient := logs.NewClient(httpClient)
-		pipeline, err := logs.NewPipeline(cfg, logsClient, logger)
+		var err error
+		logPipeline, err = logs.NewPipeline(cfg, logsClient, logger)
 		if err != nil {
 			logger.Fatalf("log pipeline error: %v", err)
 		}
 
 		var discoverer *k8s.Discoverer
 		if cfg.Kubernetes.Enabled {
-			discoverer, err = k8s.New(cfg.Kubernetes, pipeline, logger)
+			discoverer, err = k8s.New(cfg.Kubernetes, logPipeline, logger)
 			if err != nil {
 				logger.Fatalf("kubernetes discovery error: %v", err)
 			}
@@ -90,7 +92,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			pipeline.Run(ctx)
+			logPipeline.Run(ctx)
 		}()
 
 		if discoverer != nil {
@@ -104,15 +106,15 @@ func main() {
 		}
 	}
 
-	run(ctx, logger, cfg, collector, metricsClient, customMetrics)
+	run(ctx, logger, cfg, collector, metricsClient, customMetrics, logPipeline)
 	wg.Wait()
 	logger.Print("stopped")
 }
 
 // run collects and sends metrics immediately and then on every configured
 // interval until the context is cancelled.
-func run(ctx context.Context, logger *log.Logger, cfg *config.Config, collector *metrics.Collector, client *metrics.Client, custom *receiver.Buffer) {
-	collectAndSend(ctx, logger, collector, client, custom)
+func run(ctx context.Context, logger *log.Logger, cfg *config.Config, collector *metrics.Collector, client *metrics.Client, custom *receiver.Buffer, logPipeline *logs.Pipeline) {
+	collectAndSend(ctx, logger, collector, client, custom, logPipeline)
 
 	ticker := time.NewTicker(cfg.Interval())
 	defer ticker.Stop()
@@ -122,12 +124,12 @@ func run(ctx context.Context, logger *log.Logger, cfg *config.Config, collector 
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			collectAndSend(ctx, logger, collector, client, custom)
+			collectAndSend(ctx, logger, collector, client, custom, logPipeline)
 		}
 	}
 }
 
-func collectAndSend(ctx context.Context, logger *log.Logger, collector *metrics.Collector, client *metrics.Client, custom *receiver.Buffer) {
+func collectAndSend(ctx context.Context, logger *log.Logger, collector *metrics.Collector, client *metrics.Client, custom *receiver.Buffer, logPipeline *logs.Pipeline) {
 	var points []metrics.Point
 
 	hostPoints, err := collector.Collect(ctx)
@@ -139,6 +141,12 @@ func collectAndSend(ctx context.Context, logger *log.Logger, collector *metrics.
 
 	if custom != nil {
 		points = append(points, custom.Drain()...)
+	}
+
+	// Report the throttling counter next to the host metrics. It is cumulative,
+	// like the network counters, so the backend can derive rates from it.
+	if logPipeline != nil {
+		points = append(points, collector.LogsDroppedPoint(logPipeline.DroppedTotal(), time.Now().UTC()))
 	}
 
 	if len(points) == 0 {

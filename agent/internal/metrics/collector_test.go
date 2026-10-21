@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"testing"
+	"time"
 
 	"github.com/vibemonitoring/agent/internal/config"
 )
@@ -112,5 +113,25 @@ func TestMetricNamesMatchContract(t *testing.T) {
 		if name != want[i] {
 			t.Errorf("metric name = %q, want %q", name, want[i])
 		}
+	}
+}
+
+func TestLogsDroppedPoint(t *testing.T) {
+	c := &Collector{hostname: "server-1"}
+	now := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+
+	point := c.LogsDroppedPoint(42, now)
+
+	if point.Name != "agent.logs.dropped_total" {
+		t.Errorf("name = %q, want agent.logs.dropped_total", point.Name)
+	}
+	if point.Value != 42 {
+		t.Errorf("value = %v, want 42", point.Value)
+	}
+	if !point.Timestamp.Equal(now) {
+		t.Errorf("timestamp = %s, want %s", point.Timestamp, now)
+	}
+	if point.Tags["host"] != "server-1" || point.Tags["version"] != Version {
+		t.Errorf("unexpected tags: %v", point.Tags)
 	}
 }

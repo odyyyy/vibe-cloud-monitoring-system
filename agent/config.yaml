@@ -22,6 +22,18 @@ log_batch_size: 500
 log_flush_seconds: 5
 state_file: ".agent_state.json"
 
+# Log throttling protects the backend (and the local buffer) from an application
+# that suddenly logs at an extreme rate. Each source is limited independently, so
+# one noisy file cannot starve logs from a quiet, critical one.
+#   max_logs_per_second: per-source ceiling; 0 disables throttling.
+#   sample_rate:         fraction (0..1) of excess logs kept once the limit is hit.
+#   always_forward_levels: severities that bypass the limit entirely.
+# The agent reports cumulative drops as the agent.logs.dropped_total metric.
+log_throttling:
+  max_logs_per_second: 500
+  sample_rate: 0.1
+  always_forward_levels: ["FATAL", "CRITICAL"]
+
 # Kubernetes pod log discovery (optional). When enabled the agent watches pods
 # and tails /var/log/containers/<pod>_<namespace>_<container>-<id>.log, adding
 # k8s.pod.name, k8s.namespace and k8s.container.name to every event.

@@ -18,6 +18,12 @@ log_batch_size: 500
 log_flush_seconds: 5
 state_file: "/app/.agent_state.json"
 
+# Per-source log throttling (see README.md "Log throttling"). 0 disables it.
+log_throttling:
+  max_logs_per_second: 500
+  sample_rate: 0.1
+  always_forward_levels: ["FATAL", "CRITICAL"]
+
 # Pod log discovery. Not used by the plain `docker run` quick-start; the
 # Kubernetes DaemonSet sets AGENT_KUBERNETES_ENABLED=true (see k8s/daemonset.yaml
 # and the "Kubernetes" section in README.md). Namespace and selector can also be

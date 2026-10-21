@@ -31,6 +31,10 @@ type Event struct {
 	Message   string    `json:"message"`
 	Timestamp time.Time `json:"timestamp"`
 	Context   string    `json:"context,omitempty"`
+
+	// severity is the canonical severity token used for throttle decisions. It is
+	// unexported so it is never serialized to the backend.
+	severity string
 }
 
 // isReservedContextKey reports whether a context key is owned by the agent. Log

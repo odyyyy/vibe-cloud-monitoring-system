@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/vibemonitoring/agent/internal/config"
@@ -32,23 +33,29 @@ type sourceUpdate struct {
 // forwards them to the cloud. Buffering is bounded: when the backend is
 // unreachable the oldest events are dropped rather than growing without limit.
 type Pipeline struct {
-	logger     *log.Logger
-	client     *Client
-	state      *stateStore
-	hostname   string
-	batchSize  int
-	flushEvery time.Duration
-	pollEvery  time.Duration
-	maxBuffer  int
+	logger      *log.Logger
+	client      *Client
+	state       *stateStore
+	hostname    string
+	batchSize   int
+	flushEvery  time.Duration
+	pollEvery   time.Duration
+	maxBuffer   int
+	throttleCfg config.LogThrottlingConfig
 
 	sources     []*source
 	sourceIndex map[string]*source
 	updates     chan sourceUpdate
 
-	mu      sync.Mutex
-	buffer  []Event
-	dropped int
-	flushCh chan struct{}
+	mu        sync.Mutex
+	buffer    []Event
+	dropped   int
+	throttled int
+	flushCh   chan struct{}
+
+	// droppedTotal counts events dropped by throttling since startup. It is read
+	// by the metric collection goroutine, so it is atomic.
+	droppedTotal atomic.Int64
 
 	// warned is only touched by the single poll goroutine inside Run.
 	warned map[string]bool
@@ -77,6 +84,7 @@ func NewPipeline(cfg *config.Config, client *Client, logger *log.Logger) (*Pipel
 		flushEvery:  time.Duration(cfg.LogFlushSeconds) * time.Second,
 		pollEvery:   defaultPollInterval,
 		maxBuffer:   cfg.LogBatchSize * 10,
+		throttleCfg: cfg.LogThrottling,
 		flushCh:     make(chan struct{}, 1),
 		updates:     make(chan sourceUpdate, maxPendingSourceUpdates),
 		sourceIndex: map[string]*source{},
@@ -88,6 +96,7 @@ func NewPipeline(cfg *config.Config, client *Client, logger *log.Logger) (*Pipel
 		if err != nil {
 			return nil, fmt.Errorf("logs[%d].level_pattern: %w", i, err)
 		}
+		s.throttle = newThrottler(cfg.LogThrottling)
 		if offset, ok := state.offset(srcCfg.Path); ok {
 			s.offset = offset
 			s.hasState = true
@@ -141,6 +150,7 @@ func (p *Pipeline) addSource(cfg config.LogSource) {
 		p.logger.Printf("warning: cannot tail %s: %v", cfg.Path, err)
 		return
 	}
+	s.throttle = newThrottler(p.throttleCfg)
 	if offset, ok := p.state.offset(cfg.Path); ok {
 		s.offset = offset
 		s.hasState = true
@@ -226,8 +236,13 @@ func (p *Pipeline) signalFlush() {
 // accepted or ctx is cancelled.
 func (p *Pipeline) flush(ctx context.Context) {
 	p.mu.Lock()
+	throttled := p.throttled
+	p.throttled = 0
 	if len(p.buffer) == 0 {
 		p.mu.Unlock()
+		if throttled > 0 {
+			p.logger.Printf("throttled %d log events: rate limit exceeded", throttled)
+		}
 		return
 	}
 	batch := p.buffer
@@ -236,6 +251,9 @@ func (p *Pipeline) flush(ctx context.Context) {
 	p.dropped = 0
 	p.mu.Unlock()
 
+	if throttled > 0 {
+		p.logger.Printf("throttled %d log events: rate limit exceeded", throttled)
+	}
 	if dropped > 0 {
 		p.logger.Printf("dropped %d log events: local buffer limit reached", dropped)
 	}
@@ -243,6 +261,12 @@ func (p *Pipeline) flush(ctx context.Context) {
 	transport.Retry(ctx, p.logger, fmt.Sprintf("%d logs", len(batch)), func(sendCtx context.Context) error {
 		return p.client.Send(sendCtx, batch)
 	})
+}
+
+// DroppedTotal returns the cumulative number of log events dropped by agent-side
+// throttling since startup. It is safe to call from another goroutine.
+func (p *Pipeline) DroppedTotal() int64 {
+	return p.droppedTotal.Load()
 }
 
 func (p *Pipeline) finalFlush() {

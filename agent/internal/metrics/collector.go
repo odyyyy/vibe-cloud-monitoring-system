@@ -26,18 +26,22 @@ const (
 	metricMemoryUsage = "system.memory.usage"
 	metricDiskUsage   = "system.disk.usage"
 
-	metricNetworkBytesSent  = "system.network.bytes_sent"
-	metricNetworkBytesRecv  = "system.network.bytes_recv"
+	metricNetworkBytesSent   = "system.network.bytes_sent"
+	metricNetworkBytesRecv   = "system.network.bytes_recv"
 	metricNetworkPacketsSent = "system.network.packets_sent"
 	metricNetworkPacketsRecv = "system.network.packets_recv"
-	metricNetworkDropIn     = "system.network.drop_in"
-	metricNetworkDropOut    = "system.network.drop_out"
+	metricNetworkDropIn      = "system.network.drop_in"
+	metricNetworkDropOut     = "system.network.drop_out"
 
 	metricLoad1  = "system.load.1"
 	metricLoad5  = "system.load.5"
 	metricLoad15 = "system.load.15"
 
 	metricUptime = "system.uptime"
+
+	// MetricLogsDroppedTotal is the cumulative number of log events the agent
+	// dropped because a source exceeded its configured rate limit.
+	MetricLogsDroppedTotal = "agent.logs.dropped_total"
 )
 
 // defaultInterfacePatterns matches the physical interfaces reported in auto
@@ -229,4 +233,11 @@ func (c *Collector) tagsWith(key, value string) map[string]string {
 	tags := c.tags()
 	tags[key] = value
 	return tags
+}
+
+// LogsDroppedPoint builds the cumulative log-throttling counter as a metric
+// point. It is reported alongside the host metrics so a user can see on the
+// platform when the agent is dropping logs to protect the backend.
+func (c *Collector) LogsDroppedPoint(total int64, now time.Time) Point {
+	return Point{Name: MetricLogsDroppedTotal, Value: float64(total), Timestamp: now, Tags: c.tags()}
 }
