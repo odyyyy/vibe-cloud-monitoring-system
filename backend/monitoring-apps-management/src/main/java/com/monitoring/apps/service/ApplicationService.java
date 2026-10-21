@@ -21,6 +21,7 @@ import java.util.UUID;
 public class ApplicationService {
 
     private static final String API_KEY_PREFIX = "app_";
+    private static final int API_KEY_HINT_VISIBLE_SUFFIX = 4;
 
     private final ApplicationRepository applicationRepository;
 
@@ -35,6 +36,7 @@ public class ApplicationService {
         Application application = Application.builder()
                 .name(name)
                 .apiKeyHash(ApiKeyHasher.hash(rawApiKey))
+                .apiKeyHint(apiKeyHint(rawApiKey))
                 .organizationId(organizationId)
                 .build();
 
@@ -92,6 +94,7 @@ public class ApplicationService {
         Application application = getOwnedApplication(id, organizationId);
         String rawApiKey = generateUniqueApiKey();
         application.setApiKeyHash(ApiKeyHasher.hash(rawApiKey));
+        application.setApiKeyHint(apiKeyHint(rawApiKey));
         return toWithKeyResponse(applicationRepository.save(application), rawApiKey);
     }
 
@@ -103,7 +106,23 @@ public class ApplicationService {
 
     private ApplicationWithKeyResponse toWithKeyResponse(Application application, String rawApiKey) {
         return new ApplicationWithKeyResponse(
-                application.getId(), application.getName(), rawApiKey, application.getCreatedAt());
+                application.getId(),
+                application.getName(),
+                rawApiKey,
+                application.getApiKeyHint(),
+                application.getCreatedAt());
+    }
+
+    /**
+     * Builds a short, non-sensitive hint such as {@code app_…1f2e}. Only the public
+     * {@code app_} prefix and the last four characters are kept; the rest of the key is
+     * never persisted in plaintext.
+     */
+    static String apiKeyHint(String rawApiKey) {
+        if (rawApiKey == null || rawApiKey.length() <= API_KEY_PREFIX.length() + API_KEY_HINT_VISIBLE_SUFFIX) {
+            return null;
+        }
+        return API_KEY_PREFIX + "…" + rawApiKey.substring(rawApiKey.length() - API_KEY_HINT_VISIBLE_SUFFIX);
     }
 
     private Application findOrThrow(Long id) {

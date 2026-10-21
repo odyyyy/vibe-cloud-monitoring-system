@@ -59,12 +59,13 @@ class ApplicationControllerTest {
                 .id(10L)
                 .name("my-app")
                 .apiKeyHash("hashed-key")
+                .apiKeyHint("app_…cdef")
                 .organizationId(USER_ID)
                 .build();
     }
 
     private ApplicationWithKeyResponse sampleAppWithKey() {
-        return new ApplicationWithKeyResponse(10L, "my-app", "app_abc", null);
+        return new ApplicationWithKeyResponse(10L, "my-app", "app_abcd", "app_…abcd", null);
     }
 
     @Test
@@ -75,6 +76,7 @@ class ApplicationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(10))
                 .andExpect(jsonPath("$[0].name").value("my-app"))
+                .andExpect(jsonPath("$[0].apiKeyHint").value("app_…cdef"))
                 .andExpect(jsonPath("$[0].apiKey").doesNotExist());
     }
 
@@ -88,7 +90,7 @@ class ApplicationControllerTest {
                         .content("{\"name\":\"my-app\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/api/applications/10"))
-                .andExpect(jsonPath("$.apiKey").value("app_abc"));
+                .andExpect(jsonPath("$.apiKey").value("app_abcd"));
     }
 
     @Test
@@ -155,6 +157,6 @@ class ApplicationControllerTest {
 
         mockMvc.perform(post("/api/applications/10/regenerate-api-key"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.apiKey").value("app_abc"));
+                .andExpect(jsonPath("$.apiKey").value("app_abcd"));
     }
 }

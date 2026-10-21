@@ -4,6 +4,11 @@ import { apiRequest } from './client'
 export interface Application {
   id: number
   name: string
+  /**
+   * Short non-sensitive mask of the active key (for example `app_…1f2e`).
+   * `null` for keys issued before hints were stored; regenerate the key to get one.
+   */
+  apiKeyHint: string | null
   createdAt: string
 }
 

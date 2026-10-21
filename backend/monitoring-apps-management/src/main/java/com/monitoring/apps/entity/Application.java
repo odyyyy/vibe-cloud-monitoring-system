@@ -34,6 +34,14 @@ public class Application {
     @Column(name = "api_key_hash", nullable = false, unique = true, length = 64)
     private String apiKeyHash;
 
+    /**
+     * Short, non-sensitive display hint such as {@code app_…1f2e}. It contains only the
+     * public prefix and the last four characters of the key, so the owner can identify
+     * which key is configured without revealing the full credential.
+     */
+    @Column(name = "api_key_hint", length = 32)
+    private String apiKeyHint;
+
     @Column(nullable = false)
     private Long organizationId;
 

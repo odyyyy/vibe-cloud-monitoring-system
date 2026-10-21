@@ -39,6 +39,10 @@ class ApplicationServiceTest {
         return request;
     }
 
+    private static String lastFour(String value) {
+        return value.substring(value.length() - 4);
+    }
+
     private Application appOwnedBy(Long organizationId) {
         return Application.builder()
                 .id(10L)
@@ -66,6 +70,15 @@ class ApplicationServiceTest {
         assertEquals(OWNER_ID, saved.getOrganizationId());
         assertEquals(ApiKeyHasher.hash(created.apiKey()), saved.getApiKeyHash());
         assertNotEquals(created.apiKey(), saved.getApiKeyHash(), "raw key must never be persisted");
+        assertEquals("app_…" + lastFour(created.apiKey()), created.apiKeyHint());
+        assertEquals(created.apiKeyHint(), saved.getApiKeyHint());
+    }
+
+    @Test
+    void apiKeyHint_keepsOnlyPrefixAndLastFourCharacters() {
+        assertEquals("app_…9f3e", ApplicationService.apiKeyHint("app_1a2b3c4d-1111-2222-3333-444455559f3e"));
+        assertNull(ApplicationService.apiKeyHint("app_1234"));
+        assertNull(ApplicationService.apiKeyHint(null));
     }
 
     @Test
@@ -156,5 +169,7 @@ class ApplicationServiceTest {
         assertTrue(updated.apiKey().startsWith("app_"));
         assertEquals(ApiKeyHasher.hash(updated.apiKey()), owned.getApiKeyHash());
         assertNotEquals(ApiKeyHasher.hash("app_old"), owned.getApiKeyHash());
+        assertEquals("app_…" + lastFour(updated.apiKey()), updated.apiKeyHint());
+        assertEquals(updated.apiKeyHint(), owned.getApiKeyHint());
     }
 }

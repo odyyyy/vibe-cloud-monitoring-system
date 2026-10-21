@@ -25,6 +25,7 @@ export function ApplicationsTable({ applications, canManage, onEdit, onRegenerat
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
+          <TableHead>API Key</TableHead>
           <TableHead>Created At</TableHead>
           {canManage ? <TableHead className="w-16 text-right">Actions</TableHead> : null}
         </TableRow>
@@ -33,6 +34,27 @@ export function ApplicationsTable({ applications, canManage, onEdit, onRegenerat
         {applications.map((application) => (
           <TableRow key={application.id}>
             <TableCell className="font-medium text-slate-100">{application.name}</TableCell>
+            <TableCell className="whitespace-nowrap">
+              {application.apiKeyHint ? (
+                <code
+                  className="mono text-xs text-cyan-200/80"
+                  title="Only a short hint is shown. The full key is displayed once when it is created or regenerated."
+                >
+                  {application.apiKeyHint}
+                </code>
+              ) : (
+                <span
+                  className="text-xs text-slate-500"
+                  title={
+                    canManage
+                      ? 'This key was issued before hints were stored. Regenerate it to see a hint.'
+                      : 'This key was issued before hints were stored.'
+                  }
+                >
+                  {canManage ? 'Regenerate to show' : 'Not available'}
+                </span>
+              )}
+            </TableCell>
             <TableCell className="whitespace-nowrap text-slate-400">
               {formatDateTime(application.createdAt)}
             </TableCell>

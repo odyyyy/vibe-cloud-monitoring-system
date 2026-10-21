@@ -162,6 +162,7 @@ function ApplicationsTableSkeleton() {
         {[0, 1, 2, 3, 4].map((row) => (
           <div key={row} className="flex items-center gap-4">
             <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-4 w-24" />
             <Skeleton className="h-4 w-36" />
             <Skeleton className="ml-auto h-8 w-8 rounded-md" />
           </div>
