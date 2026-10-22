@@ -23,6 +23,7 @@ export interface AlertThresholdLine {
 
 const CONDITION_SYMBOLS: Record<AlertCondition, string> = {
   GREATER_THAN: '>',
+  GREATER_OR_EQUAL: '>=',
   LESS_THAN: '<',
   EQUAL: '=',
 }

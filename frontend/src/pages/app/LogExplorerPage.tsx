@@ -3,16 +3,22 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ApiError, type ExportFormat } from '../../api/client'
-import type { LogEvent, LogsQueryParams } from '../../api/logs'
+import type { LogEvent, LogFacetField, LogsQueryParams } from '../../api/logs'
 import { exportLogs, useLogsQuery } from '../../api/logs'
 import type { SavedLogView } from '../../api/savedLogViews'
 import { LogDetailModal } from '../../components/logs/LogDetailModal'
+import { LogFacetsPanel } from '../../components/logs/LogFacetsPanel'
 import { LogTable } from '../../components/logs/LogTable'
 import { LogsFilterPanel } from '../../components/logs/LogsFilterPanel'
 import { SavedViewsPanel } from '../../components/logs/SavedViewsPanel'
 import { Button } from '../../components/ui/button'
 import { Label } from '../../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
+import {
+  carryOverFacetFilters,
+  clearFacetFilters,
+  toggleFacetFilter,
+} from '../../features/logs/facets'
 import { LOG_PAGE_SIZES, logsQuerySchema } from '../../features/logs/schemas'
 import {
   DEFAULT_LOG_FILTERS,
@@ -24,6 +30,17 @@ import {
 import { savedViewToSearchParams } from '../../features/logs/savedViews'
 import { TIME_RANGE_PRESETS, resolvePresetRange } from '../../features/metrics/timeRange'
 import { downloadBlob } from '../../lib/download'
+
+const FACETS_COLLAPSED_KEY = 'monitoring.logs.facets.collapsed'
+
+/** The collapsed state of the facet sidebar is remembered for the browser session only. */
+function readFacetsCollapsed(): boolean {
+  try {
+    return sessionStorage.getItem(FACETS_COLLAPSED_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
 
 export default function LogExplorerPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -43,6 +60,7 @@ export default function LogExplorerPage() {
   const [applyError, setApplyError] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [selectedLog, setSelectedLog] = useState<LogEvent | null>(null)
+  const [facetsCollapsed, setFacetsCollapsed] = useState(readFacetsCollapsed)
 
   useEffect(() => {
     setDraft(filtersFromSearchParams(new URLSearchParams(searchKey), initialFilters))
@@ -81,7 +99,9 @@ export default function LogExplorerPage() {
     }
 
     setApplyError(null)
-    setSearchParams(filtersToSearchParams(result.data))
+    setSearchParams(
+      filtersToSearchParams(carryOverFacetFilters(params, { ...result.data, page: 0 })),
+    )
   }
 
   const handleExport = async (format: ExportFormat) => {
@@ -126,6 +146,29 @@ export default function LogExplorerPage() {
     setSearchParams(savedViewToSearchParams(view))
   }
 
+  const toggleFacetValue = (field: LogFacetField, value: string) => {
+    if (!params) {
+      return
+    }
+    commit(toggleFacetFilter(params, field, value))
+  }
+
+  const clearFacets = () => {
+    if (!params) {
+      return
+    }
+    commit(clearFacetFilters(params))
+  }
+
+  const handleFacetsCollapsedChange = (collapsed: boolean) => {
+    setFacetsCollapsed(collapsed)
+    try {
+      sessionStorage.setItem(FACETS_COLLAPSED_KEY, String(collapsed))
+    } catch {
+      // Session storage may be unavailable (private mode); the toggle still works for this view.
+    }
+  }
+
   const validationError = parsed.error ?? applyError
   const isRefreshing = query.isFetching && !query.isLoading
 
@@ -139,8 +182,19 @@ export default function LogExplorerPage() {
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
-        <SavedViewsPanel currentParams={params} onApply={applySavedView} />
+      <div className="grid items-start gap-6 lg:grid-cols-[260px_1fr]">
+        <div className="space-y-4">
+          <SavedViewsPanel currentParams={params} onApply={applySavedView} />
+          {params ? (
+            <LogFacetsPanel
+              params={params}
+              collapsed={facetsCollapsed}
+              onCollapsedChange={handleFacetsCollapsedChange}
+              onToggleValue={toggleFacetValue}
+              onClearFilters={clearFacets}
+            />
+          ) : null}
+        </div>
 
         <div className="min-w-0 space-y-6">
           <LogsFilterPanel

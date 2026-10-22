@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Settings2, Share2, Copy, Check, Lock } from 'lucide-react'
+import { ArrowLeft, Plus, Settings2, Share2, Copy, Check, History, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Layout } from 'react-grid-layout'
 import { ApiError } from '../../api/client'
@@ -21,6 +21,7 @@ import { DashboardVariablesBar } from '../../components/dashboards/DashboardVari
 import { DashboardVariablesDialog } from '../../components/dashboards/DashboardVariablesDialog'
 import { DashboardWidget } from '../../components/dashboards/DashboardWidget'
 import { WidgetFormDialog, type WidgetFormSubmit } from '../../components/dashboards/WidgetFormDialog'
+import { RevisionHistoryDialog } from '../../components/revisions/RevisionHistoryDialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -82,6 +83,7 @@ export default function DashboardViewPage() {
   const [deleteTarget, setDeleteTarget] = useState<Widget | null>(null)
   const [variablesOpen, setVariablesOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const serverLayout = useMemo<Layout[]>(() => (dashboard?.widgets ?? []).map(widgetToLayout), [dashboard])
   const serverSignature = useMemo(() => JSON.stringify(serverLayout), [serverLayout])
@@ -301,6 +303,13 @@ export default function DashboardViewPage() {
             </Select>
           </div>
 
+          {!readOnly ? (
+            <Button type="button" variant="secondary" onClick={() => setHistoryOpen(true)}>
+              <History className="h-4 w-4" aria-hidden="true" />
+              History
+            </Button>
+          ) : null}
+
           {canEdit ? (
             <>
               <Button type="button" variant="secondary" onClick={() => setVariablesOpen(true)}>
@@ -363,6 +372,19 @@ export default function DashboardViewPage() {
         dashboardId={dashboard.id}
         dashboardName={dashboard.name}
         variables={variables}
+      />
+
+      <RevisionHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        kind="dashboard"
+        resourceId={dashboard.id}
+        resourceName={dashboard.name}
+        canRestore={canManage}
+        onRestored={() => {
+          setLayout(null)
+          void queryClient.invalidateQueries({ queryKey: dashboardQueryKey(dashboard.id) })
+        }}
       />
 
       <AlertDialog

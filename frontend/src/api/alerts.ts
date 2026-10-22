@@ -1,9 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '../store/authStore'
 import { apiRequest } from './client'
+import type { LogLevel } from './logs'
 
-export type AlertRuleType = 'METRIC_THRESHOLD' | 'HEALTH_CHECK'
-export type AlertCondition = 'GREATER_THAN' | 'LESS_THAN' | 'EQUAL'
+export type AlertRuleType = 'METRIC_THRESHOLD' | 'HEALTH_CHECK' | 'LOG'
+export type AlertCondition = 'GREATER_THAN' | 'GREATER_OR_EQUAL' | 'LESS_THAN' | 'EQUAL'
+/** Log alerts compare counts; equality is intentionally not offered. */
+export type LogAlertCondition = Exclude<AlertCondition, 'EQUAL'>
 export type IncidentStatus = 'FIRING' | 'ACKNOWLEDGED' | 'RESOLVED'
 export type NotificationChannelType = 'WEBHOOK' | 'SLACK' | 'EMAIL'
 export type LogicOperator = 'AND' | 'OR'
@@ -28,6 +31,11 @@ export interface AlertRule {
   conditions: AlertConditionSpec[]
   logicOperator: LogicOperator
   durationMinutes: number
+  logLevel: LogLevel | null
+  logQuery: string | null
+  windowMinutes: number | null
+  comparison: LogAlertCondition | null
+  countThreshold: number | null
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -47,6 +55,13 @@ export interface AlertIncident {
   id: number
   ruleId: number
   ruleName: string
+  ruleType: AlertRuleType
+  applicationId: number | null
+  logLevel: LogLevel | null
+  logQuery: string | null
+  windowMinutes: number | null
+  comparison: LogAlertCondition | null
+  countThreshold: number | null
   status: IncidentStatus
   triggeredAt: string
   acknowledgedBy: number | null
@@ -69,10 +84,29 @@ export interface CreateAlertRuleRequest {
   conditions: AlertConditionSpec[]
   logicOperator: LogicOperator
   durationMinutes: number
+  logLevel?: LogLevel | null
+  logQuery?: string | null
+  windowMinutes?: number | null
+  comparison?: LogAlertCondition | null
+  countThreshold?: number | null
   isActive: boolean
 }
 
 export type UpdateAlertRuleRequest = Partial<CreateAlertRuleRequest>
+
+export interface LogCountPreviewRequest {
+  applicationId: number
+  logLevel?: LogLevel | null
+  logQuery?: string | null
+  windowMinutes: number
+}
+
+export interface LogCountPreview {
+  count: number
+  windowMinutes: number
+  from: string
+  to: string
+}
 
 export interface CreateNotificationChannelRequest {
   type: NotificationChannelType
@@ -119,6 +153,15 @@ export function updateAlertRule(id: number, data: UpdateAlertRuleRequest): Promi
 
 export function deleteAlertRule(id: number): Promise<void> {
   return apiRequest<void>(`${RULES_PATH}/${id}`, { method: 'DELETE', token: authToken() })
+}
+
+/** Read-only count preview used to calibrate a log rule threshold. */
+export function previewLogCount(data: LogCountPreviewRequest): Promise<LogCountPreview> {
+  return apiRequest<LogCountPreview>(`${RULES_PATH}/preview-log-count`, {
+    method: 'POST',
+    body: data,
+    token: authToken(),
+  })
 }
 
 export function getNotificationChannels(): Promise<NotificationChannel[]> {
@@ -201,6 +244,23 @@ export function useMetricAlertRulesQuery(applicationId: number | null, metricNam
     queryKey: metricAlertRulesQueryKey(applicationId, metricName),
     queryFn: () => getMetricAlertRules(applicationId as number, metricName as string),
     enabled,
+  })
+}
+
+export const logCountPreviewQueryKey = (filters: LogCountPreviewRequest | null) =>
+  ['alert-log-preview', filters] as const
+
+/**
+ * Debounced by the caller: send only the settled filter values. Query keys include the filters,
+ * so a slow response for an older query can never overwrite the current preview.
+ */
+export function useLogCountPreviewQuery(filters: LogCountPreviewRequest | null) {
+  return useQuery({
+    queryKey: logCountPreviewQueryKey(filters),
+    queryFn: () => previewLogCount(filters as LogCountPreviewRequest),
+    enabled: filters !== null,
+    staleTime: 15_000,
+    retry: false,
   })
 }
 

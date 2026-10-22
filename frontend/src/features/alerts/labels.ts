@@ -1,18 +1,28 @@
-import type { AlertCondition, AlertRuleType, IncidentStatus, LogicOperator, NotificationChannelType } from '../../api/alerts'
+import type {
+  AlertCondition,
+  AlertRule,
+  AlertRuleType,
+  IncidentStatus,
+  LogicOperator,
+  NotificationChannelType,
+} from '../../api/alerts'
 
 const RULE_TYPE_LABELS: Record<AlertRuleType, string> = {
-  METRIC_THRESHOLD: 'Metric threshold',
+  METRIC_THRESHOLD: 'Metric',
   HEALTH_CHECK: 'Health check',
+  LOG: 'Log',
 }
 
 const CONDITION_LABELS: Record<AlertCondition, string> = {
   GREATER_THAN: 'greater than',
+  GREATER_OR_EQUAL: 'greater than or equal',
   LESS_THAN: 'less than',
   EQUAL: 'equal to',
 }
 
 const CONDITION_SYMBOLS: Record<AlertCondition, string> = {
   GREATER_THAN: '>',
+  GREATER_OR_EQUAL: '>=',
   LESS_THAN: '<',
   EQUAL: '=',
 }
@@ -56,4 +66,14 @@ export function logicOperatorLabel(operator: LogicOperator): string {
 
 export function notificationChannelTypeLabel(type: NotificationChannelType): string {
   return CHANNEL_TYPE_LABELS[type]
+}
+
+/** Human-readable log-rule summary, for example: `ERROR logs containing "timeout" >= 10 in 5 min`. */
+export function logRuleSummary(rule: AlertRule): string {
+  const subject = rule.logLevel ? `${rule.logLevel} logs` : 'logs'
+  const query = rule.logQuery ? ` containing "${rule.logQuery}"` : ''
+  const comparison = rule.comparison ? alertConditionSymbol(rule.comparison) : '>='
+  const threshold = rule.countThreshold ?? 0
+  const window = rule.windowMinutes ?? 0
+  return `${subject}${query} ${comparison} ${threshold} in ${window} min`
 }

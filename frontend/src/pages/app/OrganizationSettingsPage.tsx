@@ -29,6 +29,7 @@ import { Label } from '../../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import { Skeleton } from '../../components/ui/skeleton'
 import { useCanManage, useIsOwner } from '../../features/organizations/useCanManage'
+import { RetentionSettings } from '../../features/retention/RetentionSettings'
 import { useAuthStore } from '../../store/authStore'
 
 const ROLE_OPTIONS: MembershipRole[] = ['OWNER', 'ADMIN', 'VIEWER']
@@ -332,6 +333,8 @@ export default function OrganizationSettingsPage() {
           </div>
         )}
       </div>
+
+      <RetentionSettings />
 
       <AlertDialog open={removeTarget !== null} onOpenChange={(open) => !open && setRemoveTarget(null)}>
         <AlertDialogContent>

@@ -1,12 +1,16 @@
 import { z } from 'zod'
 
-export const ALERT_RULE_TYPES = ['METRIC_THRESHOLD', 'HEALTH_CHECK'] as const
+export const ALERT_RULE_TYPES = ['METRIC_THRESHOLD', 'HEALTH_CHECK', 'LOG'] as const
 export type AlertRuleTypeValue = (typeof ALERT_RULE_TYPES)[number]
 
-export const ALERT_CONDITIONS = ['GREATER_THAN', 'LESS_THAN', 'EQUAL'] as const
+export const ALERT_CONDITIONS = ['GREATER_THAN', 'GREATER_OR_EQUAL', 'LESS_THAN', 'EQUAL'] as const
 export type AlertConditionValue = (typeof ALERT_CONDITIONS)[number]
 
 export const LOGIC_OPERATORS = ['AND', 'OR'] as const
+export const LOG_LEVELS = ['DEBUG', 'INFO', 'WARN', 'ERROR'] as const
+export type LogLevelValue = (typeof LOG_LEVELS)[number]
+export const LOG_ALERT_CONDITIONS = ['GREATER_THAN', 'GREATER_OR_EQUAL', 'LESS_THAN'] as const
+export type LogAlertConditionValue = (typeof LOG_ALERT_CONDITIONS)[number]
 export type LogicOperatorValue = (typeof LOGIC_OPERATORS)[number]
 
 export const NOTIFICATION_CHANNEL_TYPES = ['WEBHOOK', 'SLACK', 'EMAIL'] as const
@@ -21,6 +25,12 @@ export const MIN_DURATION_MINUTES = 1
 export const MAX_DURATION_MINUTES = 1440
 export const DEFAULT_DURATION_MINUTES = 5
 export const DEFAULT_THRESHOLD = 90
+export const MIN_WINDOW_MINUTES = 1
+export const MAX_WINDOW_MINUTES = 60
+export const DEFAULT_WINDOW_MINUTES = 5
+export const DEFAULT_COUNT_THRESHOLD = 10
+export const DEFAULT_LOG_COMPARISON: LogAlertConditionValue = 'GREATER_OR_EQUAL'
+export const LOG_QUERY_MAX_LENGTH = 200
 export const DEFAULT_RULE_TYPE: AlertRuleTypeValue = 'METRIC_THRESHOLD'
 export const DEFAULT_CONDITION: AlertConditionValue = 'GREATER_THAN'
 export const DEFAULT_LOGIC_OPERATOR: LogicOperatorValue = 'AND'
@@ -90,6 +100,23 @@ const durationMinutesSchema = requiredNumberSchema('Duration is required', 'Dura
       .max(MAX_DURATION_MINUTES, `Duration must be between ${MIN_DURATION_MINUTES} and ${MAX_DURATION_MINUTES} minutes`),
   )
 
+const windowMinutesSchema = requiredNumberSchema('Window is required', 'Window must be a number')
+  .pipe(
+    z
+      .number()
+      .int('Window must be a whole number')
+      .min(MIN_WINDOW_MINUTES, `Window must be between ${MIN_WINDOW_MINUTES} and ${MAX_WINDOW_MINUTES} minutes`)
+      .max(MAX_WINDOW_MINUTES, `Window must be between ${MIN_WINDOW_MINUTES} and ${MAX_WINDOW_MINUTES} minutes`),
+  )
+
+const countThresholdSchema = requiredNumberSchema('Count threshold is required', 'Count threshold must be a number')
+  .pipe(
+    z
+      .number()
+      .int('Count threshold must be a whole number')
+      .min(0, 'Count threshold must be zero or greater'),
+  )
+
 export const alertConditionSchema = z.object({
   target: targetSchema,
   operator: z.enum(ALERT_CONDITIONS),
@@ -103,13 +130,27 @@ export const alertRuleFormSchema = z
     applicationId: z.number().int().positive().nullable(),
     conditions: z
       .array(alertConditionSchema)
-      .min(1, 'Add at least one condition')
       .max(MAX_CONDITIONS, `At most ${MAX_CONDITIONS} conditions are allowed`),
     logicOperator: z.enum(LOGIC_OPERATORS),
     durationMinutes: durationMinutesSchema,
+    logLevel: z.enum(LOG_LEVELS).nullable(),
+    logQuery: z
+      .string()
+      .trim()
+      .max(LOG_QUERY_MAX_LENGTH, `Log query must be at most ${LOG_QUERY_MAX_LENGTH} characters`),
+    windowMinutes: windowMinutesSchema,
+    comparison: z.enum(LOG_ALERT_CONDITIONS),
+    countThreshold: countThresholdSchema,
     isActive: z.boolean(),
   })
   .superRefine((values, ctx) => {
+    if (values.type !== 'LOG' && values.conditions.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['conditions'],
+        message: 'Add at least one condition',
+      })
+    }
     if (values.type === 'METRIC_THRESHOLD' && values.applicationId === null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -129,6 +170,22 @@ export const alertRuleFormSchema = z
           code: z.ZodIssueCode.custom,
           path: ['conditions', 0, 'target'],
           message: 'Select a health check',
+        })
+      }
+    }
+    if (values.type === 'LOG') {
+      if (values.applicationId === null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['applicationId'],
+          message: 'Select an application for a log rule',
+        })
+      }
+      if (values.logLevel === null && values.logQuery.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['logQuery'],
+          message: 'Choose a log level, enter a search query, or both',
         })
       }
     }

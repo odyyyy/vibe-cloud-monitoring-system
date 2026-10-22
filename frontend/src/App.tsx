@@ -28,6 +28,8 @@ import PublicDashboardViewPage from './pages/app/PublicDashboardViewPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import PlatformHealthPage from './pages/admin/PlatformHealthPage'
 import SettingsPage from './pages/app/SettingsPage'
+import StatusPagesPage from './pages/app/StatusPagesPage'
+import PublicStatusPage from './pages/public/PublicStatusPage'
 import UsagePage from './pages/app/UsagePage'
 
 const router = createBrowserRouter([
@@ -80,6 +82,10 @@ const router = createBrowserRouter([
     element: <PublicDashboardViewPage />,
   },
   {
+    path: '/s/:slug',
+    element: <PublicStatusPage />,
+  },
+  {
     path: '/app',
     element: (
       <RequireAuth>
@@ -94,6 +100,7 @@ const router = createBrowserRouter([
       { path: 'metrics', element: <MetricsExplorerPage /> },
       { path: 'logs', element: <LogExplorerPage /> },
       { path: 'health', element: <HealthChecksPage /> },
+      { path: 'status-pages', element: <StatusPagesPage /> },
       { path: 'alerts', element: <AlertsPage /> },
       { path: 'incidents', element: <IncidentsPage /> },
       { path: 'maintenance', element: <MaintenancePage /> },

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { CheckCheck, MessageSquare, Siren } from 'lucide-react'
+import { CheckCheck, ExternalLink, MessageSquare, Siren } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import type { AlertIncident, IncidentStatus } from '../../api/alerts'
 import {
@@ -25,6 +26,7 @@ import { Label } from '../../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import { Skeleton } from '../../components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
+import { logExplorerHref } from '../../features/alerts/incidentLinks'
 import { MAX_INCIDENT_NOTE_LENGTH, validateIncidentNote } from '../../features/alerts/incidentNotes'
 import { useCanManage } from '../../features/organizations/useCanManage'
 import { formatDateTime } from '../../lib/datetime'
@@ -244,6 +246,7 @@ export default function IncidentsPage() {
                 const acknowledging =
                   acknowledgeMutation.isPending && acknowledgeMutation.variables === incident.id
                 const resolving = resolveMutation.isPending && resolveMutation.variables === incident.id
+                const explorerHref = logExplorerHref(incident)
 
                 return (
                   <TableRow key={incident.id}>
@@ -252,6 +255,15 @@ export default function IncidentsPage() {
                     </TableCell>
                     <TableCell className="min-w-[14rem]">
                       <p className="font-medium text-slate-100">{incident.ruleName}</p>
+                      {explorerHref ? (
+                        <Link
+                          to={explorerHref}
+                          className="mt-1 inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200"
+                        >
+                          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                          View matching logs
+                        </Link>
+                      ) : null}
                       {incident.notes ? (
                         <p className="mt-1 max-w-xs truncate text-xs text-slate-400" title={incident.notes}>
                           {incident.notes}

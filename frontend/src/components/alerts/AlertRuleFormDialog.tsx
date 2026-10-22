@@ -1,24 +1,45 @@
 import { useEffect, useRef, useState } from 'react'
-import { Bell, Clock, Plus, X } from 'lucide-react'
+import { Bell, Clock, History, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
-import type { AlertConditionSpec, AlertRule, CreateAlertRuleRequest } from '../../api/alerts'
-import { useCreateAlertRuleMutation, useUpdateAlertRuleMutation } from '../../api/alerts'
+import type {
+  AlertConditionSpec,
+  AlertRule,
+  CreateAlertRuleRequest,
+  LogCountPreviewRequest,
+} from '../../api/alerts'
+import {
+  useCreateAlertRuleMutation,
+  useLogCountPreviewQuery,
+  useUpdateAlertRuleMutation,
+} from '../../api/alerts'
 import { ApiError } from '../../api/client'
 import { useHealthChecksListQuery } from '../../api/healthchecks'
+import { useCanManage } from '../../features/organizations/useCanManage'
 import { ApplicationSelect } from '../filters/ApplicationSelect'
+import { RevisionHistoryDialog } from '../revisions/RevisionHistoryDialog'
 import { MetricNameSelect } from '../filters/MetricNameSelect'
 import {
   ALERT_CONDITIONS,
   ALERT_RULE_TYPES,
   DEFAULT_CONDITION,
+  DEFAULT_COUNT_THRESHOLD,
   DEFAULT_DURATION_MINUTES,
+  DEFAULT_LOG_COMPARISON,
   DEFAULT_LOGIC_OPERATOR,
   DEFAULT_RULE_TYPE,
   DEFAULT_THRESHOLD,
+  DEFAULT_WINDOW_MINUTES,
+  LOG_ALERT_CONDITIONS,
+  LOG_LEVELS,
+  LOG_QUERY_MAX_LENGTH,
   MAX_CONDITIONS,
+  MAX_WINDOW_MINUTES,
+  MIN_WINDOW_MINUTES,
   alertRuleFormSchema,
   type AlertConditionValue,
   type AlertRuleTypeValue,
+  type LogAlertConditionValue,
+  type LogLevelValue,
   type LogicOperatorValue,
 } from '../../features/alerts/schemas'
 import {
@@ -60,6 +81,7 @@ function newCondition(overrides: Partial<Omit<ConditionDraft, 'id'>> = {}, id = 
 
 export function AlertRuleFormDialog({ open, onOpenChange, rule }: AlertRuleFormDialogProps) {
   const isEditing = Boolean(rule)
+  const canManage = useCanManage()
   const createMutation = useCreateAlertRuleMutation()
   const updateMutation = useUpdateAlertRuleMutation()
   const healthChecksQuery = useHealthChecksListQuery()
@@ -72,8 +94,18 @@ export function AlertRuleFormDialog({ open, onOpenChange, rule }: AlertRuleFormD
   const [conditions, setConditions] = useState<ConditionDraft[]>([newCondition()])
   const [logicOperator, setLogicOperator] = useState<LogicOperatorValue>(DEFAULT_LOGIC_OPERATOR)
   const [durationMinutes, setDurationMinutes] = useState(String(DEFAULT_DURATION_MINUTES))
+  const [logLevel, setLogLevel] = useState<LogLevelValue | null>(null)
+  const [logQuery, setLogQuery] = useState('')
+  const [windowMinutes, setWindowMinutes] = useState(String(DEFAULT_WINDOW_MINUTES))
+  const [comparison, setComparison] = useState<LogAlertConditionValue>(DEFAULT_LOG_COMPARISON)
+  const [countThreshold, setCountThreshold] = useState(String(DEFAULT_COUNT_THRESHOLD))
+  const [previewFilters, setPreviewFilters] = useState<LogCountPreviewRequest | null>(null)
   const [isActive, setIsActive] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+
+  const isLog = type === 'LOG'
+  const previewQuery = useLogCountPreviewQuery(previewFilters)
 
   useEffect(() => {
     if (!open) {
@@ -87,20 +119,57 @@ export function AlertRuleFormDialog({ open, onOpenChange, rule }: AlertRuleFormD
     setConditions(drafts)
     setLogicOperator(rule?.logicOperator ?? DEFAULT_LOGIC_OPERATOR)
     setDurationMinutes(rule ? String(rule.durationMinutes) : String(DEFAULT_DURATION_MINUTES))
+    setLogLevel(rule?.logLevel ?? null)
+    setLogQuery(rule?.logQuery ?? '')
+    setWindowMinutes(String(rule?.windowMinutes ?? DEFAULT_WINDOW_MINUTES))
+    setComparison(rule?.comparison ?? DEFAULT_LOG_COMPARISON)
+    setCountThreshold(String(rule?.countThreshold ?? DEFAULT_COUNT_THRESHOLD))
+    setPreviewFilters(null)
     setIsActive(rule?.isActive ?? true)
     nextConditionId.current = drafts.length
   }, [open, rule])
+
+  // Calibration is a network request: wait for typing to settle, and never preview an incomplete
+  // filter (the backend rejects an empty level+query pair).
+  useEffect(() => {
+    if (!open || type !== 'LOG' || applicationId === null) {
+      setPreviewFilters(null)
+      return
+    }
+    const windowSize = Number(windowMinutes)
+    if (!Number.isInteger(windowSize) || windowSize < MIN_WINDOW_MINUTES || windowSize > MAX_WINDOW_MINUTES) {
+      setPreviewFilters(null)
+      return
+    }
+    const query = logQuery.trim()
+    if (logLevel === null && query === '') {
+      setPreviewFilters(null)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      setPreviewFilters({
+        applicationId,
+        logLevel,
+        logQuery: query === '' ? null : query,
+        windowMinutes: windowSize,
+      })
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [open, type, applicationId, logLevel, logQuery, windowMinutes])
 
   const handleTypeChange = (next: AlertRuleTypeValue) => {
     if (next === type) {
       return
     }
-    // The two rule kinds use different target scopes, so reset the conditions.
+    // Rule kinds use different target scopes, so reset the type-specific state.
     setType(next)
     nextConditionId.current = 1
+    setPreviewFilters(null)
     if (next === 'HEALTH_CHECK') {
       setApplicationId(null)
       setConditions([newCondition({ target: '', condition: 'EQUAL', threshold: '0' }, 0)])
+    } else if (next === 'LOG') {
+      setConditions([])
     } else {
       setConditions([newCondition({ target: '', condition: DEFAULT_CONDITION, threshold: String(DEFAULT_THRESHOLD) }, 0)])
     }
@@ -131,6 +200,11 @@ export function AlertRuleFormDialog({ open, onOpenChange, rule }: AlertRuleFormD
       conditions,
       logicOperator,
       durationMinutes,
+      logLevel,
+      logQuery,
+      windowMinutes,
+      comparison,
+      countThreshold,
       isActive,
     })
 
@@ -140,26 +214,34 @@ export function AlertRuleFormDialog({ open, onOpenChange, rule }: AlertRuleFormD
     }
 
     const values = parsed.data
-    const specs: AlertConditionSpec[] =
-      values.type === 'HEALTH_CHECK'
+    const isLogRule = values.type === 'LOG'
+    const specs: AlertConditionSpec[] = isLogRule
+      ? []
+      : values.type === 'HEALTH_CHECK'
         ? values.conditions.map((condition) => ({ target: condition.target, operator: 'EQUAL', threshold: 0 }))
         : values.conditions.map((condition) => ({
             target: condition.target,
             operator: condition.operator,
             threshold: condition.threshold,
           }))
-    const first = specs[0]!
+    const first = specs[0]
 
     const payload: CreateAlertRuleRequest = {
       name: values.name,
-      applicationId: values.type === 'METRIC_THRESHOLD' ? values.applicationId : null,
+      applicationId: values.type === 'HEALTH_CHECK' ? null : values.applicationId,
       type: values.type,
       // The backend derives evaluation from `conditions`; the legacy fields mirror the first one.
-      target: first.target,
-      condition: first.operator,
-      threshold: first.threshold,
+      // Log rules use the legacy columns for their count comparison and threshold.
+      target: isLogRule ? 'logs' : (first?.target ?? ''),
+      condition: isLogRule ? values.comparison : (first?.operator ?? DEFAULT_CONDITION),
+      threshold: isLogRule ? values.countThreshold : (first?.threshold ?? DEFAULT_THRESHOLD),
       conditions: specs,
       logicOperator: specs.length > 1 ? values.logicOperator : 'AND',
+      logLevel: isLogRule ? values.logLevel : null,
+      logQuery: isLogRule ? (values.logQuery === '' ? null : values.logQuery) : null,
+      windowMinutes: isLogRule ? values.windowMinutes : null,
+      comparison: isLogRule ? values.comparison : null,
+      countThreshold: isLogRule ? values.countThreshold : null,
       durationMinutes: values.durationMinutes,
       isActive: values.isActive,
     }
@@ -189,9 +271,21 @@ export function AlertRuleFormDialog({ open, onOpenChange, rule }: AlertRuleFormD
         <DialogHeader>
           <DialogTitle>{isEditing ? 'Edit alert rule' : 'Create alert rule'}</DialogTitle>
           <DialogDescription>
-            The platform evaluates active rules on a schedule and opens an incident when the condition holds. Combine
-            multiple conditions with AND or OR.
+            The platform evaluates active rules on a schedule and opens an incident when the condition holds. Metric
+            rules can combine multiple conditions with AND or OR; log rules count matching events in a time window.
           </DialogDescription>
+          {isEditing && rule ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="mt-2 w-fit"
+              onClick={() => setHistoryOpen(true)}
+            >
+              <History className="h-4 w-4" aria-hidden="true" />
+              History
+            </Button>
+          ) : null}
         </DialogHeader>
 
         <form
@@ -228,13 +322,14 @@ export function AlertRuleFormDialog({ open, onOpenChange, rule }: AlertRuleFormD
             </Select>
           </div>
 
-          {isMetric ? (
+          {isMetric || isLog ? (
             <div className="space-y-1.5">
               <Label htmlFor="alert-application">Application</Label>
               <ApplicationSelect id="alert-application" value={applicationId} onChange={setApplicationId} />
             </div>
           ) : null}
 
+          {!isLog ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <Label>{isMetric ? 'Conditions' : 'Health check'}</Label>
@@ -375,6 +470,118 @@ export function AlertRuleFormDialog({ open, onOpenChange, rule }: AlertRuleFormD
               </Button>
             ) : null}
           </div>
+          ) : null}
+
+          {isLog ? (
+            <div className="space-y-3 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="alert-log-level">Level</Label>
+                  <Select
+                    value={logLevel ?? 'ALL'}
+                    onValueChange={(value) =>
+                      setLogLevel(value === 'ALL' ? null : (value as LogLevelValue))
+                    }
+                  >
+                    <SelectTrigger id="alert-log-level">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Any level</SelectItem>
+                      {LOG_LEVELS.map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="alert-window">Window (minutes)</Label>
+                  <Input
+                    id="alert-window"
+                    type="number"
+                    inputMode="numeric"
+                    min={MIN_WINDOW_MINUTES}
+                    max={MAX_WINDOW_MINUTES}
+                    value={windowMinutes}
+                    onChange={(event) => setWindowMinutes(event.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="alert-log-query">Message contains</Label>
+                <Input
+                  id="alert-log-query"
+                  autoComplete="off"
+                  maxLength={LOG_QUERY_MAX_LENGTH}
+                  placeholder="timeout"
+                  value={logQuery}
+                  onChange={(event) => setLogQuery(event.target.value)}
+                />
+                <p className="text-xs text-slate-500">
+                  Case-insensitive substring match. Choose a level, enter a query, or both.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="alert-log-comparison">Fire when count is</Label>
+                  <Select
+                    value={comparison}
+                    onValueChange={(value) => setComparison(value as LogAlertConditionValue)}
+                  >
+                    <SelectTrigger id="alert-log-comparison">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LOG_ALERT_CONDITIONS.map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {`${alertConditionSymbol(value)} ${alertConditionLabel(value)}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="alert-count-threshold">Count threshold</Label>
+                  <Input
+                    id="alert-count-threshold"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    value={countThreshold}
+                    onChange={(event) => setCountThreshold(event.target.value)}
+                  />
+                </div>
+              </div>
+
+              <p role="status" aria-live="polite" className="text-xs text-slate-400">
+                {applicationId === null ? (
+                  'Select an application to preview matching logs.'
+                ) : previewFilters === null ? (
+                  'Choose a level or enter a query to preview matching logs.'
+                ) : previewQuery.isFetching ? (
+                  'Counting matching logs…'
+                ) : previewQuery.isError ? (
+                  <span className="text-red-400">
+                    {previewQuery.error instanceof ApiError
+                      ? previewQuery.error.message
+                      : 'Could not count matching logs.'}
+                  </span>
+                ) : previewQuery.data ? (
+                  <>
+                    In the last {previewQuery.data.windowMinutes} minutes this query matched{' '}
+                    <strong className="text-slate-200">{previewQuery.data.count.toLocaleString()}</strong> logs.
+                  </>
+                ) : (
+                  'No preview available.'
+                )}
+              </p>
+            </div>
+          ) : null}
 
           <div className="space-y-1.5">
             <Label htmlFor="alert-duration">Duration (minutes)</Label>
@@ -417,6 +624,21 @@ export function AlertRuleFormDialog({ open, onOpenChange, rule }: AlertRuleFormD
           </DialogFooter>
         </form>
       </DialogContent>
+
+      {rule ? (
+        <RevisionHistoryDialog
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          kind="alert-rule"
+          resourceId={rule.id}
+          resourceName={rule.name}
+          canRestore={canManage}
+          onRestored={() => {
+            setHistoryOpen(false)
+            onOpenChange(false)
+          }}
+        />
+      ) : null}
     </Dialog>
   )
 }

@@ -19,6 +19,11 @@ function validMetricRule(overrides: Record<string, unknown> = {}) {
     conditions: [condition()],
     logicOperator: 'AND',
     durationMinutes: '5',
+    logLevel: null,
+    logQuery: '',
+    windowMinutes: '5',
+    comparison: 'GREATER_OR_EQUAL',
+    countThreshold: '10',
     isActive: true,
     ...overrides,
   }
@@ -32,6 +37,29 @@ function validHealthRule(overrides: Record<string, unknown> = {}) {
     conditions: [condition({ target: '12', operator: 'EQUAL', threshold: '0' })],
     logicOperator: 'AND',
     durationMinutes: '1',
+    logLevel: null,
+    logQuery: '',
+    windowMinutes: '5',
+    comparison: 'GREATER_OR_EQUAL',
+    countThreshold: '10',
+    isActive: true,
+    ...overrides,
+  }
+}
+
+function validLogRule(overrides: Record<string, unknown> = {}) {
+  return {
+    name: 'Checkout errors',
+    type: 'LOG',
+    applicationId: 7,
+    conditions: [],
+    logicOperator: 'AND',
+    durationMinutes: '5',
+    logLevel: 'ERROR',
+    logQuery: '',
+    windowMinutes: '10',
+    comparison: 'GREATER_THAN',
+    countThreshold: '25',
     isActive: true,
     ...overrides,
   }
@@ -153,6 +181,44 @@ describe('alertRuleFormSchema', () => {
       alertRuleFormSchema.safeParse(validHealthRule({ conditions: [condition({ target: '1' }), condition({ target: '2' })] }))
         .success,
     ).toBe(false)
+  })
+
+  it('accepts a log rule filtered by level and coerces count fields', () => {
+    const result = alertRuleFormSchema.safeParse(validLogRule())
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.windowMinutes).toBe(10)
+      expect(result.data.countThreshold).toBe(25)
+      expect(result.data.logLevel).toBe('ERROR')
+    }
+  })
+
+  it('accepts a log rule filtered only by a search query', () => {
+    expect(alertRuleFormSchema.safeParse(validLogRule({ logLevel: null, logQuery: 'timeout' })).success).toBe(true)
+  })
+
+  it('requires a level or a search query for a log rule', () => {
+    expect(alertRuleFormSchema.safeParse(validLogRule({ logLevel: null, logQuery: '   ' })).success).toBe(false)
+  })
+
+  it('requires an application for a log rule', () => {
+    expect(alertRuleFormSchema.safeParse(validLogRule({ applicationId: null })).success).toBe(false)
+  })
+
+  it('rejects log windows outside 1-60 minutes', () => {
+    expect(alertRuleFormSchema.safeParse(validLogRule({ windowMinutes: '0' })).success).toBe(false)
+    expect(alertRuleFormSchema.safeParse(validLogRule({ windowMinutes: '61' })).success).toBe(false)
+    expect(alertRuleFormSchema.safeParse(validLogRule({ windowMinutes: '2.5' })).success).toBe(false)
+  })
+
+  it('rejects invalid log count thresholds', () => {
+    expect(alertRuleFormSchema.safeParse(validLogRule({ countThreshold: '-1' })).success).toBe(false)
+    expect(alertRuleFormSchema.safeParse(validLogRule({ countThreshold: '1.5' })).success).toBe(false)
+    expect(alertRuleFormSchema.safeParse(validLogRule({ countThreshold: '' })).success).toBe(false)
+  })
+
+  it('does not offer equality for log count comparisons', () => {
+    expect(alertRuleFormSchema.safeParse(validLogRule({ comparison: 'EQUAL' })).success).toBe(false)
   })
 })
 

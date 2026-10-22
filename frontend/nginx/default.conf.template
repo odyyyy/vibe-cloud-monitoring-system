@@ -1,0 +1,75 @@
+# Rendered at container start by the nginx image's envsubst entrypoint.
+# Only BACKEND_URL is substituted; nginx variables such as $uri are left untouched.
+server {
+    listen 8080;
+    server_name _;
+    server_tokens off;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    client_max_body_size 10m;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_types
+        application/javascript
+        application/json
+        application/xml
+        image/svg+xml
+        text/css
+        text/javascript
+        text/plain
+        text/xml;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Container-local health probe (not exposed as an application API).
+    location = /healthz {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+    }
+
+    # Actuator endpoints (including /actuator/prometheus) are not proxied. Return 404
+    # explicitly instead of falling through to the SPA index so they are not reachable
+    # through the UI origin at all.
+    location /actuator/ {
+        return 404;
+    }
+
+    # Only /api is proxied to the backend. Metrics should be scraped from the backend,
+    # not through the UI.
+    location /api/ {
+        proxy_pass ${BACKEND_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+    }
+
+    # Vite emits content-hashed files into /assets; they can be cached indefinitely.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable" always;
+        try_files $uri =404;
+    }
+
+    # The entry document must be revalidated so a new deployment is picked up safely.
+    location = /index.html {
+        add_header Cache-Control "no-cache" always;
+    }
+
+    # SPA fallback for client-side routes.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

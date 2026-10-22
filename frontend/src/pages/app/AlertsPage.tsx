@@ -24,7 +24,12 @@ import { Button } from '../../components/ui/button'
 import { Skeleton } from '../../components/ui/skeleton'
 import { Switch } from '../../components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
-import { alertConditionSymbol, alertRuleTypeLabel, logicOperatorLabel } from '../../features/alerts/labels'
+import {
+  alertConditionSymbol,
+  alertRuleTypeLabel,
+  logRuleSummary,
+  logicOperatorLabel,
+} from '../../features/alerts/labels'
 import { metricLabel } from '../../features/metrics/catalog'
 import { useCanManage } from '../../features/organizations/useCanManage'
 
@@ -65,7 +70,10 @@ export default function AlertsPage() {
       return healthCheckNames.get(checkId) ?? `Health check #${rule.target}`
     }
     const appName = rule.applicationId === null ? 'Unknown application' : applicationNames.get(rule.applicationId) ?? `Application #${rule.applicationId}`
-    return `${appName} · ${metricLabel(rule.target)}`
+    if (rule.type === 'LOG') {
+      return `${appName} - Logs`
+    }
+    return `${appName} - ${metricLabel(rule.target)}`
   }
 
   const openCreate = () => {
@@ -108,7 +116,9 @@ export default function AlertsPage() {
         <div className="space-y-2">
           <p className="section-tag">Alerting</p>
           <h1 className="font-display text-2xl font-semibold text-slate-100">Alerts</h1>
-          <p className="text-sm text-slate-400">Rules that open an incident when a metric or health check breaches.</p>
+          <p className="text-sm text-slate-400">
+            Rules that open an incident when a metric, log query, or health check breaches.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {canManage ? (
@@ -189,9 +199,11 @@ export default function AlertsPage() {
                     <TableCell className="whitespace-nowrap">
                       {rule.type === 'HEALTH_CHECK'
                         ? 'Down or Timeout'
-                        : rule.conditions.length > 1
-                          ? `${rule.conditions.length} conditions · ${logicOperatorLabel(rule.logicOperator)}`
-                          : `${alertConditionSymbol(rule.condition)} ${rule.threshold}`}
+                        : rule.type === 'LOG'
+                          ? logRuleSummary(rule)
+                          : rule.conditions.length > 1
+                            ? `${rule.conditions.length} conditions / ${logicOperatorLabel(rule.logicOperator)}`
+                            : `${alertConditionSymbol(rule.condition)} ${rule.threshold}`}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">{`${rule.durationMinutes} min`}</TableCell>
                     <TableCell>
