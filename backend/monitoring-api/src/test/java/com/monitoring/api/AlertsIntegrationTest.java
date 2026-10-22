@@ -2,10 +2,12 @@ package com.monitoring.api;
 
 import com.monitoring.alerts.dto.response.AlertIncidentResponse;
 import com.monitoring.alerts.dto.response.AlertRuleResponse;
+import com.monitoring.alerts.dto.response.LogCountPreviewResponse;
 import com.monitoring.alerts.dto.request.AlertConditionRequest;
 import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
 import com.monitoring.alerts.dto.request.CreateMaintenanceWindowRequest;
 import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
+import com.monitoring.alerts.dto.request.PreviewLogCountRequest;
 import com.monitoring.alerts.dto.request.UpdateMaintenanceWindowRequest;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertRuleType;
@@ -23,8 +25,12 @@ import com.monitoring.alerts.repository.NotificationChannelRepository;
 import com.monitoring.alerts.service.AlertEvaluationService;
 import com.monitoring.alerts.service.AlertService;
 import com.monitoring.alerts.service.MaintenanceWindowService;
+import com.monitoring.collector.entity.LogEvent;
+import com.monitoring.collector.entity.LogLevel;
 import com.monitoring.collector.entity.MetricSample;
+import com.monitoring.collector.repository.LogEventRepository;
 import com.monitoring.collector.repository.MetricSampleRepository;
+import com.monitoring.collector.service.LogQueryService;
 import com.monitoring.healthcheck.dto.request.CreateHealthCheckRequest;
 import com.monitoring.healthcheck.dto.response.HealthCheckResponse;
 import com.monitoring.healthcheck.entity.HealthCheckMethod;
@@ -101,6 +107,12 @@ class AlertsIntegrationTest {
     private MetricSampleRepository metricSampleRepository;
 
     @Autowired
+    private LogEventRepository logEventRepository;
+
+    @Autowired
+    private LogQueryService logQueryService;
+
+    @Autowired
     private HealthCheckService healthCheckService;
 
     @Autowired
@@ -115,6 +127,7 @@ class AlertsIntegrationTest {
         incidentRepository.deleteAll();
         ruleRepository.deleteAll();
         channelRepository.deleteAll();
+        logEventRepository.deleteAll();
         metricSampleRepository.deleteAll();
         healthCheckResultRepository.deleteAll();
         healthCheckConfigRepository.deleteAll();
@@ -139,6 +152,134 @@ class AlertsIntegrationTest {
                 .durationMinutes(1)
                 .active(true)
                 .build());
+    }
+
+    private AlertRuleResponse createLogRule(long organizationId, long applicationId) {
+        return alertService.createRule(organizationId, CreateAlertRuleRequest.builder()
+                .name("Checkout timeouts")
+                .applicationId(applicationId)
+                .type(AlertRuleType.LOG)
+                .logLevel(LogLevel.ERROR)
+                .logQuery("timeout")
+                .windowMinutes(5)
+                .comparison(AlertCondition.GREATER_OR_EQUAL)
+                .countThreshold(2L)
+                .durationMinutes(1)
+                .active(true)
+                .build());
+    }
+
+    private void saveLog(Application application, LogLevel level, String message, Instant timestamp) {
+        logEventRepository.save(LogEvent.builder()
+                .application(application)
+                .level(level)
+                .message(message)
+                .timestamp(timestamp)
+                .receivedAt(timestamp)
+                .build());
+    }
+
+    @Test
+    void logRuleCountsOnlyMatchingLogsInWindowAndFires() {
+        Application application = createApplication(OWNER_ID, "checkout");
+        Application foreign = createApplication(OTHER_ID, "foreign");
+        saveLog(application, LogLevel.ERROR, "database timeout", NOW.minusSeconds(60));
+        saveLog(application, LogLevel.ERROR, "timeout reading cache", NOW.minusSeconds(30));
+        saveLog(application, LogLevel.INFO, "timeout is expected here", NOW.minusSeconds(20));
+        saveLog(application, LogLevel.ERROR, "unrelated failure", NOW.minusSeconds(10));
+        saveLog(application, LogLevel.ERROR, "timeout outside window", NOW.minusSeconds(400));
+        saveLog(foreign, LogLevel.ERROR, "timeout from another tenant", NOW.minusSeconds(20));
+
+        AlertRuleResponse rule = createLogRule(OWNER_ID, application.getId());
+
+        assertTrue(evaluationService.evaluate(rule.getId(), NOW).isEmpty());
+        var event = evaluationService.evaluate(rule.getId(), NOW.plusSeconds(61));
+
+        assertTrue(event.isPresent());
+        assertEquals(IncidentStatus.FIRING, event.get().status());
+        assertEquals(2.0, event.get().observedValue());
+        assertEquals(2L, event.get().logDetails().observedCount());
+        assertEquals(LogLevel.ERROR, event.get().logDetails().level());
+        assertEquals("timeout", event.get().logDetails().query());
+        assertEquals(5, event.get().logDetails().windowMinutes());
+        assertEquals("checkout", event.get().logDetails().applicationName());
+
+        AlertIncidentResponse incident = alertService.listIncidents(OWNER_ID, null).get(0);
+        assertEquals(AlertRuleType.LOG, incident.getRuleType());
+        assertEquals(application.getId(), incident.getApplicationId());
+        assertEquals(5, incident.getWindowMinutes());
+    }
+
+    @Test
+    void logRuleCannotUseAnotherTenantsApplication() {
+        Application foreign = createApplication(OTHER_ID, "foreign");
+
+        assertThrows(com.monitoring.apps.exception.ApplicationAccessDeniedException.class,
+                () -> createLogRule(OWNER_ID, foreign.getId()));
+    }
+
+    @Test
+    void logRuleResolvesWhenCountDropsBelowThreshold() {
+        Application application = createApplication(OWNER_ID, "checkout");
+        saveLog(application, LogLevel.ERROR, "database timeout", NOW.minusSeconds(30));
+        saveLog(application, LogLevel.ERROR, "timeout reading cache", NOW.minusSeconds(20));
+        AlertRuleResponse rule = createLogRule(OWNER_ID, application.getId());
+
+        assertTrue(evaluationService.evaluate(rule.getId(), NOW).isEmpty());
+        assertEquals(IncidentStatus.FIRING,
+                evaluationService.evaluate(rule.getId(), NOW.plusSeconds(61)).orElseThrow().status());
+
+        var recovery = evaluationService.evaluate(rule.getId(), NOW.plusSeconds(400));
+
+        assertTrue(recovery.isPresent());
+        assertEquals(IncidentStatus.RESOLVED, recovery.get().status());
+        assertEquals(0L, recovery.get().logDetails().observedCount());
+        assertEquals(IncidentStatus.RESOLVED,
+                alertService.listIncidents(OWNER_ID, null).get(0).getStatus());
+    }
+
+    @Test
+    void logRuleCountEscapesLikeWildcards() {
+        Application application = createApplication(OWNER_ID, "checkout");
+        Instant from = NOW.minusSeconds(300);
+        saveLog(application, LogLevel.ERROR, "100% timeout", NOW.minusSeconds(30));
+        saveLog(application, LogLevel.ERROR, "100x timeout", NOW.minusSeconds(20));
+
+        long literal = logQueryService.countLogs(
+                OWNER_ID, application.getId(), LogLevel.ERROR, "100% timeout", from, NOW);
+        long patternWouldMatch = logQueryService.countLogs(
+                OWNER_ID, application.getId(), LogLevel.ERROR, "100x timeout", from, NOW);
+
+        assertEquals(1, literal);
+        assertEquals(1, patternWouldMatch);
+    }
+
+    @Test
+    void logPreviewCountsCurrentWindowAndIsTenantScoped() {
+        Application application = createApplication(OWNER_ID, "checkout");
+        Instant now = Instant.now();
+        saveLog(application, LogLevel.ERROR, "timeout one", now.minusSeconds(30));
+        saveLog(application, LogLevel.ERROR, "timeout two", now.minusSeconds(20));
+        saveLog(application, LogLevel.INFO, "timeout three", now.minusSeconds(10));
+        saveLog(application, LogLevel.ERROR, "timeout too old", now.minusSeconds(600));
+
+        LogCountPreviewResponse preview = alertService.previewLogCount(OWNER_ID,
+                PreviewLogCountRequest.builder()
+                        .applicationId(application.getId())
+                        .logLevel(LogLevel.ERROR)
+                        .logQuery("timeout")
+                        .windowMinutes(5)
+                        .build());
+
+        assertEquals(2, preview.count());
+        assertEquals(5, preview.windowMinutes());
+
+        assertThrows(com.monitoring.apps.exception.ApplicationAccessDeniedException.class,
+                () -> alertService.previewLogCount(OTHER_ID, PreviewLogCountRequest.builder()
+                        .applicationId(application.getId())
+                        .logLevel(LogLevel.ERROR)
+                        .windowMinutes(5)
+                        .build()));
     }
 
     @Test

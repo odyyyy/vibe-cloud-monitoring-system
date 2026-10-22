@@ -11,6 +11,10 @@ import com.monitoring.collector.exception.SavedLogViewAccessDeniedException;
 import com.monitoring.collector.exception.SavedLogViewLimitExceededException;
 import com.monitoring.collector.exception.SavedLogViewNotFoundException;
 import com.monitoring.collector.exception.InvalidExportFormatException;
+import com.monitoring.collector.exception.InvalidLogFacetRequestException;
+import com.monitoring.collector.exception.LogFacetRateLimitedException;
+import com.monitoring.collector.exception.LogFacetTimeoutException;
+import com.monitoring.retention.exception.InvalidRetentionPolicyException;
 import com.monitoring.collector.exception.InvalidTraceException;
 import com.monitoring.collector.exception.TraceNotFoundException;
 import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
@@ -23,6 +27,7 @@ import com.monitoring.dashboards.exception.WidgetLimitExceededException;
 import com.monitoring.dashboards.exception.WidgetNotFoundException;
 import com.monitoring.alerts.exception.AlertIncidentAccessDeniedException;
 import com.monitoring.alerts.exception.AlertIncidentNotFoundException;
+import com.monitoring.alerts.exception.AlertPreviewRateLimitedException;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
 import com.monitoring.alerts.exception.AlertRuleNotFoundException;
 import com.monitoring.alerts.exception.InvalidAlertRuleException;
@@ -31,6 +36,7 @@ import com.monitoring.alerts.exception.InvalidIncidentStateException;
 import com.monitoring.alerts.exception.InvalidMaintenanceWindowException;
 import com.monitoring.alerts.exception.InvalidNotificationChannelException;
 import com.monitoring.alerts.exception.InvalidWebhookUrlException;
+import com.monitoring.alerts.exception.LogAlertRuleLimitExceededException;
 import com.monitoring.alerts.exception.MaintenanceWindowAccessDeniedException;
 import com.monitoring.alerts.exception.MaintenanceWindowNotFoundException;
 import com.monitoring.alerts.exception.NotificationChannelAccessDeniedException;
@@ -38,9 +44,18 @@ import com.monitoring.alerts.exception.NotificationChannelNotFoundException;
 import com.monitoring.healthcheck.exception.HealthCheckAccessDeniedException;
 import com.monitoring.healthcheck.exception.HealthCheckNotFoundException;
 import com.monitoring.healthcheck.exception.InvalidTargetUrlException;
+import com.monitoring.statuspage.exception.InvalidStatusPageException;
+import com.monitoring.statuspage.exception.StatusPageAccessDeniedException;
+import com.monitoring.statuspage.exception.StatusPageLimitExceededException;
+import com.monitoring.statuspage.exception.StatusPageNotFoundException;
+import com.monitoring.statuspage.exception.StatusPageRateLimitedException;
+import com.monitoring.statuspage.exception.StatusPageSlugConflictException;
 import com.monitoring.apps.exception.ApplicationAccessDeniedException;
 import com.monitoring.apps.exception.ApplicationNameConflictException;
 import com.monitoring.apps.exception.ApplicationNotFoundException;
+import com.monitoring.revisions.exception.ConfigRevisionNotFoundException;
+import com.monitoring.revisions.exception.ConfigRevisionRestoreConflictException;
+import com.monitoring.revisions.exception.InvalidConfigSnapshotException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -87,10 +102,26 @@ public class ApiExceptionHandler {
                 .body(new ApiError(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
     }
 
-    @ExceptionHandler({DashboardNotFoundException.class, WidgetNotFoundException.class})
+    @ExceptionHandler({DashboardNotFoundException.class, WidgetNotFoundException.class,
+            ConfigRevisionNotFoundException.class})
     public ResponseEntity<ApiError> handleDashboardNotFound(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
+    }
+
+    /** A snapshot cannot be restored because a referenced resource is missing or foreign. */
+    @ExceptionHandler(ConfigRevisionRestoreConflictException.class)
+    public ResponseEntity<ApiError> handleRevisionRestoreConflict(
+            ConfigRevisionRestoreConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(HttpStatus.CONFLICT.value(), ex.getMessage()));
+    }
+
+    /** A stored snapshot does not satisfy the current schema; the resource is left unchanged. */
+    @ExceptionHandler(InvalidConfigSnapshotException.class)
+    public ResponseEntity<ApiError> handleInvalidConfigSnapshot(InvalidConfigSnapshotException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(new ApiError(HttpStatus.UNPROCESSABLE_ENTITY.value(), ex.getMessage()));
     }
 
     @ExceptionHandler(DashboardAccessDeniedException.class)
@@ -117,6 +148,12 @@ public class ApiExceptionHandler {
     }
 
     /** Invalid time range or widget configuration in a public shared-dashboard query. */
+    @ExceptionHandler(InvalidRetentionPolicyException.class)
+    public ResponseEntity<ApiError> handleInvalidRetentionPolicy(InvalidRetentionPolicyException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
+    }
+
     @ExceptionHandler(InvalidSharedQueryException.class)
     public ResponseEntity<ApiError> handleInvalidSharedQuery(InvalidSharedQueryException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -190,10 +227,45 @@ public class ApiExceptionHandler {
      * internal details).
      */
     @ExceptionHandler({ApplicationNameConflictException.class, WidgetLimitExceededException.class,
-            SavedLogViewLimitExceededException.class})
+            SavedLogViewLimitExceededException.class, LogAlertRuleLimitExceededException.class,
+            StatusPageLimitExceededException.class, StatusPageSlugConflictException.class})
     public ResponseEntity<ApiError> handleConflict(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ApiError(HttpStatus.CONFLICT.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(StatusPageNotFoundException.class)
+    public ResponseEntity<ApiError> handleStatusPageNotFound(StatusPageNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(StatusPageAccessDeniedException.class)
+    public ResponseEntity<ApiError> handleStatusPageAccessDenied(StatusPageAccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiError(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidStatusPageException.class)
+    public ResponseEntity<ApiError> handleInvalidStatusPage(InvalidStatusPageException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
+    }
+
+    /** Public status page requests are throttled per client IP; honor the advertised retry delay. */
+    @ExceptionHandler(StatusPageRateLimitedException.class)
+    public ResponseEntity<ApiError> handleStatusPageRateLimited(StatusPageRateLimitedException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", Long.toString(ex.getRetryAfterSeconds()))
+                .body(new ApiError(HttpStatus.TOO_MANY_REQUESTS.value(), ex.getMessage()));
+    }
+
+    /** The per-organization preview budget was exhausted; clients may retry after the delay. */
+    @ExceptionHandler(AlertPreviewRateLimitedException.class)
+    public ResponseEntity<ApiError> handlePreviewRateLimited(AlertPreviewRateLimitedException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", Long.toString(ex.getRetryAfterSeconds()))
+                .body(new ApiError(HttpStatus.TOO_MANY_REQUESTS.value(), ex.getMessage()));
     }
 
     @ExceptionHandler(SavedLogViewNotFoundException.class)
@@ -226,6 +298,31 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiError> handleInvalidExportFormat(InvalidExportFormatException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
+    }
+
+    /** Unknown facet field or an out-of-range facet limit. */
+    @ExceptionHandler(InvalidLogFacetRequestException.class)
+    public ResponseEntity<ApiError> handleInvalidLogFacetRequest(InvalidLogFacetRequestException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
+    }
+
+    /** The per-organization facet budget was exhausted; clients may retry after the delay. */
+    @ExceptionHandler(LogFacetRateLimitedException.class)
+    public ResponseEntity<ApiError> handleLogFacetRateLimited(LogFacetRateLimitedException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", Long.toString(ex.getRetryAfterSeconds()))
+                .body(new ApiError(HttpStatus.TOO_MANY_REQUESTS.value(), ex.getMessage()));
+    }
+
+    /**
+     * The facet aggregation exceeded its statement timeout. The log result list is unaffected,
+     * so the explorer keeps working without facets.
+     */
+    @ExceptionHandler(LogFacetTimeoutException.class)
+    public ResponseEntity<ApiError> handleLogFacetTimeout(LogFacetTimeoutException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ApiError(HttpStatus.SERVICE_UNAVAILABLE.value(), ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

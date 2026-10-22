@@ -33,9 +33,10 @@ spring:
 
 # JWT settings. The secret is mandatory (at least 32 characters) and is provided through
 # the environment; the application refuses to start without it, so tokens are never signed
-# with a publicly known key.
+# with a publicly known key. The empty fallback lets JwtTokenProvider report a clear startup
+# error instead of an unresolved-placeholder error.
 jwt:
-  secret: ${JWT_SECRET}
+  secret: ${JWT_SECRET:}
   expiration: ${JWT_EXPIRATION:86400000}
 
 # Email confirmation and password reset.
@@ -74,7 +75,7 @@ app:
     success-redirect-url: ${APP_SSO_SUCCESS_REDIRECT_URL:http://localhost:3000/sso/callback}
     failure-redirect-url: ${APP_SSO_FAILURE_REDIRECT_URL:http://localhost:3000/login}
 
-# Background telemetry maintenance (downsampling of raw metrics and retention).
+# Background telemetry maintenance (downsampling of raw metrics and per-organization retention).
 # Each job can be disabled independently; retention windows are in days.
 monitoring:
   # Platform self-monitoring (dogfooding). Samples are written through the regular metric
@@ -99,19 +100,38 @@ monitoring:
     raw-retention-hours: ${MONITORING_DOWNSAMPLE_RAW_RETENTION_HOURS:24}
     # Upper bound on rows deleted per statement (short transactions, no table-wide lock).
     batch-size: ${MONITORING_DOWNSAMPLE_BATCH_SIZE:10000}
+  # Per-organization retention of logs, metrics and traces. An organization without a stored
+  # policy uses the defaults below. The max-*-days values are hard API limits, not defaults.
   retention:
     enabled: ${MONITORING_RETENTION_ENABLED:true}
-    # Daily at 02:00.
-    cron: ${MONITORING_RETENTION_CRON:0 0 2 * * *}
-    logs-days: ${MONITORING_RETENTION_LOGS_DAYS:14}
-    metrics-days: ${MONITORING_RETENTION_METRICS_DAYS:90}
-    batch-size: ${MONITORING_RETENTION_BATCH_SIZE:10000}
+    # Hourly, at minute 0.
+    cron: ${MONITORING_RETENTION_CRON:0 0 * * * *}
+    default-logs-days: ${MONITORING_RETENTION_DEFAULT_LOGS_DAYS:14}
+    default-metrics-days: ${MONITORING_RETENTION_DEFAULT_METRICS_DAYS:30}
+    default-traces-days: ${MONITORING_RETENTION_DEFAULT_TRACES_DAYS:7}
+    max-logs-days: ${MONITORING_RETENTION_MAX_LOGS_DAYS:90}
+    max-metrics-days: ${MONITORING_RETENTION_MAX_METRICS_DAYS:365}
+    max-traces-days: ${MONITORING_RETENTION_MAX_TRACES_DAYS:30}
+    # Upper bound on rows deleted per statement (short transactions, no table-wide lock).
+    batch-size: ${MONITORING_RETENTION_BATCH_SIZE:5000}
+    # Upper bound on batches processed per organization and data type per run.
+    max-batches-per-run: ${MONITORING_RETENTION_MAX_BATCHES_PER_RUN:100}
   # Per-application ingestion rate limits (requests per minute), enforced per API key and
   # separately for metrics and logs. Set monitoring.quotas.enabled=false to disable.
   quotas:
     enabled: ${MONITORING_QUOTAS_ENABLED:true}
     metrics-per-minute: ${MONITORING_QUOTAS_METRICS_PER_MINUTE:10000}
     logs-per-minute: ${MONITORING_QUOTAS_LOGS_PER_MINUTE:5000}
+  # Log facets (Top-N aggregation). The aggregation is more expensive than a normal log query:
+  # the JSON context fields are counted over the most recent max-scan-rows matching rows, the
+  # statement timeout aborts a run that takes too long, and the requests are rate limited per
+  # organization.
+  logs:
+    facets:
+      max-scan-rows: ${MONITORING_LOGS_FACETS_MAX_SCAN_ROWS:50000}
+      timeout-ms: ${MONITORING_LOGS_FACETS_TIMEOUT_MS:2000}
+      max-requests: ${MONITORING_LOGS_FACETS_MAX_REQUESTS:30}
+      window-seconds: ${MONITORING_LOGS_FACETS_WINDOW_SECONDS:60}
   # Usage tracking and quota visualization. The rollup job recomputes daily per-organization
   # telemetry totals; it can be disabled with monitoring.usage.enabled=false. Quotas are the
   # monthly plan limits shown on the Usage page (items per calendar month, UTC).
@@ -133,6 +153,14 @@ monitoring:
     evaluation-pool-size: ${MONITORING_ALERTS_EVALUATION_POOL_SIZE:4}
     evaluation-queue-capacity: ${MONITORING_ALERTS_EVALUATION_QUEUE_CAPACITY:100}
     evaluation-timeout-ms: ${MONITORING_ALERTS_EVALUATION_TIMEOUT_MS:120000}
+    # Log-count preview is a read-only, tenant-scoped COUNT query; bound its cost per organization.
+    preview:
+      max-requests: ${MONITORING_ALERTS_PREVIEW_MAX_REQUESTS:30}
+      window-seconds: ${MONITORING_ALERTS_PREVIEW_WINDOW_SECONDS:60}
+    # Customer-facing base URL used to build Log Explorer links in notifications.
+    # Leave blank in local development to omit the link instead of emitting localhost URLs.
+    frontend:
+      base-url: ${MONITORING_ALERTS_FRONTEND_BASE_URL:}
     webhook:
       pool-size: ${MONITORING_ALERTS_WEBHOOK_POOL_SIZE:2}
       queue-capacity: ${MONITORING_ALERTS_WEBHOOK_QUEUE_CAPACITY:100}
@@ -153,15 +181,27 @@ monitoring:
     notifications:
       min-interval-seconds: ${MONITORING_ALERTS_NOTIFICATIONS_MIN_INTERVAL_SECONDS:900}
 
-# Actuator. Health details are hidden from anonymous clients; the dev profile shows them.
+# Actuator. Only health and Prometheus endpoints are exposed. Health details are hidden
+# from anonymous clients; the dev profile shows them. Kubernetes-style liveness and
+# readiness probes are enabled separately: readiness includes database connectivity, so a
+# lost MySQL connection turns the readiness probe DOWN while the process stays alive.
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus
+        include: health,prometheus
   endpoint:
     health:
       show-details: never
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+          show-details: never
+        readiness:
+          include: readinessState,db
+          show-details: never
   metrics:
     tags:
       application: ${spring.application.name}
@@ -196,3 +236,21 @@ management:
   endpoint:
     health:
       show-details: always
+      group:
+        liveness:
+          show-details: always
+        readiness:
+          show-details: always
+
+---
+# Production profile. Required secrets are validated at startup by ProdSecretValidator:
+# missing, weak or example JWT secrets fail fast instead of silently signing real tokens.
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+management:
+  endpoint:
+    health:
+      show-details: never

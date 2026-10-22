@@ -50,10 +50,28 @@
             <artifactId>monitoring-alerts</artifactId>
         </dependency>
 
+        <!-- Configuration revision history exceptions and DTOs. -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-revisions</artifactId>
+        </dependency>
+
         <!-- Audit logging module -->
         <dependency>
             <groupId>com.monitoring</groupId>
             <artifactId>monitoring-audit</artifactId>
+        </dependency>
+
+        <!-- Public status pages. -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-statuspages</artifactId>
+        </dependency>
+
+        <!-- Data retention policies and scheduled purge. -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-retention</artifactId>
         </dependency>
 
         <!-- Auth module -->
