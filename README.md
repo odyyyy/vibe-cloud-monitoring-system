@@ -117,11 +117,13 @@ Frontend запрашивает GET /api/v1/metrics/query и рисует гра
 
 Для запуска «всё в Docker»:
 - Docker Engine 24+ и Docker Compose v2
+- Свободные порты `3000` (frontend) и `8080` (backend); их можно изменить через
+  `FRONTEND_PORT` / `BACKEND_PORT` в `.env`
 
 Для локальной разработки без Docker:
 - JDK 21
 - Maven 3.9+ (или входящий `mvnw`/`mvnw.cmd`)
-- Node.js 18+ и npm
+- Node.js 22 LTS и npm
 - Go 1.26+ (только для агента)
 
 ---
@@ -139,20 +141,25 @@ cloud-monitoring/
 │   ├── monitoring-audit/        # аудит-лог (immutable, read-only API)
 │   ├── monitoring-common/       # общие DTO/ошибки без доменных зависимостей
 │   ├── monitoring-api/          # entry point (порт 8080)
-│   ├── docker/mysql/initdb/     # init-скрипты MySQL
-│   ├── Dockerfile
+│   ├── Dockerfile               # multi-stage: Maven -> JRE 21, non-root
 │   ├── pom.xml
-│   └── .env                     # пример конфигурации (плейсхолдеры)
+│   └── .env                     # переменные для запуска backend без Docker (ignored)
 ├── frontend/                    # React + Vite (порт 3000)
 │   ├── src/
-│   ├── Dockerfile.dev
+│   ├── Dockerfile               # multi-stage: Node -> unprivileged nginx
+│   ├── nginx/default.conf.template
 │   └── package.json
 ├── agent/                       # Go-агент
 │   ├── cmd/agent/               # entry point (package main)
 │   ├── internal/                # config, transport, metrics, logs, receiver
 │   ├── config.yaml              # пример конфигурации (плейсхолдеры)
 │   └── Dockerfile
-├── compose.yaml                 # mysql + app + frontend
+├── scripts/                     # backup-db.sh / restore-db.sh
+├── docs/operations.md           # health probes, бэкапы, секреты
+├── .github/workflows/ci.yml     # CI: backend, frontend, agent, docker builds
+├── compose.yaml                 # production-style стек (mysql + backend + nginx)
+├── compose.dev.yaml             # dev override (Vite + HMR, MySQL на хосте)
+├── .env.example                 # все переменные окружения (плейсхолдеры)
 ├── AGENTS.md                    # правила и гайдлайны разработки
 └── TASKS.md                     # план задач
 ```
@@ -161,39 +168,67 @@ cloud-monitoring/
 
 ## Быстрый старт через Docker Compose
 
-`compose.yaml` поднимает MySQL, backend и frontend для разработки.
+`compose.yaml` поднимает production-style стек: MySQL, backend и frontend
+(собранный React-бандл в nginx). MySQL **не публикует** порт на хост.
 
 ```bash
-# 1. Отредактируйте backend/.env — Compose читает этот файл (env_file) для mysql и app.
-#    Значения по умолчанию подходят для локального запуска, но JWT_SECRET
-#    обязательно смените перед публичным запуском.
+# 1. Скопируйте пример конфигурации и замените плейсхолдеры.
+#    JWT_SECRET: openssl rand -base64 48
+cp .env.example .env
 
-# 2. Поднимите сервисы
-docker compose up -d mysql app frontend
-
-# либо с авто-перезагрузкой при изменениях (watch mode, Compose v2.22+)
-docker compose watch
+# 2. Соберите и запустите стек.
+docker compose up --build -d
+docker compose ps
 ```
 
 После старта:
 
 | Сервис | URL |
 | --- | --- |
-| Frontend (Vite dev) | http://localhost:3000 |
+| Frontend (nginx) | http://localhost:3000 |
 | Backend API | http://localhost:8080 |
 | Swagger UI | http://localhost:8080/swagger-ui.html |
-| Actuator health | http://localhost:8080/actuator/health |
-| MySQL | localhost:3306 (база `monitoring_db`) |
+| Liveness probe | http://localhost:8080/actuator/health/liveness |
+| Readiness probe (включает БД) | http://localhost:8080/actuator/health/readiness |
+| Prometheus | http://localhost:8080/actuator/prometheus (только напрямую в backend, не через frontend) |
+| MySQL | не опубликован; в dev-стеке публикуется через `compose.dev.yaml` |
 
-Остановить и удалить данные:
+Первый аккаунт и `PLATFORM_ADMIN`:
+
+1. Откройте http://localhost:3000 и зарегистрируйтесь.
+2. В `.env.example` включён `APP_AUTH_LOG_EMAILS=true`, поэтому ссылка подтверждения
+   печатается в лог: `docker compose logs backend | grep "verify-email"`. Для продакшена
+   выключите этот режим и настройте реальную отправку почты.
+3. Подтвердите email и войдите.
+4. Чтобы выдать аккаунту роль `PLATFORM_ADMIN`, укажите его username в
+   `MONITORING_PLATFORM_ADMIN_USERNAME` и пересоздайте backend:
+   `docker compose up -d --force-recreate backend`. Роль также перепроверяется
+   периодически (`MONITORING_PLATFORM_ADMIN_SYNC_INTERVAL_MS`).
+
+Запуск агента против стека: создайте Application в UI, скопируйте одноразовый API-ключ,
+положите его в `AGENT_API_KEY` в `.env` и выполните:
+
+```bash
+docker compose --profile agent up -d agent
+```
+
+Остановить стек и удалить данные:
 
 ```bash
 docker compose down          # остановить
-docker compose down -v       # остановить и удалить volume с данными MySQL
+docker compose down -v       # остановить и удалить volume с данными MySQL и буфером агента
 ```
 
-> Агент в compose отключён и вынесен за профиль `agent` (см. закомментированный блок
-> в `compose.yaml`). Смотрите [Установка агента](#установка-агента).
+> `compose.yaml` — production-style стек. `compose.dev.yaml` — override для разработки:
+> Vite dev-сервер с hot reload, публикация MySQL на хост и пересборка backend/agent при
+> изменениях. Оба файла читают только корневой `.env`:
+>
+> ```bash
+> docker compose -f compose.yaml -f compose.dev.yaml up --build --watch
+> ```
+>
+> Бэкапы, health probes и работа с секретами описаны в
+> [`docs/operations.md`](docs/operations.md).
 
 ---
 
@@ -278,19 +313,22 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 
 ## Конфигурация окружения
 
-### Backend (`backend/.env`)
+### Корневой `.env` (production-style compose)
 
-Файл содержит **пример** конфигурации. Значения по умолчанию безопасны только для
-локального запуска; перед эксплуатацией их необходимо заменить.
+Шаблон — `.env.example`. Значения по умолчанию безопасны только для локального запуска;
+перед эксплуатацией их необходимо заменить. Оба compose-файла читают этот `.env`.
+`backend/.env` нужен только для запуска backend без Docker.
 
 | Переменная | Назначение | Пример |
 | --- | --- | --- |
-| `MYSQL_ROOT_PASSWORD` | Пароль root MySQL | `rootpassword` |
+| `FRONTEND_PORT` / `BACKEND_PORT` | Опубликованные порты frontend/backend | `3000` / `8080` |
+| `MYSQL_ROOT_PASSWORD` | Пароль root MySQL | `<generated-password>` |
 | `MYSQL_DATABASE` | Имя базы | `monitoring_db` |
-| `MYSQL_USER` / `MYSQL_PASSWORD` | Пользователь приложения | `admin` / `admin_password` |
+| `MYSQL_USER` / `MYSQL_PASSWORD` | Пользователь приложения | `<db-user>` / `<generated-password>` |
 | `SPRING_DATASOURCE_URL` | JDBC URL | `jdbc:mysql://mysql:3306/...` |
-| `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` | Учётные данные БД | |
-| `JWT_SECRET` | Секрет подписи JWT (обязателен, мин. 32 символа) | `change-me-...` |
+| `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` | Учётные данные БД (должны совпадать с `MYSQL_*`) | |
+| `SPRING_PROFILES_ACTIVE` | `prod` включает проверку секретов на старте; пусто для local | `` |
+| `JWT_SECRET` | Секрет подписи JWT (обязателен, мин. 32 байта; в `prod` плейсхолдер запрещён) | `<openssl rand -base64 48>` |
 | `JWT_EXPIRATION` | TTL access-токена, мс | `86400000` |
 | `SPRING_H2_CONSOLE_ENABLED` | Включить H2 console (по умолчанию выключено; включайте только в dev) | `false` |
 | `SPRING_JPA_HIBERNATE_DDL_AUTO` | Режим схемы Hibernate (схему создаёт Flyway) | `validate` |
@@ -313,20 +351,39 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `MONITORING_DOWNSAMPLE_CRON` | Расписание downsampling (Spring cron) | `0 5 * * * *` |
 | `MONITORING_DOWNSAMPLE_RAW_RETENTION_HOURS` | Возраст сырых метрик, после которого их сворачивают, часы | `24` |
 | `MONITORING_DOWNSAMPLE_BATCH_SIZE` | Размер батча удаления сырых метрик | `10000` |
-| `MONITORING_RETENTION_ENABLED` | Включить job удаления устаревших логов и агрегатов | `true` |
-| `MONITORING_RETENTION_CRON` | Расписание retention-очистки (Spring cron) | `0 0 2 * * *` |
-| `MONITORING_RETENTION_LOGS_DAYS` | Срок хранения логов, дней | `14` |
-| `MONITORING_RETENTION_METRICS_DAYS` | Срок хранения агрегатов метрик, дней | `90` |
-| `MONITORING_RETENTION_BATCH_SIZE` | Размер батча удаления устаревших записей | `10000` |
+| `MONITORING_RETENTION_ENABLED` | Включить job per-organization очистки логов, метрик и трейсов | `true` |
+| `MONITORING_RETENTION_CRON` | Расписание retention-очистки (Spring cron; `-` отключает) | `0 0 * * * *` |
+| `MONITORING_RETENTION_DEFAULT_LOGS_DAYS` | Срок хранения логов по умолчанию (если организация не сохранила политику) | `14` |
+| `MONITORING_RETENTION_DEFAULT_METRICS_DAYS` | Срок хранения метрик по умолчанию | `30` |
+| `MONITORING_RETENTION_DEFAULT_TRACES_DAYS` | Срок хранения трейсов по умолчанию | `7` |
+| `MONITORING_RETENTION_MAX_LOGS_DAYS` | Максимальный срок хранения логов, доступный организации | `90` |
+| `MONITORING_RETENTION_MAX_METRICS_DAYS` | Максимальный срок хранения метрик | `365` |
+| `MONITORING_RETENTION_MAX_TRACES_DAYS` | Максимальный срок хранения трейсов | `30` |
+| `MONITORING_RETENTION_BATCH_SIZE` | Размер батча удаления устаревших записей | `5000` |
+| `MONITORING_RETENTION_MAX_BATCHES_PER_RUN` | Максимум батчей на организацию и тип данных за один запуск | `100` |
+| `MONITORING_ALERTS_FRONTEND_BASE_URL` | Базовый URL фронтенда для deep-link в уведомлениях; пусто — ссылки не добавляются | `https://app.example.com` |
+| `MONITORING_ALERTS_PREVIEW_MAX_REQUESTS` | Лимит запросов preview-log-count на организацию в окне | `30` |
+| `MONITORING_ALERTS_PREVIEW_WINDOW_SECONDS` | Длина окна rate limit для preview-log-count, секунды | `60` |
 | `MONITORING_PLATFORM_METRICS_ENABLED` | Сбор собственных метрик платформы (dogfooding) | `true` |
 | `MONITORING_PLATFORM_ADMIN_USERNAME` | Логин пользователя, которому на старте выдаётся роль `PLATFORM_ADMIN` (пусто — платформенного администратора нет) | |
+| `MONITORING_PLATFORM_ADMIN_SYNC_INTERVAL_MS` | Как часто перепроверять назначение `PLATFORM_ADMIN` | `300000` |
+| `AGENT_API_KEY` | API-ключ приложения для optional `agent` profile; реальный ключ не коммитить | `app_...` |
+| `AGENT_INTERVAL_SECONDS` | Интервал сбора метрик агентом в Compose | `15` |
+| `DB_NAME` / `DB_USER` / `DB_PASSWORD` | Переопределение БД для `scripts/backup-db.sh` и `restore-db.sh`; по умолчанию берутся из `MYSQL_*` | |
+| `DB_HOST` / `DB_PORT` | Если заданы, backup/restore используют локальный `mysqldump`/`mysql` вместо Compose | не заданы |
 
 ### Frontend
 
+В production-образе браузер всегда обращается к тому же origin по пути `/api`; nginx
+проксирует его на backend. Upstream задаётся **во время запуска контейнера** переменной
+`BACKEND_URL` (по умолчанию `http://backend:8080`), поэтому пересборка frontend для
+другого окружения не требуется. `/actuator/*` через nginx не проксируется.
+
 | Переменная | Назначение | По умолчанию |
 | --- | --- | --- |
-| `VITE_API_BASE_URL` | Базовый путь API | `/api` |
-| `VITE_BACKEND_PROXY_TARGET` / `VITE_BACKEND_URL` | Куда проксировать `/api` в dev | `http://localhost:8080` |
+| `BACKEND_URL` | Runtime-адрес backend для nginx `/api` proxy | `http://backend:8080` |
+| `VITE_API_BASE_URL` | Базовый путь API, вшиваемый в бандл при сборке | `/api` |
+| `VITE_BACKEND_PROXY_TARGET` / `VITE_BACKEND_URL` | Куда проксировать `/api` в dev (Vite) | `http://localhost:8080` |
 
 > Значения `VITE_*` попадают в клиентский бандл и **не являются секретами**.
 
@@ -352,6 +409,13 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `config.yaml` / `AGENT_RECEIVER_ENABLED` | `receiver.enabled` | Включить локальный приём custom-метрик (по умолчанию `false`) |
 | `config.yaml` / `AGENT_RECEIVER_PROTOCOL` | `receiver.protocol` | `statsd` (UDP) или `http` |
 | `config.yaml` / `AGENT_RECEIVER_PORT` | `receiver.port` | Порт receiver'а (по умолчанию 8125 для StatsD, 8080 для HTTP) |
+| `config.yaml` / `AGENT_BUFFER_ENABLED` | `buffer.enabled` | Дисковый буфер неотправленных батчей (по умолчанию `true`) |
+| `config.yaml` / `AGENT_BUFFER_DIRECTORY` | `buffer.directory` | Каталог буфера (по умолчанию `/var/lib/monitoring-agent/buffer`) |
+| `config.yaml` / `AGENT_BUFFER_MAX_SIZE_MB` | `buffer.max_size_mb` | Максимальный размер буфера в МБ (по умолчанию 256) |
+| `config.yaml` / `AGENT_BUFFER_MAX_AGE_HOURS` | `buffer.max_age_hours` | Максимальный возраст батча в часах; `0` отключает eviction по возрасту (по умолчанию 24) |
+| `config.yaml` / `AGENT_RETRY_INITIAL_BACKOFF_MS` | `retry.initial_backoff_ms` | Начальная задержка повтора в мс (по умолчанию 1000) |
+| `config.yaml` / `AGENT_RETRY_MAX_BACKOFF_MS` | `retry.max_backoff_ms` | Максимальная задержка повтора в мс (по умолчанию 60000) |
+| `config.yaml` / `AGENT_RETRY_JITTER` | `retry.jitter` | Добавлять случайный jitter к backoff (по умолчанию `true`) |
 | env `NODE_NAME` | — | Ограничить discovery подами этого узла; DaemonSet задаёт автоматически |
 
 ---
@@ -375,6 +439,21 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 `docker0`, `veth*`, `br-*`). Секция `metrics.network.interfaces` в `config.yaml`
 задаёт явный список интерфейсов. Сетевые метрики отправляются как абсолютные
 счётчики — скорости (байты/с, пакеты/с) вычисляет backend при запросе.
+
+### Быстрый запуск в Compose
+
+Если платформа уже поднята через `docker compose`, агент можно запустить в том же
+Compose-проекте (он обратится к `http://backend:8080` по внутренней сети):
+
+```bash
+# После создания Application и получения ключа:
+AGENT_API_KEY="app_..." docker compose --profile agent up -d agent
+docker compose logs -f agent
+```
+
+Либо положите ключ в `.env` (`AGENT_API_KEY=...`) и выполните
+`docker compose --profile agent up -d agent`. Буфер агента сохраняется в named volume
+`agent-buffer`.
 
 ### 1. Получите API-ключ
 
@@ -466,6 +545,54 @@ log_throttling:
   а отброшенные увеличивают счётчик `agent.logs.dropped_total`.
 - Агент отправляет накопленное значение `agent.logs.dropped_total` в облако вместе
   с host-метриками (теги `host` и `version`), поэтому throttling виден на графиках.
+
+### Надёжная доставка: retry и дисковый буфер
+
+Если backend недоступен, сеть пропала или контейнер перезапустили, агент не теряет
+телеметрию:
+
+- Сетевые ошибки, HTTP `5xx` и `429` повторяются с экспоненциальным backoff и
+  jitter. Для `429` учитывается заголовок `Retry-After`.
+- `400`, `401`, `403` и `413` не повторяются: батч отбрасывается, а ошибка
+  логируется. Для `401`/`403` сообщение о неверном или отозванном API-ключе
+  выводится не чаще раза в минуту и не занимает диск.
+- После исчерпания быстрых повторов батч атомарно сохраняется в `buffer.directory`
+  (temp-файл + rename). Фоновый replay-worker отправляет файлы от старых к новым,
+  удаляя каждый только после ответа `2xx`, и не вытесняет live-трафик.
+- При превышении `buffer.max_size_mb` сначала удаляются самые старые батчи; батчи
+  старше `buffer.max_age_hours` также удаляются. Corrupt/partial файлы при старте и
+  во время replay удаляются.
+- Файлы создаются с правами `0600`, каталог — `0700`. API-ключ в буфер **не**
+  записывается: сохраняется только payload, ключ добавляется при отправке.
+- Если каталог недоступен для записи, агент пишет понятную ошибку и продолжает
+  работу в memory-only режиме, не падая.
+
+Собственные метрики агента: `agent.buffer.size_bytes`, `agent.buffer.queued_batches`,
+`agent.buffer.dropped_total`, `agent.send.retries_total`, `agent.send.failures_total`.
+
+```yaml
+buffer:
+  enabled: true
+  directory: "/var/lib/monitoring-agent/buffer"
+  max_size_mb: 256
+  max_age_hours: 24
+retry:
+  initial_backoff_ms: 1000
+  max_backoff_ms: 60000
+  jitter: true
+```
+
+Для контейнера смонтируйте writable volume в `buffer.directory`, иначе буфер
+исчезнет при пересоздании контейнера:
+
+```bash
+docker run -d \
+  --name monitoring-agent \
+  -e AGENT_BACKEND_URL="https://your-cloud.example.com" \
+  -e AGENT_API_KEY="app_your_api_key_here" \
+  -v vibemonitoring-agent-buffer:/var/lib/monitoring-agent/buffer \
+  vibemonitoring/agent:latest
+```
 
 Запуск контейнера с монтированием каталога логов и writable volume для state:
 
@@ -812,14 +939,63 @@ Content-Type: application/json
 | --- | --- | --- | --- |
 | `POST` | `/api/v1/ingest/logs` | Приём батча логов (макс. 1000 событий) | `X-API-Key` |
 | `GET` | `/api/v1/logs` | Постраничный поиск логов | JWT (владелец приложения) |
+| `GET` | `/api/v1/logs/facets` | Top-N значений выбранных полей для текущего фильтра | JWT (владелец приложения) |
 
 Параметры `GET /api/v1/logs`: `applicationId` (обязателен), `level`
 (`DEBUG|INFO|WARN|ERROR`), `from`, `to` (ISO-8601 UTC, обязательны), `searchText`
-(до 200 символов), `page` (>= 0), `size` (1..100). Диапазон не более 30 дней.
+(до 200 символов), `page` (>= 0), `size` (1..100). Точные фильтры `host`, `service` и
+`namespace` (до 256 символов) сужают выборку до одного значения соответствующего поля в
+JSON-документе `context` — их выставляет клик по фасету. Диапазон не более 30 дней.
 
 Ответ имеет форму `{ content, totalElements, totalPages, page, size }` (собственный
 `PageResponse`, не Spring Data `Page`); `content[]` содержит
 `{ id, applicationId, timestamp, level, message, context }`.
+
+### Фасеты логов — `/api/v1/logs/facets`
+
+`GET /api/v1/logs/facets?fields=level,host,service,k8s.namespace&limit=5` принимает те же
+фильтры и диапазон времени, что и `GET /api/v1/logs`, и возвращает Top-N значений для
+каждого запрошенного поля:
+
+```json
+{
+  "facets": {
+    "host": [
+      { "value": "server-1", "count": 150 },
+      { "value": "server-2", "count": 42 }
+    ]
+  },
+  "approximate": false,
+  "scanLimit": 50000
+}
+```
+
+Правила:
+
+- `fields` — белый список `level`, `host`, `service`, `k8s.namespace`; не более 4 полей за
+  запрос, неизвестное имя → HTTP 400. Имя поля используется только как ключ поиска по
+  белому списку и никогда не попадает в SQL.
+- `limit` — 1..10, по умолчанию 5. Значения отсортированы по убыванию `count`, при равных
+  счётчиках — по значению. Пустые и отсутствующие значения не попадают в ответ.
+- `level` — реальная индексированная колонка, поэтому считается через `GROUP BY` по всей
+  выборке и всегда точен.
+- `host`, `service`, `k8s.namespace` лежат в JSON-документе `context`. Индекса для них нет,
+  поэтому агрегация идёт по последним `monitoring.logs.facets.max-scan-rows` (по умолчанию
+  50 000) подходящим строкам в порядке `event_time DESC`; при достижении лимита ответ
+  помечается `"approximate": true`, а `scanLimit` сообщает использованный предел.
+- Ошибки: истёк `monitoring.logs.facets.timeout-ms` (по умолчанию 2000) → HTTP 503; больше
+  `monitoring.logs.facets.max-requests` (по умолчанию 30) запросов за
+  `monitoring.logs.facets.window-seconds` (60) на организацию → HTTP 429 с `Retry-After`.
+  Список логов при этом остаётся доступным.
+- Права и tenant isolation те же, что у `GET /api/v1/logs`: приложение проверяется на
+  принадлежность организации вызывающего.
+
+В Log Explorer (`/app/logs`) фасеты показывает сворачиваемая панель слева (состояние
+запоминается на сессию). Клик по значению добавляет точный фильтр (`host`, `service`,
+`namespace` или `level`) и перезапускает поиск, повторный клик снимает фильтр, кнопка
+**Clear** снимает все контекстные фильтры. Запрос фасетов идёт параллельно со списком
+логов, отменяется при смене запроса и при ошибке показывает «Facets unavailable», не скрывая
+результаты поиска.
 
 ### Экспорт логов и метрик
 
@@ -878,8 +1054,9 @@ range в форме виджета, по умолчанию 1 час) до те�
 фильтр вида `{ applicationId, level?, searchText?, timeRange: { from, to } }`. Этот JSON
 перепроверяется при каждой записи: приложение должно принадлежать владельцу, `from < to`,
 диапазон не более 30 дней, `searchText` до 200 символов и без символов `<`/`>`; на одного
-пользователя — не более 50 представлений (иначе HTTP 409). Пагинация в представление не
-сохраняется. В Log Explorer (`/app/logs`) панель **Saved views** позволяет применить
+пользователя — не более 50 представлений (иначе HTTP 409). Пагинация и фильтры фасетов
+(`host`/`service`/`namespace`) в представление не сохраняются — как и раньше, представление
+описывает только фильтры формы. В Log Explorer (`/app/logs`) панель **Saved views** позволяет применить
 представление одним нажатием, сохранить текущие фильтры, переименовать и удалить.
 
 > В текущей модели представления привязаны к владельцу (`owner_id`), как и дашборды,
@@ -1027,6 +1204,7 @@ link-local, CGNAT, multicast, `169.254.169.254` и т.п. отклоняются
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/alert-rules` | Список правил пользователя (опц. `applicationId`, `metricName` — активные metric-правила для графика) | JWT (владелец) |
 | `POST` | `/api/v1/alert-rules` | Создать правило | JWT |
+| `POST` | `/api/v1/alert-rules/preview-log-count` | Предварительный подсчёт логов для калибровки порога (rate limit на организацию) | JWT (`ADMIN`/`OWNER`) |
 | `PUT` | `/api/v1/alert-rules/{id}` | Обновить (частично) | JWT (владелец) |
 | `DELETE` | `/api/v1/alert-rules/{id}` | Удалить правило и его инциденты | JWT (владелец) |
 | `GET` | `/api/v1/notification-channels` | Список каналов (webhook/Slack/email) | JWT (владелец) |
@@ -1036,13 +1214,20 @@ link-local, CGNAT, multicast, `169.254.169.254` и т.п. отклоняются
 | `POST` | `/api/v1/notification-channels/{id}/test` | Отправить тестовое уведомление (async, `202 Accepted`) | JWT (владелец) |
 | `GET` | `/api/v1/alert-incidents` | История инцидентов (`limit`, по умолчанию 50, максимум 500) | JWT (владелец) |
 
-Правило: `name` (1–100), `type` (`METRIC_THRESHOLD|HEALTH_CHECK`), список `conditions`
+Правило: `name` (1–100), `type` (`METRIC_THRESHOLD|HEALTH_CHECK|LOG`), список `conditions`
 (до 10; каждая — `target`, `operator` и `threshold`), `logicOperator` (`AND|OR`),
 `durationMinutes` (1–1440) и `isActive`. Для `METRIC_THRESHOLD` обязателен `applicationId`;
 для `HEALTH_CHECK` правило срабатывает при статусе `DOWN` или `TIMEOUT` (одно условие —
 id health-check). Устаревшие поля `target`/`condition`/`threshold` по-прежнему принимаются
 (одно условие) и в ответе зеркалят первое условие. Инцидент: `id`, `ruleId`, `ruleName`,
 `status` (`FIRING|RESOLVED`), `triggeredAt`, `resolvedAt`.
+
+Для `LOG` правило задаётся полями `applicationId`, `logLevel` (необязательно), `logQuery`
+(до 200 символов, необязательно), `windowMinutes` (1–60), `comparison`
+(`GREATER_THAN|GREATER_OR_EQUAL|LESS_THAN`) и `countThreshold` (≥ 0). Нужен хотя бы один
+из фильтров `logLevel`/`logQuery`; log-поля запрещены для остальных типов правил. Один
+активный log-алерт расходует ограничение в 50 активных `LOG`-правил на организацию
+(превышение — `409`).
 
 Плановый evaluator (отдельный пул с ограниченной очередью и `CallerRunsPolicy`) проверяет
 активные правила каждые `monitoring.alerts.scheduler-interval-ms` (по умолчанию 60 секунд).
@@ -1053,6 +1238,15 @@ id health-check). Устаревшие поля `target`/`condition`/`threshold`
 умолчанию 5), результат health-check — не старше `monitoring.alerts.health-freshness-minutes`
 (по умолчанию 10). Планировщик отключается через `monitoring.alerts.scheduler.enabled=false`.
 
+Log-правило считает `COUNT(*)` событий приложения за последние `windowMinutes`, применяя
+фильтры уровня и подстроки сообщения; `%`/`_` в `logQuery` трактуются буквально. Запрос
+ограничен таймаутом 5 секунд; при таймауте или ошибке раунд пропускается, состояние
+инцидента не меняется, а ошибка не превращается в нулевой счётчик. Для калибровки порога
+`POST /api/v1/alert-rules/preview-log-count` принимает `applicationId`, `windowMinutes` и
+необязательные `logLevel`/`logQuery`, возвращает `count`, `windowMinutes`, `from`, `to` и
+ограничен per-organization rate limit (`monitoring.alerts.preview.*`, по умолчанию 30
+запросов за 60 секунд; превышение — `429`).
+
 Каналы уведомлений бывают трёх типов: `WEBHOOK` (произвольный https-URL), `SLACK` (incoming
 webhook на хосте `slack.com`, сообщение в формате Block Kit) и `EMAIL` (адрес получателя).
 Webhook- и Slack-URL допускают только https и проходят SSRF-проверку (хост должен разрешаться
@@ -1062,7 +1256,10 @@ email использует `spring-boot-starter-mail` (нужен `spring.mail.h
 `monitoring.alerts.email.*`, поэтому недоступный SMTP не блокирует evaluation. Повторные
 уведомления по одному правилу и каналу ограничены `monitoring.alerts.notifications.min-interval-seconds`
 (по умолчанию 900). Тестовое сообщение в канал отправляется через
-`POST /api/v1/notification-channels/{id}/test`.
+`POST /api/v1/notification-channels/{id}/test`. Уведомления по log-правилам содержат
+фильтры, окно, порог и фактический `observedCount`, а при заданном
+`monitoring.alerts.frontend.base-url` (`MONITORING_ALERTS_FRONTEND_BASE_URL`) — ссылку на
+Log Explorer с тем же приложением, окном, уровнем и поисковой строкой.
 
 Страница **Alerts** (`/app/alerts`) показывает список правил с переключателями активности,
 диалог создания/редактирования (несколько условий с переключателем AND/OR) и настройку
@@ -1173,10 +1370,19 @@ cd frontend && npm test
 
 # Frontend type-check
 cd frontend && npm run typecheck
+
+# Agent (Go)
+cd agent && go vet ./... && go test -race ./...
 ```
 
 Тесты детерминированы и не зависят от внешних сервисов и сети: backend-тесты используют
 H2, frontend-тесты — jsdom.
+
+CI (`.github/workflows/ci.yml`) запускается на pull request и push в `main` и параллельно
+проверяет backend (`mvn clean test`), frontend (`npm ci`, typecheck, build, tests), агент
+(`go vet`, `go test -race`, `go build`) и сборку всех трёх Docker-образов без публикации.
+Если скрипт `lint` не объявлен в `frontend/package.json`, шаг lint пропускается с явным
+сообщением.
 
 ---
 
@@ -1207,10 +1413,18 @@ H2, frontend-тесты — jsdom.
 
 ## Безопасность
 
-- **Не коммитьте** реальные ключи, токены, пароли и приватные сертификаты. В `.env` и
-  `config.yaml` — только плейсхолдеры.
+- **Не коммитьте** реальные ключи, токены, пароли и приватные сертификаты. В
+  `.env.example` и `config.yaml` — только плейсхолдеры; реальный `.env` в `.gitignore`.
 - `JWT_SECRET` обязателен: без него приложение не стартует (нет небезопасного значения по
-  умолчанию), минимальная длина — 32 символа. Задавайте его через окружение.
+  умолчанию), минимальная длина — 32 байта. Задавайте его через окружение.
+- С `SPRING_PROFILES_ACTIVE=prod` backend дополнительно отказывается стартовать, если
+  `JWT_SECRET` пуст, слишком короткий или совпадает с примером из репозитория. Ошибка
+  выводится до открытия порта и содержит инструкцию заменить секрет.
+- Все контейнеры запускаются non-root: backend — `appuser` (uid 1001), agent — `agent`
+  (uid 1001), frontend — непривилегированный nginx (uid 101). `compose.yaml` не публикует
+  порт MySQL на хост (это делает только `compose.dev.yaml`).
+- Frontend nginx проксирует только `/api/`; `/actuator/prometheus` и остальные Actuator
+  endpoints недоступны через UI-origin. Prometheus следует скрейпить напрямую с backend.
 - Небезопасные для продакшена вещи выключены по умолчанию и включаются только в профиле `dev`:
   H2 console (`SPRING_H2_CONSOLE_ENABLED=false`), вывод SQL (`spring.jpa.show-sql=false`) и
   детали Actuator health (`management.endpoint.health.show-details=never`).

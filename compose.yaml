@@ -1,131 +1,92 @@
+# Production-style local stack. Copy .env.example to .env before starting:
+#   cp .env.example .env
+#   docker compose up --build -d
+#
+# MySQL is intentionally not published to the host. For live-reload development use the
+# override file:
+#   docker compose -f compose.yaml -f compose.dev.yaml up --build --watch -d
+
+name: vibemonitoring
+
 services:
   mysql:
     image: mysql:8.0
-    container_name: monitoring-mysql
+    restart: unless-stopped
     env_file:
-      - ./backend/.env
+      - .env
     command:
       - --default-authentication-plugin=mysql_native_password
-      - --bind-address=0.0.0.0
-    ports:
-      - "3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./backend/docker/mysql/initdb:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u\"$${MYSQL_USER}\" -p\"$${MYSQL_PASSWORD}\" --silent"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: monitoring-api
-    ports:
-      - "8080:8080"
+    restart: unless-stopped
     env_file:
-      - ./backend/.env
+      - .env
     environment:
-      # Local development plan limits. The shipped defaults (millions of items) make the
-      # usage meters unreadable with sample data, so the local stack uses smaller limits.
-      - MONITORING_USAGE_METRICS_QUOTA=100000
-      - MONITORING_USAGE_LOGS_QUOTA=50000
-      - MONITORING_USAGE_TRACES_QUOTA=10000
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+      MONITORING_ALERTS_FRONTEND_BASE_URL: ${MONITORING_ALERTS_FRONTEND_BASE_URL:-http://localhost:3000}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
     depends_on:
       mysql:
         condition: service_healthy
-    develop:
-      watch:
-        - path: ./backend/pom.xml
-          action: rebuild
-        - path: ./backend/monitoring-common/src
-          action: rebuild
-        - path: ./backend/monitoring-common/pom.xml
-          action: rebuild
-        - path: ./backend/monitoring-api/src
-          action: rebuild
-        - path: ./backend/monitoring-api/pom.xml
-          action: rebuild
-        - path: ./backend/monitoring-auth/src
-          action: rebuild
-        - path: ./backend/monitoring-auth/pom.xml
-          action: rebuild
-        - path: ./backend/monitoring-apps-management/src
-          action: rebuild
-        - path: ./backend/monitoring-apps-management/pom.xml
-          action: rebuild
-        - path: ./backend/monitoring-collector/src
-          action: rebuild
-        - path: ./backend/monitoring-collector/pom.xml
-          action: rebuild
-        - path: ./backend/monitoring-dashboards/src
-          action: rebuild
-        - path: ./backend/monitoring-dashboards/pom.xml
-          action: rebuild
-        - path: ./backend/monitoring-healthcheck/src
-          action: rebuild
-        - path: ./backend/monitoring-healthcheck/pom.xml
-          action: rebuild
-        - path: ./backend/.env
-          action: restart
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --output-document=- http://127.0.0.1:8080/actuator/health/readiness | grep -q '\"status\":\"UP\"' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8080}
+    ports:
+      - "${FRONTEND_PORT:-3000}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Optional agent profile. It reports to the backend over the Compose network and needs an
+  # application API key created in the UI:
+  #   AGENT_API_KEY=app_... docker compose --profile agent up -d agent
   agent:
     build:
       context: ./agent
       dockerfile: Dockerfile
-    container_name: monitoring-agent
     profiles:
       - agent
+    restart: unless-stopped
     environment:
-      - AGENT_BACKEND_URL=http://backend:8080
-      - AGENT_API_KEY=${AGENT_API_KEY:-}
-      - AGENT_INTERVAL_SECONDS=${AGENT_INTERVAL_SECONDS:-15}
+      AGENT_BACKEND_URL: http://backend:8080
+      AGENT_API_KEY: ${AGENT_API_KEY:-}
+      AGENT_INTERVAL_SECONDS: ${AGENT_INTERVAL_SECONDS:-15}
+      AGENT_BUFFER_DIRECTORY: /var/lib/monitoring-agent/buffer
+    volumes:
+      - agent-buffer:/var/lib/monitoring-agent/buffer
     depends_on:
       backend:
-        condition: service_started
-    develop:
-      watch:
-        - path: ./agent
-          action: rebuild
-
-  # test:
-  #   image: maven:3.9-eclipse-temurin-21
-  #   working_dir: /app
-  #   volumes:
-  #     - ./backend:/app
-  #     - maven-cache:/root/.m2
-  #   env_file:
-  #     - ./backend/.env
-  #   depends_on:
-  #     mysql:
-  #       condition: service_healthy
-  #   command: ["mvn", "test", "-B"]
-
-  frontend:
-      build:
-        context: ./frontend
-        dockerfile: Dockerfile.dev
-      container_name: monitoring-frontend-dev
-      ports:
-        - "3000:3000"
-        - "24678:24678"  # Vite HMR WebSocket port
-      environment:
-        - VITE_BACKEND_URL=http://backend:8080/api
-        - CHOKIDAR_USEPOLLING=true
-      volumes:
-        - ./frontend:/app
-        - /app/node_modules
-      command: npm run dev
-      develop:
-        watch:
-          - path: ./frontend/package.json
-            action: rebuild
-          - path: ./frontend/package-lock.json
-            action: rebuild
-
+        condition: service_healthy
 
 volumes:
   mysql-data:
-  maven-cache:
+  agent-buffer:

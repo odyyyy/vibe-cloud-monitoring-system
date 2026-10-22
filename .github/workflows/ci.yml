@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (Java 21)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/**/pom.xml
+
+      - name: Run backend tests
+        run: |
+          chmod +x mvnw
+          ./mvnw -B clean test
+
+  frontend:
+    name: Frontend (Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (only when a lint script is configured)
+        run: |
+          if node -e "const p=require('./package.json');process.exit(p.scripts && p.scripts.lint ? 0 : 1)"; then
+            npm run lint
+          else
+            echo "No lint script is configured in frontend/package.json; skipping."
+          fi
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Run unit tests
+        run: npm test
+
+  agent:
+    name: Agent (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache: true
+          cache-dependency-path: agent/go.sum
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test with race detector
+        run: go test -race ./...
+
+      - name: Build
+        run: go build ./...
+
+  docker:
+    name: Docker images
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build --file backend/Dockerfile --tag vibemonitoring/backend:ci ./backend
+
+      - name: Build frontend image
+        run: docker build --file frontend/Dockerfile --tag vibemonitoring/frontend:ci ./frontend
+
+      - name: Build agent image
+        run: docker build --file agent/Dockerfile --tag vibemonitoring/agent:ci ./agent

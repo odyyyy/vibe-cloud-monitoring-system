@@ -9,6 +9,7 @@
 *.iws
 
 *.md
+compose*.yaml
 docker-compose*.yaml
 Dockerfile
 .env

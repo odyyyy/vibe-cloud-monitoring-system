@@ -21,10 +21,13 @@
         <module>monitoring-auth</module>
         <module>monitoring-apps-management</module>
         <module>monitoring-collector</module>
+        <module>monitoring-revisions</module>
         <module>monitoring-dashboards</module>
         <module>monitoring-healthcheck</module>
         <module>monitoring-alerts</module>
         <module>monitoring-audit</module>
+        <module>monitoring-retention</module>
+        <module>monitoring-statuspages</module>
         <module>monitoring-api</module>
     </modules>
 
@@ -59,6 +62,11 @@
             </dependency>
             <dependency>
                 <groupId>com.monitoring</groupId>
+                <artifactId>monitoring-revisions</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.monitoring</groupId>
                 <artifactId>monitoring-dashboards</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -75,6 +83,16 @@
             <dependency>
                 <groupId>com.monitoring</groupId>
                 <artifactId>monitoring-audit</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.monitoring</groupId>
+                <artifactId>monitoring-retention</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.monitoring</groupId>
+                <artifactId>monitoring-statuspages</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

@@ -35,6 +35,12 @@ build/
 
 ### Secrets ###
 .env
+.env.local
+.env.*.local
+!.env.example
+
+### Local database backups (contain customer data) ###
+backups/
 
 ### Agents
 GEMINI.md

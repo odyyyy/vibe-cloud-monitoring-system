@@ -1,0 +1,56 @@
+# Development override for compose.yaml. It keeps a single source of truth for the
+# production-style stack and only changes what local development needs:
+#   docker compose -f compose.yaml -f compose.dev.yaml up --build --watch -d
+#
+# - publishes MySQL on the host for GUI clients and local tooling;
+# - replaces the nginx frontend image with the Vite dev server (HMR on port 3000);
+# - rebuilds backend and agent images when their sources change (--watch).
+#
+# Both files read the root .env. Changes to .env require recreating the affected service:
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d --force-recreate backend
+
+services:
+  mysql:
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+
+  backend:
+    environment:
+      # Smaller local quotas keep the usage meters readable with sample data.
+      MONITORING_USAGE_METRICS_QUOTA: ${MONITORING_USAGE_METRICS_QUOTA:-100000}
+      MONITORING_USAGE_LOGS_QUOTA: ${MONITORING_USAGE_LOGS_QUOTA:-50000}
+      MONITORING_USAGE_TRACES_QUOTA: ${MONITORING_USAGE_TRACES_QUOTA:-10000}
+    develop:
+      watch:
+        # backend/.dockerignore excludes target/, .env and IDE files.
+        - action: rebuild
+          path: ./backend
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    # Replace the production port mapping instead of appending to it.
+    ports: !override
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      VITE_BACKEND_PROXY_TARGET: http://backend:8080
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1"]
+      start_period: 30s
+    develop:
+      watch:
+        - action: rebuild
+          path: ./frontend/package.json
+        - action: rebuild
+          path: ./frontend/package-lock.json
+
+  agent:
+    develop:
+      watch:
+        - action: rebuild
+          path: ./agent

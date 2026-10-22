@@ -4,11 +4,15 @@
 .git/
 .gitignore
 .idea/
+.vscode/
 *.iml
 *.ipr
 *.iws
 
 *.md
 docker-compose*.yaml
+compose*.yaml
 Dockerfile
+.dockerignore
 .env
+.env.*
