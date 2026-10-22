@@ -22,6 +22,15 @@ data:
       max_logs_per_second: 500
       sample_rate: 0.1
       always_forward_levels: ["FATAL", "CRITICAL"]
+    buffer:
+      enabled: true
+      directory: "/var/lib/monitoring-agent/buffer"
+      max_size_mb: 256
+      max_age_hours: 24
+    retry:
+      initial_backoff_ms: 1000
+      max_backoff_ms: 60000
+      jitter: true
     kubernetes:
       enabled: false
 ---
@@ -46,13 +55,15 @@ spec:
       serviceAccountName: vibemonitoring-agent
       initContainers:
         # hostPath directories are created as root; give the non-root agent
-        # user ownership of its state directory.
+        # user ownership of its state and disk-buffer directories.
         - name: init-state
           image: alpine:3.20
-          command: ["sh", "-c", "chown -R 1001:1001 /app"]
+          command: ["sh", "-c", "mkdir -p /buffer && chown -R 1001:1001 /app /buffer"]
           volumeMounts:
             - name: state
               mountPath: /app
+            - name: buffer
+              mountPath: /buffer
       containers:
         - name: agent
           image: vibemonitoring/agent:latest
@@ -84,6 +95,8 @@ spec:
               subPath: config.yaml
             - name: state
               mountPath: /app
+            - name: buffer
+              mountPath: /var/lib/monitoring-agent/buffer
             - name: container-logs
               mountPath: /var/log/containers
               readOnly: true
@@ -101,6 +114,10 @@ spec:
         - name: state
           hostPath:
             path: /var/lib/vibemonitoring-agent
+            type: DirectoryOrCreate
+        - name: buffer
+          hostPath:
+            path: /var/lib/vibemonitoring-agent-buffer
             type: DirectoryOrCreate
         - name: container-logs
           hostPath:

@@ -491,3 +491,75 @@ func TestReceiverEnvOverrides(t *testing.T) {
 		t.Errorf("port = %d, want 9090", cfg.Receiver.Port)
 	}
 }
+
+func TestBufferAndRetryDefaults(t *testing.T) {
+	path := writeConfigFile(t, "backend_url: http://localhost:8080\napi_key: app_test\n")
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if !cfg.Buffer.Enabled {
+		t.Error("buffer.enabled should default to true")
+	}
+	if cfg.Buffer.Directory != defaultBufferDirectory {
+		t.Errorf("buffer.directory = %q, want %q", cfg.Buffer.Directory, defaultBufferDirectory)
+	}
+	if cfg.Buffer.MaxSizeMB != defaultBufferMaxSizeMB {
+		t.Errorf("buffer.max_size_mb = %d, want %d", cfg.Buffer.MaxSizeMB, defaultBufferMaxSizeMB)
+	}
+	if cfg.Buffer.MaxAgeHours != defaultBufferMaxAge {
+		t.Errorf("buffer.max_age_hours = %d, want %d", cfg.Buffer.MaxAgeHours, defaultBufferMaxAge)
+	}
+	if cfg.Retry.InitialBackoffMS != defaultBackoffInitial || cfg.Retry.MaxBackoffMS != defaultBackoffMax {
+		t.Errorf("retry defaults = %+v", cfg.Retry)
+	}
+	if !cfg.Retry.Jitter {
+		t.Error("retry.jitter should default to true")
+	}
+}
+
+func TestBufferAndRetryEnvOverrides(t *testing.T) {
+	t.Setenv("AGENT_BUFFER_ENABLED", "false")
+	t.Setenv("AGENT_BUFFER_DIRECTORY", "/tmp/agent-buffer")
+	t.Setenv("AGENT_BUFFER_MAX_SIZE_MB", "12")
+	t.Setenv("AGENT_BUFFER_MAX_AGE_HOURS", "3")
+	t.Setenv("AGENT_RETRY_INITIAL_BACKOFF_MS", "250")
+	t.Setenv("AGENT_RETRY_MAX_BACKOFF_MS", "5000")
+	t.Setenv("AGENT_RETRY_JITTER", "false")
+
+	path := writeConfigFile(t, "backend_url: http://localhost:8080\napi_key: app_test\n")
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Buffer.Enabled {
+		t.Error("expected env to disable the buffer")
+	}
+	if cfg.Buffer.Directory != "/tmp/agent-buffer" {
+		t.Errorf("buffer.directory = %q", cfg.Buffer.Directory)
+	}
+	if cfg.Buffer.MaxSizeMB != 12 || cfg.Buffer.MaxAgeHours != 3 {
+		t.Errorf("buffer limits = %+v", cfg.Buffer)
+	}
+	if cfg.Retry.InitialBackoffMS != 250 || cfg.Retry.MaxBackoffMS != 5000 || cfg.Retry.Jitter {
+		t.Errorf("retry config = %+v", cfg.Retry)
+	}
+}
+
+func TestLoadConfigRejectsInvalidBufferAndRetry(t *testing.T) {
+	cases := map[string]string{
+		"empty directory": "buffer:\n  enabled: true\n  directory: \"\"\n",
+		"zero size":       "buffer:\n  max_size_mb: 0\n",
+		"negative age":    "buffer:\n  max_age_hours: -1\n",
+		"zero backoff":    "retry:\n  initial_backoff_ms: 0\n",
+		"initial > max":   "retry:\n  initial_backoff_ms: 5000\n  max_backoff_ms: 1000\n",
+	}
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			path := writeConfigFile(t, "backend_url: http://localhost:8080\napi_key: app_test\n"+body)
+			if _, err := LoadConfig(path); err == nil {
+				t.Fatal("expected a configuration error")
+			}
+		})
+	}
+}

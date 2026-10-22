@@ -36,6 +36,12 @@ const (
 	defaultReceiverPort     = 8125
 	defaultReceiverHTTPPort = 8080
 
+	defaultBufferDirectory = "/var/lib/monitoring-agent/buffer"
+	defaultBufferMaxSizeMB = 256
+	defaultBufferMaxAge    = 24
+	defaultBackoffInitial  = 1000
+	defaultBackoffMax      = 60000
+
 	// maxLogBatchSize matches the backend LogIngestRequest.MAX_BATCH_SIZE. A larger
 	// batch would be rejected with HTTP 400, so it is a configuration error here.
 	maxLogBatchSize = 1000
@@ -124,6 +130,45 @@ type ReceiverConfig struct {
 	Port     int    `yaml:"port"`
 }
 
+// BufferConfig controls the bounded on-disk queue used when a batch cannot be
+// delivered. The queue stores only telemetry payloads, never the API key.
+type BufferConfig struct {
+	Enabled     bool   `yaml:"enabled"`
+	Directory   string `yaml:"directory"`
+	MaxSizeMB   int    `yaml:"max_size_mb"`
+	MaxAgeHours int    `yaml:"max_age_hours"`
+}
+
+// MaxSizeBytes returns the configured queue limit in bytes.
+func (b BufferConfig) MaxSizeBytes() int64 {
+	return int64(b.MaxSizeMB) * 1024 * 1024
+}
+
+// MaxAge returns the maximum age of a buffered batch. Zero disables age-based
+// eviction; negative values are rejected during validation.
+func (b BufferConfig) MaxAge() time.Duration {
+	return time.Duration(b.MaxAgeHours) * time.Hour
+}
+
+// RetryConfig controls exponential backoff for transient send failures. Live
+// batches use a small bounded number of attempts before being queued; the disk
+// replay worker uses the same backoff between passes.
+type RetryConfig struct {
+	InitialBackoffMS int  `yaml:"initial_backoff_ms"`
+	MaxBackoffMS     int  `yaml:"max_backoff_ms"`
+	Jitter           bool `yaml:"jitter"`
+}
+
+// InitialBackoff returns the first retry delay.
+func (r RetryConfig) InitialBackoff() time.Duration {
+	return time.Duration(r.InitialBackoffMS) * time.Millisecond
+}
+
+// MaxBackoff returns the retry delay ceiling.
+func (r RetryConfig) MaxBackoff() time.Duration {
+	return time.Duration(r.MaxBackoffMS) * time.Millisecond
+}
+
 // LogThrottlingConfig controls agent-side rate limiting and sampling of log
 // events. It protects the backend and the local buffer from an application that
 // suddenly logs at an extreme rate.
@@ -185,6 +230,8 @@ type Config struct {
 	Metrics         MetricsConfig       `yaml:"metrics"`
 	Kubernetes      KubernetesConfig    `yaml:"kubernetes"`
 	Receiver        ReceiverConfig      `yaml:"receiver"`
+	Buffer          BufferConfig        `yaml:"buffer"`
+	Retry           RetryConfig         `yaml:"retry"`
 }
 
 // LoadConfig reads, parses, applies environment overrides and validates the
@@ -204,6 +251,17 @@ func LoadConfig(path string) (*Config, error) {
 			MaxLogsPerSecond:    defaultMaxLogsPerSecond,
 			SampleRate:          defaultLogSampleRate,
 			AlwaysForwardLevels: append([]string(nil), defaultAlwaysForwardLevels...),
+		},
+		Buffer: BufferConfig{
+			Enabled:     true,
+			Directory:   defaultBufferDirectory,
+			MaxSizeMB:   defaultBufferMaxSizeMB,
+			MaxAgeHours: defaultBufferMaxAge,
+		},
+		Retry: RetryConfig{
+			InitialBackoffMS: defaultBackoffInitial,
+			MaxBackoffMS:     defaultBackoffMax,
+			Jitter:           true,
 		},
 	}
 	if err := yaml.Unmarshal(data, cfg); err != nil {
@@ -288,6 +346,39 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.Receiver.Port = n
 		}
 	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_BUFFER_ENABLED")); v != "" {
+		if enabled, err := strconv.ParseBool(v); err == nil {
+			cfg.Buffer.Enabled = enabled
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_BUFFER_DIRECTORY")); v != "" {
+		cfg.Buffer.Directory = v
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_BUFFER_MAX_SIZE_MB")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Buffer.MaxSizeMB = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_BUFFER_MAX_AGE_HOURS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Buffer.MaxAgeHours = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_RETRY_INITIAL_BACKOFF_MS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Retry.InitialBackoffMS = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_RETRY_MAX_BACKOFF_MS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Retry.MaxBackoffMS = n
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_RETRY_JITTER")); v != "" {
+		if enabled, err := strconv.ParseBool(v); err == nil {
+			cfg.Retry.Jitter = enabled
+		}
+	}
 }
 
 func (c *Config) validate() error {
@@ -327,6 +418,26 @@ func (c *Config) validate() error {
 	}
 	if c.StateFile == "" {
 		return errors.New("state_file must not be empty")
+	}
+
+	if c.Buffer.Enabled && strings.TrimSpace(c.Buffer.Directory) == "" {
+		return errors.New("buffer.directory must not be empty when buffer.enabled is true")
+	}
+	if c.Buffer.MaxSizeMB <= 0 {
+		return fmt.Errorf("buffer.max_size_mb must be positive, got %d", c.Buffer.MaxSizeMB)
+	}
+	if c.Buffer.MaxAgeHours < 0 {
+		return fmt.Errorf("buffer.max_age_hours must not be negative, got %d", c.Buffer.MaxAgeHours)
+	}
+	if c.Retry.InitialBackoffMS <= 0 {
+		return fmt.Errorf("retry.initial_backoff_ms must be positive, got %d", c.Retry.InitialBackoffMS)
+	}
+	if c.Retry.MaxBackoffMS <= 0 {
+		return fmt.Errorf("retry.max_backoff_ms must be positive, got %d", c.Retry.MaxBackoffMS)
+	}
+	if c.Retry.InitialBackoffMS > c.Retry.MaxBackoffMS {
+		return fmt.Errorf("retry.initial_backoff_ms (%d) must not exceed retry.max_backoff_ms (%d)",
+			c.Retry.InitialBackoffMS, c.Retry.MaxBackoffMS)
 	}
 
 	for i, src := range c.Logs {

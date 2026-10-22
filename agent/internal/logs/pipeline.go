@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/vibemonitoring/agent/internal/config"
-	"github.com/vibemonitoring/agent/internal/transport"
 )
 
 // finalFlushTimeout bounds the shutdown flush so SIGTERM does not hang.
@@ -29,12 +28,18 @@ type sourceUpdate struct {
 	path   string
 }
 
+// BatchSender is the forwarding path used by the pipeline. The production
+// implementation adds retries and a disk buffer; tests can supply a fake.
+type BatchSender interface {
+	Send(ctx context.Context, events []Event) error
+}
+
 // Pipeline tails configured log files, batches parsed events in memory and
 // forwards them to the cloud. Buffering is bounded: when the backend is
 // unreachable the oldest events are dropped rather than growing without limit.
 type Pipeline struct {
 	logger      *log.Logger
-	client      *Client
+	client      BatchSender
 	state       *stateStore
 	hostname    string
 	batchSize   int
@@ -64,7 +69,7 @@ type Pipeline struct {
 // NewPipeline builds a pipeline for cfg.Logs. It returns an error only for invalid
 // configuration (an uncompilable level_pattern); a missing or corrupt state file is
 // reported as a warning and treated as empty state.
-func NewPipeline(cfg *config.Config, client *Client, logger *log.Logger) (*Pipeline, error) {
+func NewPipeline(cfg *config.Config, client BatchSender, logger *log.Logger) (*Pipeline, error) {
 	state, err := loadState(cfg.StateFile)
 	if err != nil {
 		logger.Printf("warning: %v (starting with empty offsets)", err)
@@ -258,9 +263,9 @@ func (p *Pipeline) flush(ctx context.Context) {
 		p.logger.Printf("dropped %d log events: local buffer limit reached", dropped)
 	}
 
-	transport.Retry(ctx, p.logger, fmt.Sprintf("%d logs", len(batch)), func(sendCtx context.Context) error {
-		return p.client.Send(sendCtx, batch)
-	})
+	if err := p.client.Send(ctx, batch); err != nil {
+		p.logger.Printf("log batch send failed: %v", err)
+	}
 }
 
 // DroppedTotal returns the cumulative number of log events dropped by agent-side

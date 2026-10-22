@@ -1,55 +1,59 @@
 package transport
 
 import (
-	"context"
-	"log"
 	"math/rand"
 	"time"
 )
 
-const (
-	initialBackoff = 1 * time.Second
-	maxBackoff     = 60 * time.Second
-)
+// jitterFraction is the maximum additive spread applied to a backoff delay.
+const jitterFraction = 0.2
 
-// Retry calls send with exponential backoff until it succeeds or ctx is
-// cancelled. It never panics and never exits the process, so a temporarily
-// unavailable backend does not crash the agent.
-func Retry(ctx context.Context, logger *log.Logger, label string, send func(context.Context) error) {
-	backoff := initialBackoff
+// BackoffDelay returns the exponential delay for the given zero-based attempt:
+// initial, 2*initial, 4*initial, ... capped at max. When jitter is enabled a
+// random value in [0, 20%] of the delay is added, and the final value is still
+// capped at max so a retry never waits longer than configured.
+func BackoffDelay(initial, max time.Duration, attempt int, jitter bool) time.Duration {
+	if initial <= 0 {
+		initial = time.Second
+	}
+	if max <= 0 {
+		max = initial
+	}
+	if initial > max {
+		initial = max
+	}
+	if attempt < 0 {
+		attempt = 0
+	}
 
-	for attempt := 1; ; attempt++ {
-		err := send(ctx)
-		if err == nil {
-			logger.Printf("sent %s", label)
-			return
+	delay := initial
+	for i := 0; i < attempt && delay < max; i++ {
+		if delay > max/2 {
+			delay = max
+			break
 		}
-		if ctx.Err() != nil {
-			logger.Printf("ingest of %s cancelled after %d attempt(s): %v", label, attempt, err)
-			return
-		}
+		delay *= 2
+	}
+	if delay > max {
+		delay = max
+	}
 
-		wait := jitter(backoff)
-		logger.Printf("ingest of %s attempt %d failed: %v; retrying in %s", label, attempt, err, wait)
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(wait):
-		}
-
-		if backoff < maxBackoff {
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
-			}
+	if jitter {
+		spread := time.Duration(rand.Float64() * jitterFraction * float64(delay))
+		delay += spread
+		if delay > max {
+			delay = max
 		}
 	}
+	return delay
 }
 
-// jitter adds up to 20% random spread to avoid synchronized retries across
-// multiple agents.
-func jitter(d time.Duration) time.Duration {
-	spread := float64(d) * 0.2
-	return d + time.Duration(rand.Float64()*spread)
+// WaitDelay returns the backoff for attempt, but honors a Retry-After value
+// from the server when it is longer than the computed delay.
+func WaitDelay(initial, max time.Duration, attempt int, jitter bool, retryAfter time.Duration) time.Duration {
+	delay := BackoffDelay(initial, max, attempt, jitter)
+	if retryAfter > delay {
+		return retryAfter
+	}
+	return delay
 }

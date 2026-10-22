@@ -42,6 +42,12 @@ const (
 	// MetricLogsDroppedTotal is the cumulative number of log events the agent
 	// dropped because a source exceeded its configured rate limit.
 	MetricLogsDroppedTotal = "agent.logs.dropped_total"
+
+	MetricBufferSizeBytes     = "agent.buffer.size_bytes"
+	MetricBufferQueuedBatches = "agent.buffer.queued_batches"
+	MetricBufferDroppedTotal  = "agent.buffer.dropped_total"
+	MetricSendRetriesTotal    = "agent.send.retries_total"
+	MetricSendFailuresTotal   = "agent.send.failures_total"
 )
 
 // defaultInterfacePatterns matches the physical interfaces reported in auto
@@ -240,4 +246,10 @@ func (c *Collector) tagsWith(key, value string) map[string]string {
 // platform when the agent is dropping logs to protect the backend.
 func (c *Collector) LogsDroppedPoint(total int64, now time.Time) Point {
 	return Point{Name: MetricLogsDroppedTotal, Value: float64(total), Timestamp: now, Tags: c.tags()}
+}
+
+// Point builds a gauge/counter value for an agent self-metric with the standard
+// host and version tags.
+func (c *Collector) Point(name string, value float64, now time.Time) Point {
+	return Point{Name: name, Value: value, Timestamp: now, Tags: c.tags()}
 }

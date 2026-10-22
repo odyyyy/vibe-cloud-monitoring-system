@@ -24,6 +24,21 @@ log_throttling:
   sample_rate: 0.1
   always_forward_levels: ["FATAL", "CRITICAL"]
 
+# Durable disk buffer. Mount a writable volume at this directory so unsent
+# telemetry survives an agent/container restart (see README).
+buffer:
+  enabled: true
+  directory: "/var/lib/monitoring-agent/buffer"
+  max_size_mb: 256
+  max_age_hours: 24
+
+# Retry policy for transient failures (network, 5xx, 429). Permanent rejections
+# such as 401/403 are never retried and never fill the disk.
+retry:
+  initial_backoff_ms: 1000
+  max_backoff_ms: 60000
+  jitter: true
+
 # Pod log discovery. Not used by the plain `docker run` quick-start; the
 # Kubernetes DaemonSet sets AGENT_KUBERNETES_ENABLED=true (see k8s/daemonset.yaml
 # and the "Kubernetes" section in README.md). Namespace and selector can also be

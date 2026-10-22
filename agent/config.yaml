@@ -34,6 +34,27 @@ log_throttling:
   sample_rate: 0.1
   always_forward_levels: ["FATAL", "CRITICAL"]
 
+# Durable disk buffer for telemetry that cannot be delivered because the backend
+# is down or the network is unavailable. Batches are stored as JSON files and
+# replayed oldest-first. Only telemetry payloads are written; the API key is
+# attached at send time and never persisted.
+#   enabled:       persist undelivered batches (default true).
+#   directory:     queue directory (created with mode 0700, files 0600).
+#   max_size_mb:   hard size limit; oldest batches are dropped first.
+#   max_age_hours: drop batches older than this (0 disables age eviction).
+buffer:
+  enabled: true
+  directory: "/var/lib/monitoring-agent/buffer"
+  max_size_mb: 256
+  max_age_hours: 24
+
+# Retry policy for network errors, HTTP 5xx and HTTP 429. 400/401/403/413 are
+# permanent rejections: the batch is logged, counted and dropped without retry.
+retry:
+  initial_backoff_ms: 1000
+  max_backoff_ms: 60000
+  jitter: true
+
 # Kubernetes pod log discovery (optional). When enabled the agent watches pods
 # and tails /var/log/containers/<pod>_<namespace>_<container>-<id>.log, adding
 # k8s.pod.name, k8s.namespace and k8s.container.name to every event.

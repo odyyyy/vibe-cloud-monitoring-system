@@ -30,8 +30,10 @@ COPY config.yaml /app/config.yaml
 #   docker cp agent-manifests:/app/k8s ./k8s
 COPY --chown=agent:agent k8s /app/k8s
 
-# The agent writes its log-offset state file into the working directory.
-RUN chown -R agent:agent /app
+# The agent writes its log-offset state file into the working directory and
+# persists undelivered batches to the disk buffer directory.
+RUN mkdir -p /var/lib/monitoring-agent/buffer && \
+    chown -R agent:agent /app /var/lib/monitoring-agent
 
 USER agent
 

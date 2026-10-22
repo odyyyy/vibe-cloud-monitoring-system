@@ -3,3 +3,11 @@
 .gitignore
 Dockerfile
 .dockerignore
+.env
+.env.*
+agent
+agent.exe
+.agent_state.json
+.agent_state.json.tmp
+logs/
+coverage/
