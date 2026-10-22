@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { API_KEY_PLACEHOLDER, buildAgentDockerCommand, shellSingleQuote } from './dockerCommand'
+import { API_KEY_PLACEHOLDER, buildAgentDockerCommand, buildAgentDockerCommandDisplay, shellSingleQuote } from './dockerCommand'
 
 describe('shellSingleQuote', () => {
   it('wraps a plain value in single quotes', () => {
@@ -17,21 +17,14 @@ describe('shellSingleQuote', () => {
 })
 
 describe('buildAgentDockerCommand', () => {
-  it('builds the exact command with escaped backend URL and API key', () => {
+  it('builds the exact command with escaped backend URL and API key (single line)', () => {
     const command = buildAgentDockerCommand({
       backendUrl: 'https://cloud.example.com',
       apiKey: 'app_11111111-2222-3333-4444-555555555555',
     })
 
     expect(command).toBe(
-      [
-        'docker run -d \\',
-        '  --name monitoring-agent \\',
-        "  -e AGENT_BACKEND_URL='https://cloud.example.com' \\",
-        "  -e AGENT_API_KEY='app_11111111-2222-3333-4444-555555555555' \\",
-        '  -e AGENT_INTERVAL_SECONDS=15 \\',
-        '  vibemonitoring/agent:latest',
-      ].join('\n'),
+      "docker run -d --name monitoring-agent -e AGENT_BACKEND_URL='https://cloud.example.com' -e AGENT_API_KEY='app_11111111-2222-3333-4444-555555555555' -e AGENT_INTERVAL_SECONDS=15 vibemonitoring/agent:latest"
     )
   })
 
@@ -52,5 +45,25 @@ describe('buildAgentDockerCommand', () => {
 
     expect(command).toContain(`AGENT_API_KEY=${API_KEY_PLACEHOLDER}`)
     expect(API_KEY_PLACEHOLDER.startsWith('app_')).toBe(false)
+  })
+})
+
+describe('buildAgentDockerCommandDisplay', () => {
+  it('builds the multi-line display command with backslashes', () => {
+    const command = buildAgentDockerCommandDisplay({
+      backendUrl: 'https://cloud.example.com',
+      apiKey: 'app_11111111-2222-3333-4444-555555555555',
+    })
+
+    expect(command).toBe(
+      [
+        'docker run -d \\',
+        '  --name monitoring-agent \\',
+        "  -e AGENT_BACKEND_URL='https://cloud.example.com' \\",
+        "  -e AGENT_API_KEY='app_11111111-2222-3333-4444-555555555555' \\",
+        '  -e AGENT_INTERVAL_SECONDS=15 \\',
+        '  vibemonitoring/agent:latest',
+      ].join('\n'),
+    )
   })
 })

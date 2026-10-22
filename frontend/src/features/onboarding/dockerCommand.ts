@@ -18,10 +18,24 @@ export interface AgentDockerCommandOptions {
 }
 
 /**
- * Builds the `docker run` command shown in the onboarding wizard. Both the backend URL and the
- * API key are shell-escaped; a `null` key falls back to a placeholder the user must replace.
+ * Builds the `docker run` command for copying (single line, no backslashes).
  */
 export function buildAgentDockerCommand({ backendUrl, apiKey }: AgentDockerCommandOptions): string {
+  const keyValue = apiKey ? shellSingleQuote(apiKey) : API_KEY_PLACEHOLDER
+  return [
+    'docker run -d',
+    '--name monitoring-agent',
+    `-e AGENT_BACKEND_URL=${shellSingleQuote(backendUrl)}`,
+    `-e AGENT_API_KEY=${keyValue}`,
+    '-e AGENT_INTERVAL_SECONDS=15',
+    AGENT_IMAGE,
+  ].join(' ')
+}
+
+/**
+ * Builds the `docker run` command for display (multi-line with backslashes for readability).
+ */
+export function buildAgentDockerCommandDisplay({ backendUrl, apiKey }: AgentDockerCommandOptions): string {
   const keyValue = apiKey ? shellSingleQuote(apiKey) : API_KEY_PLACEHOLDER
   return [
     'docker run -d \\',
@@ -38,5 +52,17 @@ export function resolveBackendUrl(): string {
   if (typeof window === 'undefined') {
     return ''
   }
-  return window.location.origin
+  const origin = window.location.origin
+  try {
+    const url = new URL(origin)
+    // If frontend is on localhost, use host.docker.internal for Docker agent to reach host
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+      return `http://host.docker.internal:8080`
+    }
+    // Otherwise use the same host but backend port (8080)
+    url.port = '8080'
+    return url.toString()
+  } catch {
+    return origin
+  }
 }

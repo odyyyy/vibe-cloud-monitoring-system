@@ -7,7 +7,7 @@ import { Button } from '../ui/button'
 import { DialogFooter } from '../ui/dialog'
 import { Label } from '../ui/label'
 import { copyText } from '../../lib/clipboard'
-import { buildAgentDockerCommand, resolveBackendUrl } from '../../features/onboarding/dockerCommand'
+import { buildAgentDockerCommand, buildAgentDockerCommandDisplay, resolveBackendUrl } from '../../features/onboarding/dockerCommand'
 
 interface InstallAgentStepProps {
   application: Application
@@ -30,7 +30,11 @@ export function InstallAgentStep({
 }: InstallAgentStepProps) {
   const [copied, setCopied] = useState(false)
 
-  const command = useMemo(
+  const displayCommand = useMemo(
+    () => buildAgentDockerCommandDisplay({ backendUrl: resolveBackendUrl(), apiKey }),
+    [apiKey],
+  )
+  const copyCommand = useMemo(
     () => buildAgentDockerCommand({ backendUrl: resolveBackendUrl(), apiKey }),
     [apiKey],
   )
@@ -44,7 +48,7 @@ export function InstallAgentStep({
   }, [copied])
 
   const handleCopy = async () => {
-    const ok = await copyText(command)
+    const ok = await copyText(copyCommand)
     if (ok) {
       setCopied(true)
     } else {
@@ -80,7 +84,7 @@ export function InstallAgentStep({
 
         <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/20">
           <pre className="overflow-x-auto p-4 pb-14 text-xs leading-relaxed text-slate-300 sm:pb-4">
-            <code className="mono">{command}</code>
+            <code className="mono">{displayCommand}</code>
           </pre>
           <Button
             type="button"
