@@ -22,6 +22,9 @@ import java.time.Instant;
  *
  * <p>{@code from}/{@code to} define an inclusive UTC range, {@code level} and
  * {@code searchText} are optional filters, and paging is bounded by {@link #MAX_PAGE_SIZE}.
+ * The optional {@code host}, {@code service} and {@code namespace} filters are exact matches on
+ * members of the JSON context document and are used by the facet sidebar to narrow the result
+ * list down to a single value.
  * Cross-field invariants turn into HTTP 400 at the API boundary.
  */
 @Getter
@@ -37,6 +40,12 @@ public class LogsQueryRequest {
     public static final int MAX_PAGE_SIZE = 100;
     public static final int DEFAULT_PAGE_SIZE = 25;
     public static final int MAX_SEARCH_TEXT_LENGTH = 200;
+
+    /**
+     * Maximum length of an exact-match facet filter value. The agent truncates the reserved
+     * context values to 256 characters, so no stored value is longer than that.
+     */
+    public static final int MAX_FACET_VALUE_LENGTH = 256;
 
     @NotNull(message = "applicationId is required")
     @Positive(message = "applicationId must be positive")
@@ -57,6 +66,21 @@ public class LogsQueryRequest {
     @Size(max = MAX_SEARCH_TEXT_LENGTH, message = "searchText must be at most "
             + MAX_SEARCH_TEXT_LENGTH + " characters")
     private String searchText;
+
+    /** Optional exact match on the {@code host} member of the JSON context document. */
+    @Size(max = MAX_FACET_VALUE_LENGTH, message = "host must be at most "
+            + MAX_FACET_VALUE_LENGTH + " characters")
+    private String host;
+
+    /** Optional exact match on the {@code service} member of the JSON context document. */
+    @Size(max = MAX_FACET_VALUE_LENGTH, message = "service must be at most "
+            + MAX_FACET_VALUE_LENGTH + " characters")
+    private String service;
+
+    /** Optional exact match on the {@code k8s.namespace} member of the JSON context document. */
+    @Size(max = MAX_FACET_VALUE_LENGTH, message = "namespace must be at most "
+            + MAX_FACET_VALUE_LENGTH + " characters")
+    private String namespace;
 
     @Min(value = 0, message = "page must be greater than or equal to 0")
     @Builder.Default

@@ -40,6 +40,18 @@ public interface MetricSampleRepository extends JpaRepository<MetricSample, Long
     List<Long> findIdsBefore(@Param("cutoffEpoch") long cutoffEpoch, @Param("limit") int limit);
 
     /**
+     * Ids of raw samples older than {@code cutoff} for one application, bounded by the
+     * {@link Pageable}. Used by the per-organization retention purge; the application id is
+     * resolved from the tenant's own applications, so no other tenant's rows can match.
+     */
+    @Query("SELECT m.id FROM MetricSample m"
+            + " WHERE m.application.id = :applicationId AND m.timestamp < :cutoff"
+            + " ORDER BY m.id")
+    List<Long> findIdsByApplicationBefore(@Param("applicationId") Long applicationId,
+                                          @Param("cutoff") Instant cutoff,
+                                          Pageable pageable);
+
+    /**
      * Deletes the samples with the given ids. Tag rows are removed by the database via the
      * {@code ON DELETE CASCADE} foreign key.
      */

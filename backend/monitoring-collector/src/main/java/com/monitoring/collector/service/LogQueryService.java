@@ -4,20 +4,20 @@ import com.monitoring.collector.dto.request.LogsQueryRequest;
 import com.monitoring.common.dto.response.PageResponse;
 import com.monitoring.collector.dto.response.LogEventResponse;
 import com.monitoring.collector.entity.LogEvent;
+import com.monitoring.collector.entity.LogLevel;
 import com.monitoring.collector.export.ExportData;
 import com.monitoring.collector.repository.LogEventRepository;
+import com.monitoring.collector.repository.LogEventSpecifications;
 import com.monitoring.apps.service.ApplicationService;
-import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -28,16 +28,16 @@ import java.util.List;
  * is never trusted on its own (tenant invariant).
  *
  * <p>All filtering, sorting and paging happen in the database. Results are ordered by event
- * time with {@code id} as a deterministic tie-breaker.
+ * time with {@code id} as a deterministic tie-breaker. The filter definition itself lives in
+ * {@link LogEventSpecifications} so that the facet aggregation counts exactly the same rows.
  */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class LogQueryService {
 
-    private static final char LIKE_ESCAPE = '\\';
-
     private final LogEventRepository logEventRepository;
+    private final LogEventSpecifications logEventSpecifications;
     private final ApplicationService applicationService;
 
     public PageResponse<LogEventResponse> query(Long organizationId, LogsQueryRequest request) {
@@ -49,7 +49,7 @@ public class LogQueryService {
                 Sort.by(Sort.Order.desc("timestamp"), Sort.Order.desc("id"))
         );
 
-        Page<LogEvent> page = logEventRepository.findAll(toSpecification(request), pageable);
+        Page<LogEvent> page = logEventRepository.findAll(logEventSpecifications.matching(request), pageable);
 
         return PageResponse.of(page, LogEventResponse::fromEntity);
     }
@@ -73,7 +73,7 @@ public class LogQueryService {
                 Sort.by(Sort.Order.desc("timestamp"), Sort.Order.desc("id"))
         );
 
-        Page<LogEvent> page = logEventRepository.findAll(toSpecification(request), pageable);
+        Page<LogEvent> page = logEventRepository.findAll(logEventSpecifications.matching(request), pageable);
         List<LogEventResponse> rows = page.getContent().stream()
                 .map(LogEventResponse::fromEntity)
                 .toList();
@@ -81,26 +81,31 @@ public class LogQueryService {
         return new ExportData<>(rows, page.getTotalElements());
     }
 
-    private Specification<LogEvent> toSpecification(LogsQueryRequest request) {
-        String searchText = normalize(request.getSearchText());
+    /**
+     * Counts matching log events without loading any rows. Used by log-based alert evaluation and
+     * by the alert-rule preview endpoint.
+     *
+     * <p>The application is resolved through {@link ApplicationService#getOwnedApplication}, so a
+     * caller can never count another tenant's logs even by guessing an application id. The text
+     * filter is a literal, case-insensitive substring; LIKE wildcards are escaped before the
+     * parameterized query runs.
+     */
+    public long countLogs(
+            Long organizationId,
+            Long applicationId,
+            LogLevel level,
+            String searchText,
+            Instant from,
+            Instant to) {
+        applicationService.getOwnedApplication(applicationId, organizationId);
 
-        return (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            predicates.add(cb.equal(root.get("application").get("id"), request.getApplicationId()));
-            predicates.add(cb.greaterThanOrEqualTo(root.get("timestamp"), request.getFrom()));
-            predicates.add(cb.lessThanOrEqualTo(root.get("timestamp"), request.getTo()));
+        String normalized = normalize(searchText);
+        String searchPattern = normalized == null
+                ? ""
+                : "%" + LogEventSpecifications.escapeLike(normalized.toLowerCase()) + "%";
+        String levelName = level == null ? "" : level.name();
 
-            if (request.getLevel() != null) {
-                predicates.add(cb.equal(root.get("level"), request.getLevel()));
-            }
-
-            if (searchText != null) {
-                String pattern = "%" + escapeLike(searchText.toLowerCase()) + "%";
-                predicates.add(cb.like(cb.lower(root.get("message")), pattern, LIKE_ESCAPE));
-            }
-
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
+        return logEventRepository.countForAlert(applicationId, from, to, levelName, searchPattern);
     }
 
     private static String normalize(String value) {
@@ -109,13 +114,5 @@ public class LogQueryService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
-    }
-
-    /** Escapes LIKE wildcards so the search text is matched literally, not as a pattern. */
-    private static String escapeLike(String value) {
-        return value
-                .replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_");
     }
 }

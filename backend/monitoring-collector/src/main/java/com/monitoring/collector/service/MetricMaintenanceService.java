@@ -1,7 +1,6 @@
 package com.monitoring.collector.service;
 
 import com.monitoring.collector.entity.MetricGranularity;
-import com.monitoring.collector.repository.LogEventRepository;
 import com.monitoring.collector.repository.MetricAggregateRepository;
 import com.monitoring.collector.repository.MetricSampleRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,10 +17,12 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
- * Background maintenance of stored telemetry: downsampling of old raw metrics and deletion
- * of expired logs/metrics.
+ * Background maintenance of stored telemetry: downsampling of old raw metrics into hourly
+ * aggregates.
  *
- * <p>Both operations delete in bounded batches so a single statement never locks a large
+ * <p>Deletion of expired telemetry is owned by the per-organization retention purge
+ * ({@code monitoring-retention}); this service only removes the raw samples it has already
+ * aggregated. Deletion happens in bounded batches so a single statement never locks a large
  * part of a table. Deletion is performed through repository methods that each run in their
  * own short transaction; the caller is intentionally not transactional, so work committed
  * earlier is preserved if a later batch fails and a repeated run simply continues where the
@@ -41,7 +42,6 @@ public class MetricMaintenanceService {
     static final long SECONDS_PER_HOUR = 3_600L;
 
     private final MetricSampleRepository metricSampleRepository;
-    private final LogEventRepository logEventRepository;
     private final MetricAggregateRepository metricAggregateRepository;
 
     /**
@@ -70,34 +70,6 @@ public class MetricMaintenanceService {
         log.info("Metric downsampling finished: cutoff={}, aggregates inserted={}, raw samples deleted={}",
                 Instant.ofEpochSecond(cutoffEpoch), aggregated, deleted);
         return deleted;
-    }
-
-    /**
-     * Deletes log events and aggregated metrics older than their retention windows, in
-     * bounded batches.
-     *
-     * @return the total number of rows deleted
-     */
-    public int enforceRetention(Instant now, int logsDays, int metricsDays, int batchSize) {
-        requirePositive(batchSize, "batchSize");
-        if (logsDays < 1 || metricsDays < 1) {
-            throw new IllegalArgumentException("retention windows must be >= 1 day");
-        }
-
-        long logsCutoff = now.minus(Duration.ofDays(logsDays)).getEpochSecond();
-        int deletedLogs = deleteInBatches(batchSize, logsCutoff,
-                logEventRepository::findIdsBefore,
-                logEventRepository::deleteByIds);
-
-        long metricsCutoff = now.minus(Duration.ofDays(metricsDays)).getEpochSecond();
-        int deletedMetrics = deleteInBatches(batchSize, metricsCutoff,
-                metricAggregateRepository::findIdsBefore,
-                metricAggregateRepository::deleteByIds);
-
-        log.info("Retention finished: logs deleted={} (older than {}), aggregates deleted={} (older than {})",
-                deletedLogs, Instant.ofEpochSecond(logsCutoff), deletedMetrics,
-                Instant.ofEpochSecond(metricsCutoff));
-        return deletedLogs + deletedMetrics;
     }
 
     /**

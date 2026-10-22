@@ -1,6 +1,7 @@
 package com.monitoring.collector.repository;
 
 import com.monitoring.collector.entity.MetricAggregate;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -58,12 +59,17 @@ public interface MetricAggregateRepository extends JpaRepository<MetricAggregate
                                @Param("bucketSeconds") long bucketSeconds,
                                @Param("cutoffEpoch") long cutoffEpoch);
 
-    /** Ids of aggregate rows older than {@code cutoffEpoch}, bounded by {@code limit}. */
-    @Query(value = "SELECT id FROM metric_aggregates"
-            + " WHERE bucket_epoch < :cutoffEpoch"
-            + " ORDER BY id"
-            + " LIMIT :limit", nativeQuery = true)
-    List<Long> findIdsBefore(@Param("cutoffEpoch") long cutoffEpoch, @Param("limit") int limit);
+    /**
+     * Ids of aggregated metrics older than {@code cutoffEpoch} (epoch seconds) for one
+     * application, bounded by the {@link Pageable}. Used by the per-organization purge so the
+     * deletion stays within the tenant that owns the application.
+     */
+    @Query("SELECT a.id FROM MetricAggregate a"
+            + " WHERE a.application.id = :applicationId AND a.bucketEpoch < :cutoffEpoch"
+            + " ORDER BY a.id")
+    List<Long> findIdsByApplicationAndBucketBefore(@Param("applicationId") Long applicationId,
+                                                   @Param("cutoffEpoch") long cutoffEpoch,
+                                                   Pageable pageable);
 
     @Modifying
     @Transactional

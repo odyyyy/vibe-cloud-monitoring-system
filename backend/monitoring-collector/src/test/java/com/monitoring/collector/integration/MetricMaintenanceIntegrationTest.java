@@ -1,7 +1,5 @@
 package com.monitoring.collector.integration;
 
-import com.monitoring.collector.entity.LogEvent;
-import com.monitoring.collector.entity.LogLevel;
 import com.monitoring.collector.entity.MetricAggregate;
 import com.monitoring.collector.entity.MetricGranularity;
 import com.monitoring.collector.entity.MetricSample;
@@ -18,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -26,8 +23,8 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Exercises the maintenance jobs against a real database: hourly downsampling with raw-data
- * deletion, idempotency on re-run, tag-aware grouping and the retention windows.
+ * Exercises metric maintenance against a real database: hourly downsampling with raw-data
+ * deletion, idempotency on re-run and tag-aware grouping.
  */
 @SpringBootTest(classes = CollectorTestApplication.class)
 class MetricMaintenanceIntegrationTest {
@@ -145,24 +142,6 @@ class MetricMaintenanceIntegrationTest {
         assertEquals(5, aggregates.get(0).getSampleCount());
     }
 
-    @Test
-    void retention_deletesExpiredLogsAndAggregatesOnly() {
-        Instant old = NOW.minus(20, ChronoUnit.DAYS);
-        Instant recent = NOW.minus(1, ChronoUnit.DAYS);
-        logEventRepository.save(logEvent(old, "old event"));
-        logEventRepository.save(logEvent(recent, "recent event"));
-
-        metricAggregateRepository.save(aggregate(NOW.minus(100, ChronoUnit.DAYS).getEpochSecond()));
-        metricAggregateRepository.save(aggregate(recent.getEpochSecond()));
-
-        maintenanceService.enforceRetention(NOW, 14, 90, 1000);
-
-        List<LogEvent> logs = logEventRepository.findAll();
-        assertEquals(1, logs.size());
-        assertEquals("recent event", logs.get(0).getMessage());
-        assertEquals(1, metricAggregateRepository.count());
-    }
-
     private void saveSample(String timestamp, double value, Map<String, String> tags) {
         metricSampleRepository.save(MetricSample.builder()
                 .application(application)
@@ -174,27 +153,4 @@ class MetricMaintenanceIntegrationTest {
                 .build());
     }
 
-    private LogEvent logEvent(Instant timestamp, String message) {
-        return LogEvent.builder()
-                .application(application)
-                .level(LogLevel.INFO)
-                .message(message)
-                .timestamp(timestamp)
-                .receivedAt(NOW)
-                .build();
-    }
-
-    private MetricAggregate aggregate(long bucketEpoch) {
-        return MetricAggregate.builder()
-                .application(application)
-                .name("cpu_usage")
-                .granularity(MetricGranularity.HOURLY)
-                .bucketEpoch(bucketEpoch)
-                .tagSignature("host=s1")
-                .sampleCount(1)
-                .valueAvg(1.0)
-                .valueMax(1.0)
-                .valueMin(1.0)
-                .build();
-    }
 }

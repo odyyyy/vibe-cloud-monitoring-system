@@ -1,7 +1,6 @@
 package com.monitoring.collector.service;
 
 import com.monitoring.collector.config.DownsamplingProperties;
-import com.monitoring.collector.config.RetentionProperties;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +24,6 @@ public class MetricMaintenanceScheduler {
 
     private final MetricMaintenanceService maintenanceService;
     private final DownsamplingProperties downsamplingProperties;
-    private final RetentionProperties retentionProperties;
 
     /** Default: every hour at minute 5. Overridable via {@code monitoring.downsample.cron}. */
     @Scheduled(cron = "${monitoring.downsample.cron:0 5 * * * *}")
@@ -40,23 +38,6 @@ public class MetricMaintenanceScheduler {
                     downsamplingProperties.getBatchSize());
         } catch (RuntimeException ex) {
             log.error("Metric downsampling job failed: {}", ex.getMessage(), ex);
-        }
-    }
-
-    /** Default: daily at 02:00. Overridable via {@code monitoring.retention.cron}. */
-    @Scheduled(cron = "${monitoring.retention.cron:0 0 2 * * *}")
-    public void enforceRetention() {
-        if (!retentionProperties.isEnabled()) {
-            log.debug("Data retention is disabled (monitoring.retention.enabled=false)");
-            return;
-        }
-        try {
-            maintenanceService.enforceRetention(Instant.now(),
-                    retentionProperties.getLogsDays(),
-                    retentionProperties.getMetricsDays(),
-                    retentionProperties.getBatchSize());
-        } catch (RuntimeException ex) {
-            log.error("Data retention job failed: {}", ex.getMessage(), ex);
         }
     }
 }

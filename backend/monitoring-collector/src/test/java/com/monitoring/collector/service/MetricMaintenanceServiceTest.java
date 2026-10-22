@@ -1,7 +1,6 @@
 package com.monitoring.collector.service;
 
 import com.monitoring.collector.entity.MetricGranularity;
-import com.monitoring.collector.repository.LogEventRepository;
 import com.monitoring.collector.repository.MetricAggregateRepository;
 import com.monitoring.collector.repository.MetricSampleRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,17 +23,14 @@ import static org.mockito.Mockito.when;
 class MetricMaintenanceServiceTest {
 
     private MetricSampleRepository metricSampleRepository;
-    private LogEventRepository logEventRepository;
     private MetricAggregateRepository metricAggregateRepository;
     private MetricMaintenanceService service;
 
     @BeforeEach
     void setUp() {
         metricSampleRepository = Mockito.mock(MetricSampleRepository.class);
-        logEventRepository = Mockito.mock(LogEventRepository.class);
         metricAggregateRepository = Mockito.mock(MetricAggregateRepository.class);
-        service = new MetricMaintenanceService(
-                metricSampleRepository, logEventRepository, metricAggregateRepository);
+        service = new MetricMaintenanceService(metricSampleRepository, metricAggregateRepository);
     }
 
     @Test
@@ -66,22 +62,6 @@ class MetricMaintenanceServiceTest {
         int deleted = service.downsample(Instant.parse("2026-10-09T10:30:00Z"), 24, 2);
 
         assertEquals(3, deleted);
-    }
-
-    @Test
-    void enforceRetention_deletesLogsAndAggregatesWithSeparateWindows() {
-        Instant now = Instant.parse("2026-10-09T10:00:00Z");
-        long logsCutoff = Instant.parse("2026-09-25T10:00:00Z").getEpochSecond();
-        long metricsCutoff = Instant.parse("2026-07-11T10:00:00Z").getEpochSecond();
-
-        when(logEventRepository.findIdsBefore(anyLong(), anyInt())).thenReturn(List.of());
-        when(metricAggregateRepository.findIdsBefore(anyLong(), anyInt())).thenReturn(List.of());
-
-        int deleted = service.enforceRetention(now, 14, 90, 500);
-
-        assertEquals(0, deleted);
-        verify(logEventRepository).findIdsBefore(logsCutoff, 500);
-        verify(metricAggregateRepository).findIdsBefore(metricsCutoff, 500);
     }
 
     @Test
