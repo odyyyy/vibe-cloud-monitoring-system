@@ -48,9 +48,11 @@ public class SecurityConfig {
         List<String> endpoints = new ArrayList<>(List.of(
             "/api/auth/**",
             "/api/hello",
+            // Liveness and readiness probes (see management.endpoint.health.group.*).
             "/actuator/health",
-            "/actuator/info",
-            // Prometheus scrape endpoint. It contains only platform telemetry (no tenant data).
+            "/actuator/health/**",
+            // Prometheus scrape endpoint. It contains only platform telemetry (no tenant data)
+            // and is intentionally not proxied by the frontend nginx container.
             "/actuator/prometheus",
             // Swagger UI / OpenAPI
             "/v3/api-docs/**",
@@ -63,7 +65,9 @@ public class SecurityConfig {
             "/api/v1/ingest/**",
             "/api/ingest/**",
             // Public share endpoint for dashboards (no authentication required)
-            "/api/v1/dashboards/share/**"
+            "/api/v1/dashboards/share/**",
+            // Public status pages (no authentication required)
+            "/api/v1/public/status-pages/**"
         ));
         if (h2ConsoleEnabled) {
             // The H2 web console is reachable only when explicitly enabled (dev-only).
