@@ -116,6 +116,23 @@ public class SlackNotificationSender implements NotificationSender {
                 "Logic", event.logicOperator().name(),
                 "Timestamp", event.timestamp().toString())));
 
+        AlertEvent.LogAlertDetails logDetails = event.logDetails();
+        if (logDetails != null) {
+            Map<String, String> fields = new LinkedHashMap<>();
+            fields.put("Application", nullToDash(logDetails.applicationName()));
+            fields.put("Filter", logFilterSummary(logDetails));
+            fields.put("Window", logDetails.windowMinutes() + " min");
+            fields.put("Threshold", symbol(logDetails.comparison()) + " " + logDetails.countThreshold());
+            fields.put("Observed count", String.valueOf(logDetails.observedCount()));
+            blocks.add(section(fields));
+
+            if (logDetails.explorerUrl() != null && !logDetails.explorerUrl().isBlank()) {
+                blocks.add(block("section", Map.of(
+                        "type", "mrkdwn",
+                        "text", "<" + logDetails.explorerUrl() + "|Open matching logs in Log Explorer>")));
+            }
+        }
+
         blocks.add(block("section", Map.of(
                 "type", "mrkdwn",
                 "text", "*Conditions*\n" + conditionSummary(event))));
@@ -151,9 +168,24 @@ public class SlackNotificationSender implements NotificationSender {
         return builder.isEmpty() ? "No conditions" : builder.toString();
     }
 
+    private String logFilterSummary(AlertEvent.LogAlertDetails details) {
+        StringBuilder filters = new StringBuilder();
+        if (details.level() != null) {
+            filters.append("level ").append(details.level().name());
+        }
+        if (details.query() != null && !details.query().isBlank()) {
+            if (!filters.isEmpty()) {
+                filters.append(", ");
+            }
+            filters.append("query \"").append(details.query()).append('"');
+        }
+        return filters.isEmpty() ? "any logs" : filters.toString();
+    }
+
     private String symbol(AlertCondition condition) {
         return switch (condition) {
             case GREATER_THAN -> ">";
+            case GREATER_OR_EQUAL -> ">=";
             case LESS_THAN -> "<";
             case EQUAL -> "=";
         };

@@ -10,6 +10,10 @@ import com.monitoring.alerts.entity.IncidentStatus;
 import com.monitoring.alerts.entity.LogicOperator;
 import com.monitoring.alerts.repository.AlertIncidentRepository;
 import com.monitoring.alerts.repository.AlertRuleRepository;
+import com.monitoring.apps.entity.Application;
+import com.monitoring.apps.service.ApplicationService;
+import com.monitoring.collector.entity.LogLevel;
+import com.monitoring.collector.service.LogQueryService;
 import com.monitoring.collector.service.MetricQueryService;
 import com.monitoring.healthcheck.dto.response.HealthCheckResultResponse;
 import com.monitoring.healthcheck.entity.HealthStatus;
@@ -44,6 +48,8 @@ class AlertEvaluationServiceTest {
     private AlertRuleRepository ruleRepository;
     private AlertIncidentRepository incidentRepository;
     private MetricQueryService metricQueryService;
+    private LogQueryService logQueryService;
+    private ApplicationService applicationService;
     private HealthCheckService healthCheckService;
     private MaintenanceWindowService maintenanceWindowService;
     private AlertEvaluationService service;
@@ -53,10 +59,14 @@ class AlertEvaluationServiceTest {
         ruleRepository = Mockito.mock(AlertRuleRepository.class);
         incidentRepository = Mockito.mock(AlertIncidentRepository.class);
         metricQueryService = Mockito.mock(MetricQueryService.class);
+        logQueryService = Mockito.mock(LogQueryService.class);
+        applicationService = Mockito.mock(ApplicationService.class);
         healthCheckService = Mockito.mock(HealthCheckService.class);
         maintenanceWindowService = Mockito.mock(MaintenanceWindowService.class);
         service = new AlertEvaluationService(ruleRepository, incidentRepository,
-                metricQueryService, healthCheckService, maintenanceWindowService, 5L, 10L);
+                metricQueryService, logQueryService, applicationService,
+                healthCheckService, maintenanceWindowService, 5L, 10L,
+                "https://app.example.com");
         when(incidentRepository.save(any(AlertIncident.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(ruleRepository.save(any(AlertRule.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -98,6 +108,126 @@ class AlertEvaluationServiceTest {
     private void noOpenIncident(long ruleId) {
         when(incidentRepository.findFirstByRule_IdAndStatusInOrderByTriggeredAtDesc(
                 eq(ruleId), any())).thenReturn(Optional.empty());
+    }
+
+    private AlertRule logRule() {
+        return AlertRule.builder()
+                .id(3L)
+                .organizationId(OWNER_ID)
+                .applicationId(APP_ID)
+                .name("Checkout timeouts")
+                .type(AlertRuleType.LOG)
+                .target("logs")
+                .condition(AlertCondition.GREATER_OR_EQUAL)
+                .threshold(10.0)
+                .durationMinutes(1)
+                .logLevel(LogLevel.ERROR)
+                .logQuery("timeout")
+                .windowMinutes(5)
+                .comparison(AlertCondition.GREATER_OR_EQUAL)
+                .countThreshold(10L)
+                .active(true)
+                .build();
+    }
+
+    @Test
+    void logCountAtThresholdFiresWithExplorerLink() {
+        AlertRule rule = logRule();
+        rule.setBreachStartedAt(NOW.minusSeconds(61));
+        when(ruleRepository.findById(3L)).thenReturn(Optional.of(rule));
+        when(logQueryService.countLogs(
+                eq(OWNER_ID), eq(APP_ID), eq(LogLevel.ERROR), eq("timeout"),
+                eq(NOW.minusSeconds(300)), eq(NOW))).thenReturn(10L);
+        when(applicationService.getOwnedApplication(APP_ID, OWNER_ID))
+                .thenReturn(Application.builder().id(APP_ID).name("checkout").build());
+        noOpenIncident(3L);
+
+        Optional<AlertEvent> event = service.evaluate(3L, NOW);
+
+        assertTrue(event.isPresent());
+        assertEquals(IncidentStatus.FIRING, event.get().status());
+        assertEquals(10.0, event.get().observedValue());
+        AlertEvent.LogAlertDetails details = event.get().logDetails();
+        assertEquals("checkout", details.applicationName());
+        assertEquals(LogLevel.ERROR, details.level());
+        assertEquals("timeout", details.query());
+        assertEquals(5, details.windowMinutes());
+        assertEquals(10L, details.countThreshold());
+        assertEquals(10L, details.observedCount());
+        assertTrue(details.explorerUrl().startsWith("https://app.example.com/app/logs?"));
+        assertTrue(details.explorerUrl().contains("applicationId=7"));
+        assertTrue(details.explorerUrl().contains("level=ERROR"));
+        assertTrue(details.explorerUrl().contains("searchText=timeout"));
+    }
+
+    @Test
+    void failedLogCountLeavesRuleStateUntouched() {
+        AlertRule rule = logRule();
+        when(ruleRepository.findById(3L)).thenReturn(Optional.of(rule));
+        when(logQueryService.countLogs(
+                eq(OWNER_ID), eq(APP_ID), eq(LogLevel.ERROR), eq("timeout"),
+                any(Instant.class), any(Instant.class)))
+                .thenThrow(new RuntimeException("query timeout"));
+
+        Optional<AlertEvent> event = service.evaluate(3L, NOW);
+
+        assertTrue(event.isEmpty());
+        assertNull(rule.getBreachStartedAt());
+        verify(incidentRepository, never()).save(any());
+    }
+
+    @Test
+    void logCountBelowThresholdResolvesOpenIncident() {
+        AlertRule rule = logRule();
+        rule.setBreachStartedAt(NOW.minusSeconds(120));
+        when(ruleRepository.findById(3L)).thenReturn(Optional.of(rule));
+        when(logQueryService.countLogs(
+                eq(OWNER_ID), eq(APP_ID), eq(LogLevel.ERROR), eq("timeout"),
+                eq(NOW.minusSeconds(300)), eq(NOW))).thenReturn(3L);
+        when(applicationService.getOwnedApplication(APP_ID, OWNER_ID))
+                .thenReturn(Application.builder().id(APP_ID).name("checkout").build());
+        AlertIncident firing = AlertIncident.builder()
+                .id(8L)
+                .rule(rule)
+                .organizationId(OWNER_ID)
+                .status(IncidentStatus.FIRING)
+                .triggeredAt(NOW.minusSeconds(120))
+                .build();
+        when(incidentRepository.findFirstByRule_IdAndStatusInOrderByTriggeredAtDesc(eq(3L), any()))
+                .thenReturn(Optional.of(firing));
+
+        Optional<AlertEvent> event = service.evaluate(3L, NOW);
+
+        assertTrue(event.isPresent());
+        assertEquals(IncidentStatus.RESOLVED, event.get().status());
+        assertEquals(3L, event.get().logDetails().observedCount());
+        assertEquals(IncidentStatus.RESOLVED, firing.getStatus());
+        assertEquals(NOW, firing.getResolvedAt());
+        assertNull(rule.getBreachStartedAt());
+    }
+
+    @Test
+    void mutedLogBreachFiresAfterMaintenanceWindowEnds() {
+        AlertRule rule = logRule();
+        rule.setBreachStartedAt(NOW.minusSeconds(120));
+        when(ruleRepository.findById(3L)).thenReturn(Optional.of(rule));
+        when(logQueryService.countLogs(
+                eq(OWNER_ID), eq(APP_ID), eq(LogLevel.ERROR), eq("timeout"),
+                any(Instant.class), any(Instant.class))).thenReturn(10L);
+        when(applicationService.getOwnedApplication(APP_ID, OWNER_ID))
+                .thenReturn(Application.builder().id(APP_ID).name("checkout").build());
+        Instant afterWindow = NOW.plusSeconds(60);
+        when(maintenanceWindowService.isMuted(OWNER_ID, APP_ID, 3L, NOW)).thenReturn(true);
+        when(maintenanceWindowService.isMuted(OWNER_ID, APP_ID, 3L, afterWindow)).thenReturn(false);
+
+        Optional<AlertEvent> suppressed = service.evaluate(3L, NOW);
+        Optional<AlertEvent> fired = service.evaluate(3L, afterWindow);
+
+        assertTrue(suppressed.isEmpty());
+        assertTrue(fired.isPresent());
+        assertEquals(IncidentStatus.FIRING, fired.get().status());
+        assertEquals(10L, fired.get().logDetails().observedCount());
+        verify(incidentRepository).save(any());
     }
 
     @Test

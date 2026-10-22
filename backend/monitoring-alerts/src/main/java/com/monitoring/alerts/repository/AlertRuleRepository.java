@@ -1,6 +1,7 @@
 package com.monitoring.alerts.repository;
 
 import com.monitoring.alerts.entity.AlertRule;
+import com.monitoring.alerts.entity.AlertRuleType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -22,4 +23,7 @@ public interface AlertRuleRepository extends JpaRepository<AlertRule, Long> {
 
     /** Active rules considered by the scheduler. */
     List<AlertRule> findByActiveTrue();
+
+    /** Backs the per-organization cap on active log rules. */
+    long countByOrganizationIdAndTypeAndActiveTrue(Long organizationId, AlertRuleType type);
 }

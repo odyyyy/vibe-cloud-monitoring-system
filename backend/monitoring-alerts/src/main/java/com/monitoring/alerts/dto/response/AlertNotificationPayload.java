@@ -5,6 +5,7 @@ import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.IncidentStatus;
 import com.monitoring.alerts.entity.LogicOperator;
 import com.monitoring.alerts.event.AlertEvent;
+import com.monitoring.collector.entity.LogLevel;
 
 import java.time.Instant;
 import java.util.List;
@@ -30,7 +31,22 @@ public record AlertNotificationPayload(
         List<ConditionSnapshot> conditions,
         LogicOperator logicOperator,
         IncidentStatus status,
-        Instant timestamp) {
+        Instant timestamp,
+        LogAlertSnapshot logDetails) {
+
+    /**
+     * Log-rule filters and the deep link. Matching log messages are intentionally not included.
+     */
+    public record LogAlertSnapshot(
+            LogLevel level,
+            String query,
+            int windowMinutes,
+            AlertCondition comparison,
+            long countThreshold,
+            long observedCount,
+            String applicationName,
+            String explorerUrl) {
+    }
 
     /** Serialized per-condition view of an evaluation. */
     public record ConditionSnapshot(
@@ -62,6 +78,15 @@ public record AlertNotificationPayload(
                         .toList(),
                 event.logicOperator(),
                 event.status(),
-                event.timestamp());
+                event.timestamp(),
+                event.logDetails() == null ? null : new LogAlertSnapshot(
+                        event.logDetails().level(),
+                        event.logDetails().query(),
+                        event.logDetails().windowMinutes(),
+                        event.logDetails().comparison(),
+                        event.logDetails().countThreshold(),
+                        event.logDetails().observedCount(),
+                        event.logDetails().applicationName(),
+                        event.logDetails().explorerUrl()));
     }
 }

@@ -1,7 +1,10 @@
 package com.monitoring.alerts.dto.response;
 
+import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertIncident;
+import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.IncidentStatus;
+import com.monitoring.collector.entity.LogLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -20,6 +23,14 @@ public class AlertIncidentResponse {
     private Long id;
     private Long ruleId;
     private String ruleName;
+    private AlertRuleType ruleType;
+    /** Set for LOG incidents so the UI can deep-link to the filtered Log Explorer. */
+    private Long applicationId;
+    private LogLevel logLevel;
+    private String logQuery;
+    private Integer windowMinutes;
+    private AlertCondition comparison;
+    private Long countThreshold;
     private IncidentStatus status;
     private Instant triggeredAt;
     private Long acknowledgedBy;
@@ -39,6 +50,13 @@ public class AlertIncidentResponse {
                 .id(incident.getId())
                 .ruleId(incident.getRule().getId())
                 .ruleName(incident.getRule().getName())
+                .ruleType(incident.getRule().getType())
+                .applicationId(incident.getRule().getApplicationId())
+                .logLevel(incident.getRule().getLogLevel())
+                .logQuery(incident.getRule().getLogQuery())
+                .windowMinutes(incident.getRule().getWindowMinutes())
+                .comparison(incident.getRule().getComparison())
+                .countThreshold(incident.getRule().getCountThreshold())
                 .status(incident.getStatus())
                 .triggeredAt(incident.getTriggeredAt())
                 .acknowledgedBy(incident.getAcknowledgedBy())

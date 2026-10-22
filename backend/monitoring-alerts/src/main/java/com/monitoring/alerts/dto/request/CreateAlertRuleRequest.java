@@ -2,8 +2,10 @@ package com.monitoring.alerts.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.monitoring.alerts.entity.AlertCondition;
+import com.monitoring.alerts.entity.AlertRule;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.LogicOperator;
+import com.monitoring.collector.entity.LogLevel;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -64,6 +66,31 @@ public class CreateAlertRuleRequest {
 
     /** How {@link #conditions} are combined; defaults to {@code AND}. */
     private LogicOperator logicOperator;
+
+    /** Optional severity filter; only valid for {@code LOG} rules. */
+    private LogLevel logLevel;
+
+    /**
+     * Optional literal substring filter (max 200 characters); only valid for {@code LOG} rules.
+     * At least one of {@link #logLevel} and {@link #logQuery} is required for a log rule.
+     */
+    @Size(max = AlertRule.MAX_LOG_QUERY_LENGTH,
+            message = "logQuery must be at most " + AlertRule.MAX_LOG_QUERY_LENGTH + " characters")
+    private String logQuery;
+
+    /** Count window in minutes; required for {@code LOG} rules and forbidden otherwise. */
+    @Min(value = AlertRule.MIN_WINDOW_MINUTES,
+            message = "windowMinutes must be between 1 and 60")
+    @Max(value = AlertRule.MAX_WINDOW_MINUTES,
+            message = "windowMinutes must be between 1 and 60")
+    private Integer windowMinutes;
+
+    /** Count comparison; required for {@code LOG} rules and forbidden otherwise. */
+    private AlertCondition comparison;
+
+    /** Count threshold; required for {@code LOG} rules and forbidden otherwise. */
+    @Min(value = 0, message = "countThreshold must be greater than or equal to 0")
+    private Long countThreshold;
 
     @NotNull(message = "durationMinutes is required")
     @Min(value = 1, message = "durationMinutes must be between 1 and 1440")

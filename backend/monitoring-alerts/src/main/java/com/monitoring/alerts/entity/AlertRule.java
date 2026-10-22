@@ -1,5 +1,6 @@
 package com.monitoring.alerts.entity;
 
+import com.monitoring.collector.entity.LogLevel;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -63,6 +64,9 @@ public class AlertRule {
     public static final int MAX_NAME_LENGTH = 100;
     public static final int MAX_TARGET_LENGTH = 255;
     public static final int MAX_CONDITIONS = 10;
+    public static final int MAX_LOG_QUERY_LENGTH = 200;
+    public static final int MIN_WINDOW_MINUTES = 1;
+    public static final int MAX_WINDOW_MINUTES = 60;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -119,6 +123,30 @@ public class AlertRule {
 
     @Column(name = "is_active", nullable = false)
     private boolean active;
+
+    /** Optional severity filter for a {@link AlertRuleType#LOG} rule. */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "log_level", length = 16)
+    private LogLevel logLevel;
+
+    /** Optional case-insensitive substring filter for a {@link AlertRuleType#LOG} rule. */
+    @Column(name = "log_query", length = MAX_LOG_QUERY_LENGTH)
+    private String logQuery;
+
+    /** Count window in minutes for a {@link AlertRuleType#LOG} rule (1-60). */
+    @Column(name = "window_minutes")
+    private Integer windowMinutes;
+
+    /** Count comparison used by a {@link AlertRuleType#LOG} rule. */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "comparison", length = 20)
+    private AlertCondition comparison;
+
+    /** Count threshold used by a {@link AlertRuleType#LOG} rule; never negative. */
+    @Column(name = "count_threshold")
+    private Long countThreshold;
 
     @Column(name = "breach_started_at")
     private Instant breachStartedAt;

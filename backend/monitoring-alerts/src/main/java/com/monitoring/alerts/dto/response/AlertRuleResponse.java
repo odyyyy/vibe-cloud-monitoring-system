@@ -5,6 +5,7 @@ import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertRule;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.LogicOperator;
+import com.monitoring.collector.entity.LogLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -36,6 +37,13 @@ public class AlertRuleResponse {
     private LogicOperator logicOperator;
     private int durationMinutes;
 
+    /** Log-rule filters; all {@code null} for metric and health-check rules. */
+    private LogLevel logLevel;
+    private String logQuery;
+    private Integer windowMinutes;
+    private AlertCondition comparison;
+    private Long countThreshold;
+
     @JsonProperty("isActive")
     private boolean active;
 
@@ -57,6 +65,11 @@ public class AlertRuleResponse {
                         .toList())
                 .logicOperator(rule.getLogicOperator())
                 .durationMinutes(rule.getDurationMinutes())
+                .logLevel(rule.getLogLevel())
+                .logQuery(rule.getLogQuery())
+                .windowMinutes(rule.getWindowMinutes())
+                .comparison(rule.getComparison())
+                .countThreshold(rule.getCountThreshold())
                 .active(rule.isActive())
                 .createdAt(rule.getCreatedAt())
                 .updatedAt(rule.getUpdatedAt())

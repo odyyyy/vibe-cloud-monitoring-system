@@ -90,6 +90,7 @@ public class EmailNotificationSender implements NotificationSender {
                 + "<br/><strong>Rule type:</strong> " + escape(event.type().name())
                 + "<br/><strong>Logic:</strong> " + escape(event.logicOperator().name())
                 + "<br/><strong>Time:</strong> " + escape(event.timestamp().toString()) + "</p>"
+                + logDetailsHtml(event.logDetails())
                 + "<table style=\"border-collapse:collapse;\">"
                 + "<thead><tr>"
                 + "<th style=\"padding:4px 8px;border:1px solid #e2e8f0;text-align:left;\">Target</th>"
@@ -101,9 +102,42 @@ public class EmailNotificationSender implements NotificationSender {
                 + "</body></html>";
     }
 
+    private String logDetailsHtml(AlertEvent.LogAlertDetails details) {
+        if (details == null) {
+            return "";
+        }
+        StringBuilder filters = new StringBuilder();
+        if (details.level() != null) {
+            filters.append("level ").append(details.level().name());
+        }
+        if (details.query() != null && !details.query().isBlank()) {
+            if (!filters.isEmpty()) {
+                filters.append(", ");
+            }
+            filters.append("query \"").append(details.query()).append('"');
+        }
+        if (filters.isEmpty()) {
+            filters.append("any logs");
+        }
+
+        StringBuilder html = new StringBuilder("<p>")
+                .append("<strong>Application:</strong> ").append(escape(details.applicationName()))
+                .append("<br/><strong>Log filter:</strong> ").append(escape(filters.toString()))
+                .append("<br/><strong>Window:</strong> ").append(details.windowMinutes()).append(" min")
+                .append("<br/><strong>Threshold:</strong> ").append(escape(symbol(details.comparison())))
+                .append(' ').append(details.countThreshold())
+                .append("<br/><strong>Observed count:</strong> ").append(details.observedCount());
+        if (details.explorerUrl() != null && !details.explorerUrl().isBlank()) {
+            html.append("<br/><a href=\"").append(escape(details.explorerUrl()))
+                    .append("\">Open matching logs in Log Explorer</a>");
+        }
+        return html.append("</p>").toString();
+    }
+
     private String symbol(AlertCondition condition) {
         return switch (condition) {
             case GREATER_THAN -> ">";
+            case GREATER_OR_EQUAL -> ">=";
             case LESS_THAN -> "<";
             case EQUAL -> "=";
         };

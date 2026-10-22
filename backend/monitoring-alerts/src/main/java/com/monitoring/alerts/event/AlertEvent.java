@@ -4,6 +4,7 @@ import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.entity.IncidentStatus;
 import com.monitoring.alerts.entity.LogicOperator;
+import com.monitoring.collector.entity.LogLevel;
 
 import java.time.Instant;
 import java.util.List;
@@ -20,6 +21,8 @@ import java.util.List;
  * @param observedValue the metric value that caused the transition, or {@code null} for
  *                      health-check rules
  * @param conditions per-condition observations that produced the transition
+ * @param logDetails log-rule context for notifications, or {@code null} for metric and
+ *                   health-check rules
  */
 public record AlertEvent(
         Long incidentId,
@@ -35,7 +38,24 @@ public record AlertEvent(
         List<ConditionObservation> conditions,
         LogicOperator logicOperator,
         IncidentStatus status,
-        Instant timestamp) {
+        Instant timestamp,
+        LogAlertDetails logDetails) {
+
+    /**
+     * Log-rule context. {@code explorerUrl} is absolute when a customer-facing frontend base URL is
+     * configured and {@code null} otherwise; notifications then omit the link. The raw matching
+     * log messages are deliberately not included, only the filters and the count.
+     */
+    public record LogAlertDetails(
+            LogLevel level,
+            String query,
+            int windowMinutes,
+            AlertCondition comparison,
+            long countThreshold,
+            long observedCount,
+            String applicationName,
+            String explorerUrl) {
+    }
 
     /**
      * A single evaluated condition at transition time.

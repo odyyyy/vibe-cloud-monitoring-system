@@ -3,12 +3,15 @@ package com.monitoring.alerts.service;
 import com.monitoring.alerts.dto.request.AlertConditionRequest;
 import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
 import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
+import com.monitoring.alerts.dto.request.PreviewLogCountRequest;
 import com.monitoring.alerts.dto.request.UpdateAlertRuleRequest;
 import com.monitoring.alerts.dto.request.UpdateIncidentNotesRequest;
 import com.monitoring.alerts.dto.request.UpdateNotificationChannelRequest;
 import com.monitoring.alerts.dto.response.AlertIncidentResponse;
 import com.monitoring.alerts.dto.response.AlertRuleResponse;
+import com.monitoring.alerts.dto.response.LogCountPreviewResponse;
 import com.monitoring.alerts.dto.response.NotificationChannelResponse;
+import com.monitoring.alerts.dto.snapshot.AlertRuleSnapshot;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertIncident;
 import com.monitoring.alerts.entity.AlertRule;
@@ -21,9 +24,11 @@ import com.monitoring.alerts.entity.NotificationChannelType;
 import com.monitoring.alerts.event.AlertEvent;
 import com.monitoring.alerts.exception.AlertIncidentAccessDeniedException;
 import com.monitoring.alerts.exception.AlertIncidentNotFoundException;
+import com.monitoring.alerts.exception.AlertPreviewRateLimitedException;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
 import com.monitoring.alerts.exception.AlertRuleNotFoundException;
 import com.monitoring.alerts.exception.InvalidAlertRuleException;
+import com.monitoring.alerts.exception.LogAlertRuleLimitExceededException;
 import com.monitoring.alerts.exception.InvalidIncidentNoteException;
 import com.monitoring.alerts.exception.InvalidIncidentStateException;
 import com.monitoring.alerts.exception.InvalidNotificationChannelException;
@@ -38,9 +43,26 @@ import com.monitoring.healthcheck.exception.HealthCheckNotFoundException;
 import com.monitoring.healthcheck.service.HealthCheckService;
 import com.monitoring.healthcheck.service.SsrfGuard;
 import com.monitoring.apps.service.ApplicationService;
+import com.monitoring.collector.entity.LogLevel;
+import com.monitoring.collector.service.LogQueryService;
 import com.monitoring.auth.entity.User;
 import com.monitoring.auth.repository.UserRepository;
+import com.monitoring.common.dto.response.PageResponse;
+import com.monitoring.revisions.dto.ConfigRevisionResponse;
+import com.monitoring.revisions.dto.ConfigRevisionSummaryResponse;
+import com.monitoring.revisions.entity.ConfigResourceType;
+import com.monitoring.revisions.entity.ConfigRevision;
+import com.monitoring.revisions.exception.ConfigRevisionRestoreConflictException;
+import com.monitoring.revisions.exception.InvalidConfigSnapshotException;
+import com.monitoring.revisions.service.ConfigRevisionService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +76,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -69,8 +92,20 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class AlertService {
 
+    private static final Logger log = LoggerFactory.getLogger(AlertService.class);
+
+    /** Current alert-rule snapshot shape; bump when stored fields change incompatibly. */
+    static final int SNAPSHOT_SCHEMA_VERSION = 1;
+
+    private static final ConfigResourceType RESOURCE_TYPE = ConfigResourceType.ALERT_RULE;
+
     public static final int DEFAULT_INCIDENTS_LIMIT = 50;
     public static final int MAX_INCIDENTS_LIMIT = 500;
+    /** Bounds the number of log COUNT queries the scheduler can run for one tenant. */
+    public static final int MAX_ACTIVE_LOG_RULES = 50;
+
+    /** Legacy NOT NULL target column value for log rules; they have no metric/health target. */
+    private static final String LOG_RULE_TARGET = "logs";
 
     private static final String WEBHOOK_SCHEME = "https";
     private static final String SLACK_HOST_SUFFIX = "slack.com";
@@ -90,6 +125,11 @@ public class AlertService {
     private final HealthCheckService healthCheckService;
     private final SsrfGuard ssrfGuard;
     private final AlertNotificationDispatcher notificationDispatcher;
+    private final LogQueryService logQueryService;
+    private final AlertPreviewRateLimiter previewRateLimiter;
+    private final ConfigRevisionService revisionService;
+    private final ObjectMapper objectMapper;
+    private final Validator validator;
 
     // ---------------------------------------------------------------------------------------
     // Alert rules
@@ -116,6 +156,8 @@ public class AlertService {
 
         String metricFilter = metricName == null || metricName.isBlank() ? null : metricName.trim();
         return rules.stream()
+                // Chart overlays ask for one application; only metric rules can be drawn there.
+                .filter(rule -> applicationId == null || rule.getType() == AlertRuleType.METRIC_THRESHOLD)
                 .filter(rule -> metricFilter == null || referencesMetric(rule, metricFilter))
                 .map(AlertRuleResponse::fromEntity)
                 .toList();
@@ -137,6 +179,47 @@ public class AlertService {
             throw new InvalidAlertRuleException("Alert rule type is required");
         }
 
+        boolean active = request.getActive() == null || request.getActive();
+        if (type == AlertRuleType.LOG) {
+            LogRuleValues log = resolveLogRuleValues(
+                    organizationId,
+                    request.getApplicationId(),
+                    request.getLogLevel(),
+                    request.getLogQuery(),
+                    request.getWindowMinutes(),
+                    request.getComparison(),
+                    request.getCountThreshold(),
+                    null);
+            if (active) {
+                enforceActiveLogRuleLimit(organizationId);
+            }
+            AlertRule rule = AlertRule.builder()
+                    .organizationId(organizationId)
+                    .applicationId(log.applicationId())
+                    .name(request.getName().trim())
+                    .type(type)
+                    .target(LOG_RULE_TARGET)
+                    .condition(log.comparison())
+                    .threshold(log.countThreshold().doubleValue())
+                    .conditions(List.of())
+                    .logicOperator(LogicOperator.AND)
+                    .durationMinutes(request.getDurationMinutes())
+                    .logLevel(log.level())
+                    .logQuery(log.query())
+                    .windowMinutes(log.windowMinutes())
+                    .comparison(log.comparison())
+                    .countThreshold(log.countThreshold())
+                    .active(active)
+                    .build();
+            AlertRule saved = ruleRepository.save(rule);
+            revisionService.recordCreate(organizationId, RESOURCE_TYPE, saved.getId(),
+                    SNAPSHOT_SCHEMA_VERSION, snapshot(saved));
+            return AlertRuleResponse.fromEntity(saved);
+        }
+
+        rejectLogFields(request.getLogLevel(), request.getLogQuery(), request.getWindowMinutes(),
+                request.getComparison(), request.getCountThreshold());
+
         List<AlertConditionRequest> requested = request.getConditions() != null && !request.getConditions().isEmpty()
                 ? request.getConditions()
                 : List.of(new AlertConditionRequest(request.getTarget(), request.getCondition(), request.getThreshold()));
@@ -156,21 +239,38 @@ public class AlertService {
                 .conditions(conditions)
                 .logicOperator(request.getLogicOperator() == null ? LogicOperator.AND : request.getLogicOperator())
                 .durationMinutes(request.getDurationMinutes())
-                .active(request.getActive() == null || request.getActive())
+                .active(active)
                 .build();
 
-        return AlertRuleResponse.fromEntity(ruleRepository.save(rule));
+        AlertRule saved = ruleRepository.save(rule);
+        revisionService.recordCreate(organizationId, RESOURCE_TYPE, saved.getId(),
+                SNAPSHOT_SCHEMA_VERSION, snapshot(saved));
+        return AlertRuleResponse.fromEntity(saved);
     }
 
+    /**
+     * Partially updates a rule. Log rules and metric/health rules are mutually exclusive: switching
+     * away from {@code LOG} clears the log columns (and resolves any open incident, because the
+     * rule's meaning changed), while metric/health requests may not carry log fields.
+     */
     @Transactional
     public AlertRuleResponse updateRule(Long organizationId, Long id, UpdateAlertRuleRequest request) {
         AlertRule rule = getOwnedRule(organizationId, id);
+        String before = snapshot(rule);
+        AlertRule saved = applyRuleUpdate(organizationId, rule, request);
+        revisionService.recordUpdate(organizationId, RESOURCE_TYPE, id,
+                SNAPSHOT_SCHEMA_VERSION, before, snapshot(saved));
+        return AlertRuleResponse.fromEntity(saved);
+    }
+
+    private AlertRule applyRuleUpdate(Long organizationId, AlertRule rule, UpdateAlertRuleRequest request) {
+        AlertRuleType previousType = rule.getType();
+        AlertRuleType type = request.getType() != null ? request.getType() : previousType;
+        boolean wasActiveLog = previousType == AlertRuleType.LOG && rule.isActive();
+        boolean active = request.getActive() != null ? request.getActive() : rule.isActive();
 
         if (request.getName() != null && !request.getName().isBlank()) {
             rule.setName(request.getName().trim());
-        }
-        if (request.getType() != null) {
-            rule.setType(request.getType());
         }
         if (request.getDurationMinutes() != null) {
             rule.setDurationMinutes(request.getDurationMinutes());
@@ -179,33 +279,246 @@ public class AlertService {
             rule.setLogicOperator(request.getLogicOperator());
         }
 
-        Long applicationId = request.getApplicationId() != null ? request.getApplicationId() : rule.getApplicationId();
+        if (type == AlertRuleType.LOG) {
+            boolean fromLogRule = previousType == AlertRuleType.LOG;
+            LogRuleValues fallback = fromLogRule
+                    ? new LogRuleValues(rule.getApplicationId(), rule.getLogLevel(), rule.getLogQuery(),
+                            rule.getWindowMinutes(), rule.getComparison(), rule.getCountThreshold())
+                    : null;
+            LogRuleValues log = resolveLogRuleValues(
+                    organizationId,
+                    request.getApplicationId(),
+                    request.getLogLevel(),
+                    request.getLogQuery(),
+                    request.getWindowMinutes(),
+                    request.getComparison(),
+                    request.getCountThreshold(),
+                    fallback);
+            if (active && !wasActiveLog) {
+                enforceActiveLogRuleLimit(organizationId);
+            }
 
+            boolean typeChanged = previousType != type;
+            rule.setType(type);
+            rule.setActive(active);
+            rule.setApplicationId(log.applicationId());
+            rule.setTarget(LOG_RULE_TARGET);
+            rule.setCondition(log.comparison());
+            rule.setThreshold(log.countThreshold().doubleValue());
+            rule.setConditions(new ArrayList<>());
+            rule.setLogicOperator(LogicOperator.AND);
+            rule.setLogLevel(log.level());
+            rule.setLogQuery(log.query());
+            rule.setWindowMinutes(log.windowMinutes());
+            rule.setComparison(log.comparison());
+            rule.setCountThreshold(log.countThreshold());
+            if (typeChanged || !active) {
+                rule.setBreachStartedAt(null);
+                resolveOpenIncidents(rule.getId());
+            }
+            return ruleRepository.save(rule);
+        }
+
+        rejectLogFields(request.getLogLevel(), request.getLogQuery(), request.getWindowMinutes(),
+                request.getComparison(), request.getCountThreshold());
+
+        boolean typeChanged = previousType != type;
+        if (typeChanged && request.getConditions() == null
+                && request.getTarget() == null
+                && request.getCondition() == null
+                && request.getThreshold() == null) {
+            throw new InvalidAlertRuleException(
+                    "Changing a rule type requires conditions for the new type");
+        }
+
+        rule.setType(type);
+        rule.setLogLevel(null);
+        rule.setLogQuery(null);
+        rule.setWindowMinutes(null);
+        rule.setComparison(null);
+        rule.setCountThreshold(null);
+
+        Long applicationId = request.getApplicationId() != null ? request.getApplicationId() : rule.getApplicationId();
         List<AlertConditionRequest> requested = mergeConditionRequests(rule, request);
-        List<AlertRuleCondition> conditions = materializeConditions(organizationId, rule.getType(), applicationId, requested);
+        List<AlertRuleCondition> conditions = materializeConditions(organizationId, type, applicationId, requested);
         AlertRuleCondition primary = conditions.get(0);
         rule.setTarget(primary.getTarget());
         rule.setCondition(primary.getOperator());
         rule.setThreshold(primary.getThreshold());
         rule.setConditions(conditions);
-        rule.setApplicationId(rule.getType() == AlertRuleType.METRIC_THRESHOLD ? applicationId : null);
+        rule.setApplicationId(type == AlertRuleType.METRIC_THRESHOLD ? applicationId : null);
 
         if (request.getActive() != null) {
             rule.setActive(request.getActive());
-            if (!request.getActive()) {
-                // A deactivated rule must not keep an incident firing forever.
-                rule.setBreachStartedAt(null);
-                resolveOpenIncidents(rule.getId());
-            }
+        }
+        if (typeChanged || !rule.isActive()) {
+            rule.setBreachStartedAt(null);
+            resolveOpenIncidents(rule.getId());
         }
 
-        return AlertRuleResponse.fromEntity(ruleRepository.save(rule));
+        return ruleRepository.save(rule);
     }
 
     @Transactional
     public void deleteRule(Long organizationId, Long id) {
         AlertRule rule = getOwnedRule(organizationId, id);
+        revisionService.deleteAll(organizationId, RESOURCE_TYPE, id);
         ruleRepository.delete(rule);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<ConfigRevisionSummaryResponse> listRevisions(
+            Long organizationId, Long id, Integer page, Integer size) {
+        getOwnedRule(organizationId, id);
+        return revisionService.list(organizationId, RESOURCE_TYPE, id, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public ConfigRevisionResponse getRevision(Long organizationId, Long id, int revisionNumber) {
+        getOwnedRule(organizationId, id);
+        return revisionService.get(organizationId, RESOURCE_TYPE, id, revisionNumber);
+    }
+
+    /**
+     * Restores a previous alert-rule snapshot through the same validation path as a normal
+     * update, then records the rollback as a new revision.
+     */
+    @Transactional
+    public AlertRuleResponse restoreRevision(Long organizationId, Long id, int revisionNumber) {
+        AlertRule rule = getOwnedRule(organizationId, id);
+        ConfigRevision revision =
+                revisionService.requireRevision(organizationId, RESOURCE_TYPE, id, revisionNumber);
+        AlertRuleSnapshot snapshot = readSnapshot(revision);
+
+        UpdateAlertRuleRequest request = new UpdateAlertRuleRequest();
+        request.setName(snapshot.name());
+        request.setType(snapshot.type());
+        request.setApplicationId(snapshot.applicationId());
+        request.setDurationMinutes(snapshot.durationMinutes());
+        request.setLogicOperator(snapshot.logicOperator());
+        request.setActive(snapshot.active());
+        request.setConditions(snapshot.conditions());
+        request.setLogLevel(snapshot.logLevel());
+        request.setLogQuery(snapshot.logQuery());
+        request.setWindowMinutes(snapshot.windowMinutes());
+        request.setComparison(snapshot.comparison());
+        request.setCountThreshold(snapshot.countThreshold());
+
+        Set<ConstraintViolation<UpdateAlertRuleRequest>> violations = validator.validate(request);
+        if (!violations.isEmpty()) {
+            throw new InvalidConfigSnapshotException(
+                    "Alert rule snapshot is invalid: " + violations.iterator().next().getMessage());
+        }
+        ensureSnapshotReferencesExist(organizationId, snapshot);
+
+        AlertRule saved;
+        try {
+            saved = applyRuleUpdate(organizationId, rule, request);
+        } catch (InvalidAlertRuleException ex) {
+            throw new InvalidConfigSnapshotException(ex.getMessage(), ex);
+        }
+        revisionService.recordRestore(organizationId, RESOURCE_TYPE, id,
+                revisionNumber, SNAPSHOT_SCHEMA_VERSION, snapshot(saved));
+        return AlertRuleResponse.fromEntity(saved);
+    }
+
+    private String snapshot(AlertRule rule) {
+        AlertRuleSnapshot snapshot = new AlertRuleSnapshot(
+                rule.getName(),
+                rule.getType(),
+                rule.getApplicationId(),
+                rule.getDurationMinutes(),
+                rule.getLogicOperator(),
+                rule.isActive(),
+                existingConditions(rule),
+                rule.getLogLevel(),
+                rule.getLogQuery(),
+                rule.getWindowMinutes(),
+                rule.getComparison(),
+                rule.getCountThreshold());
+        try {
+            return objectMapper.writeValueAsString(snapshot);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize alert rule snapshot", e);
+        }
+    }
+
+    private AlertRuleSnapshot readSnapshot(ConfigRevision revision) {
+        if (revision.getSchemaVersion() != SNAPSHOT_SCHEMA_VERSION) {
+            throw new InvalidConfigSnapshotException(
+                    "Alert rule snapshot schema " + revision.getSchemaVersion() + " is not supported");
+        }
+        try {
+            AlertRuleSnapshot snapshot = objectMapper.copy()
+                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true)
+                    .configure(DeserializationFeature.FAIL_ON_TRAILING_TOKENS, true)
+                    .readValue(revision.getSnapshot(), AlertRuleSnapshot.class);
+            if (snapshot == null) {
+                throw new InvalidConfigSnapshotException("Alert rule snapshot is empty");
+            }
+            return snapshot;
+        } catch (JsonProcessingException e) {
+            throw new InvalidConfigSnapshotException("Alert rule snapshot is not valid", e);
+        }
+    }
+
+    private void ensureSnapshotReferencesExist(Long organizationId, AlertRuleSnapshot snapshot) {
+        if (snapshot.applicationId() != null) {
+            try {
+                applicationService.getOwnedApplication(snapshot.applicationId(), organizationId);
+            } catch (RuntimeException ex) {
+                throw new ConfigRevisionRestoreConflictException(
+                        "Cannot restore alert rule: application " + snapshot.applicationId()
+                                + " no longer exists");
+            }
+        }
+        if (snapshot.type() != AlertRuleType.HEALTH_CHECK || snapshot.conditions() == null) {
+            return;
+        }
+        for (AlertConditionRequest condition : snapshot.conditions()) {
+            if (condition == null || condition.getTarget() == null) {
+                continue;
+            }
+            try {
+                healthCheckService.listResults(
+                        organizationId, Long.parseLong(condition.getTarget().trim()), 1);
+            } catch (RuntimeException ex) {
+                throw new ConfigRevisionRestoreConflictException(
+                        "Cannot restore alert rule: health check " + condition.getTarget()
+                                + " no longer exists");
+            }
+        }
+    }
+
+    /**
+     * Counts logs matching a prospective log rule over the last {@code windowMinutes}. This is a
+     * read-only helper for choosing a threshold; it never creates a rule or an incident and does
+     * not need an application id beyond ownership validation.
+     */
+    @Transactional(readOnly = true)
+    public LogCountPreviewResponse previewLogCount(Long organizationId, PreviewLogCountRequest request) {
+        Instant now = Instant.now();
+        long retryAfter = previewRateLimiter.tryAcquire(organizationId, now);
+        if (retryAfter > 0) {
+            throw new AlertPreviewRateLimitedException(retryAfter);
+        }
+
+        String query = normalizeLogQuery(request.getLogQuery());
+        if (request.getLogLevel() == null && query == null) {
+            throw new InvalidAlertRuleException(
+                    "Choose a log level, a search query, or both before previewing");
+        }
+
+        int windowMinutes = request.getWindowMinutes();
+        Instant from = now.minusSeconds(windowMinutes * 60L);
+        long count = logQueryService.countLogs(
+                organizationId,
+                request.getApplicationId(),
+                request.getLogLevel(),
+                query,
+                from,
+                now);
+        return new LogCountPreviewResponse(count, windowMinutes, from, now);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -287,7 +600,8 @@ public class AlertService {
                         "test.metric", AlertCondition.GREATER_THAN, 0.0, 1.0, true)),
                 LogicOperator.AND,
                 IncidentStatus.FIRING,
-                Instant.now());
+                Instant.now(),
+                null);
 
         notificationDispatcher.dispatchTest(channel, event);
     }
@@ -532,6 +846,115 @@ public class AlertService {
                     .build());
         }
         return conditions;
+    }
+
+    /**
+     * Merges a partial update into a complete, validated log-rule definition. Values omitted from
+     * the request fall back to the existing log rule (when the rule is already a log rule), which
+     * keeps PATCH-style updates usable while still validating the resulting definition.
+     */
+    private LogRuleValues resolveLogRuleValues(
+            Long organizationId,
+            Long requestedApplicationId,
+            LogLevel requestedLevel,
+            String requestedQuery,
+            Integer requestedWindowMinutes,
+            AlertCondition requestedComparison,
+            Long requestedCountThreshold,
+            LogRuleValues fallback) {
+        Long applicationId = requestedApplicationId != null
+                ? requestedApplicationId
+                : fallback == null ? null : fallback.applicationId();
+        LogLevel level = requestedLevel != null
+                ? requestedLevel
+                : fallback == null ? null : fallback.level();
+        String query = requestedQuery != null
+                ? normalizeLogQuery(requestedQuery)
+                : fallback == null ? null : fallback.query();
+        Integer windowMinutes = requestedWindowMinutes != null
+                ? requestedWindowMinutes
+                : fallback == null ? null : fallback.windowMinutes();
+        AlertCondition comparison = requestedComparison != null
+                ? requestedComparison
+                : fallback == null ? null : fallback.comparison();
+        Long countThreshold = requestedCountThreshold != null
+                ? requestedCountThreshold
+                : fallback == null ? null : fallback.countThreshold();
+
+        if (applicationId == null) {
+            throw new InvalidAlertRuleException("A log alert requires an application");
+        }
+        if (windowMinutes == null
+                || windowMinutes < AlertRule.MIN_WINDOW_MINUTES
+                || windowMinutes > AlertRule.MAX_WINDOW_MINUTES) {
+            throw new InvalidAlertRuleException(
+                    "windowMinutes must be between " + AlertRule.MIN_WINDOW_MINUTES
+                            + " and " + AlertRule.MAX_WINDOW_MINUTES);
+        }
+        if (comparison == null) {
+            throw new InvalidAlertRuleException("A log alert requires a comparison");
+        }
+        if (comparison == AlertCondition.EQUAL) {
+            throw new InvalidAlertRuleException(
+                    "Log alerts support GREATER_THAN, GREATER_OR_EQUAL or LESS_THAN");
+        }
+        if (countThreshold == null || countThreshold < 0) {
+            throw new InvalidAlertRuleException(
+                    "countThreshold must be greater than or equal to 0");
+        }
+        if (level == null && query == null) {
+            throw new InvalidAlertRuleException(
+                    "A log alert requires a log level, a search query, or both");
+        }
+        if (query != null && query.length() > AlertRule.MAX_LOG_QUERY_LENGTH) {
+            throw new InvalidAlertRuleException(
+                    "logQuery must be at most " + AlertRule.MAX_LOG_QUERY_LENGTH + " characters");
+        }
+
+        // Verifies ownership; throws ApplicationAccessDenied/NotFound for foreign or missing apps.
+        applicationService.getOwnedApplication(applicationId, organizationId);
+        return new LogRuleValues(applicationId, level, query, windowMinutes, comparison, countThreshold);
+    }
+
+    private void enforceActiveLogRuleLimit(Long organizationId) {
+        long activeLogRules = ruleRepository.countByOrganizationIdAndTypeAndActiveTrue(
+                organizationId, AlertRuleType.LOG);
+        if (activeLogRules >= MAX_ACTIVE_LOG_RULES) {
+            throw new LogAlertRuleLimitExceededException(MAX_ACTIVE_LOG_RULES);
+        }
+    }
+
+    private void rejectLogFields(
+            LogLevel level,
+            String query,
+            Integer windowMinutes,
+            AlertCondition comparison,
+            Long countThreshold) {
+        if (level != null
+                || (query != null && !query.isBlank())
+                || windowMinutes != null
+                || comparison != null
+                || countThreshold != null) {
+            throw new InvalidAlertRuleException(
+                    "Log rule fields are only valid for LOG alert rules");
+        }
+    }
+
+    private String normalizeLogQuery(String query) {
+        if (query == null) {
+            return null;
+        }
+        String trimmed = query.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private record LogRuleValues(
+            Long applicationId,
+            LogLevel level,
+            String query,
+            Integer windowMinutes,
+            AlertCondition comparison,
+            Long countThreshold) {
     }
 
     private void validateHealthCheckTarget(Long organizationId, String target) {

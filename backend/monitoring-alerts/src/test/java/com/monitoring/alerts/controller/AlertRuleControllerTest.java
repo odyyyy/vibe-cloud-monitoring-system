@@ -2,7 +2,9 @@ package com.monitoring.alerts.controller;
 
 import com.monitoring.organization.tenant.CurrentTenantService;
 import com.monitoring.alerts.dto.response.AlertRuleResponse;
+import com.monitoring.alerts.dto.response.LogCountPreviewResponse;
 import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
+import com.monitoring.alerts.dto.request.PreviewLogCountRequest;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertRuleType;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -103,6 +106,37 @@ class AlertRuleControllerTest {
                 .andExpect(jsonPath("$[0].target").value("system.cpu.usage"));
 
         verify(alertService).listRules(USER_ID, 7L, "system.cpu.usage");
+    }
+
+    @Test
+    void previewLogCount_returnsCountForResolvedTenant() throws Exception {
+        Instant from = Instant.parse("2026-10-01T10:00:00Z");
+        Instant to = Instant.parse("2026-10-01T10:05:00Z");
+        when(alertService.previewLogCount(eq(USER_ID), any(PreviewLogCountRequest.class)))
+                .thenReturn(new LogCountPreviewResponse(12L, 5, from, to));
+
+        mockMvc.perform(post("/api/v1/alert-rules/preview-log-count")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"applicationId\":7,\"logLevel\":\"ERROR\",\"logQuery\":\"timeout\","
+                                + "\"windowMinutes\":5}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(12))
+                .andExpect(jsonPath("$.windowMinutes").value(5))
+                .andExpect(jsonPath("$.from").exists())
+                .andExpect(jsonPath("$.to").exists());
+
+        verify(alertService).previewLogCount(eq(USER_ID), any(PreviewLogCountRequest.class));
+    }
+
+    @Test
+    void previewLogCount_invalidWindow_returnsBadRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/alert-rules/preview-log-count")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"applicationId\":7,\"windowMinutes\":0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.windowMinutes").exists());
+
+        verify(alertService, Mockito.never()).previewLogCount(any(), any());
     }
 
     @Test

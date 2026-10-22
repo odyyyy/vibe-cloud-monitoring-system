@@ -5,6 +5,8 @@ import com.monitoring.alerts.dto.response.AlertRuleResponse;
 import com.monitoring.alerts.dto.request.AlertConditionRequest;
 import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
 import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
+import com.monitoring.alerts.dto.request.PreviewLogCountRequest;
+import com.monitoring.alerts.dto.response.LogCountPreviewResponse;
 import com.monitoring.alerts.dto.response.NotificationChannelResponse;
 import com.monitoring.alerts.dto.request.UpdateAlertRuleRequest;
 import com.monitoring.alerts.dto.request.UpdateIncidentNotesRequest;
@@ -20,8 +22,10 @@ import com.monitoring.alerts.entity.NotificationChannelType;
 import com.monitoring.alerts.exception.AlertIncidentAccessDeniedException;
 import com.monitoring.alerts.exception.AlertIncidentNotFoundException;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
+import com.monitoring.alerts.exception.AlertPreviewRateLimitedException;
 import com.monitoring.alerts.exception.AlertRuleNotFoundException;
 import com.monitoring.alerts.exception.InvalidAlertRuleException;
+import com.monitoring.alerts.exception.LogAlertRuleLimitExceededException;
 import com.monitoring.alerts.exception.InvalidIncidentNoteException;
 import com.monitoring.alerts.exception.InvalidIncidentStateException;
 import com.monitoring.alerts.exception.InvalidWebhookUrlException;
@@ -36,10 +40,23 @@ import com.monitoring.healthcheck.service.SsrfGuard;
 import com.monitoring.apps.entity.Application;
 import com.monitoring.apps.exception.ApplicationAccessDeniedException;
 import com.monitoring.apps.service.ApplicationService;
+import com.monitoring.collector.entity.LogLevel;
+import com.monitoring.collector.service.LogQueryService;
+import com.monitoring.revisions.entity.ConfigChangeType;
+import com.monitoring.revisions.entity.ConfigResourceType;
+import com.monitoring.revisions.entity.ConfigRevision;
+import com.monitoring.revisions.exception.ConfigRevisionRestoreConflictException;
+import com.monitoring.revisions.exception.InvalidConfigSnapshotException;
+import com.monitoring.revisions.service.ConfigRevisionService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,6 +65,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -64,6 +83,9 @@ class AlertServiceTest {
     private ApplicationService applicationService;
     private HealthCheckService healthCheckService;
     private AlertNotificationDispatcher notificationDispatcher;
+    private LogQueryService logQueryService;
+    private AlertPreviewRateLimiter previewRateLimiter;
+    private ConfigRevisionService revisionService;
     private AlertService service;
 
     @BeforeEach
@@ -75,8 +97,13 @@ class AlertServiceTest {
         applicationService = Mockito.mock(ApplicationService.class);
         healthCheckService = Mockito.mock(HealthCheckService.class);
         notificationDispatcher = Mockito.mock(AlertNotificationDispatcher.class);
+        logQueryService = Mockito.mock(LogQueryService.class);
+        previewRateLimiter = Mockito.mock(AlertPreviewRateLimiter.class);
+        revisionService = Mockito.mock(ConfigRevisionService.class);
         service = new AlertService(ruleRepository, channelRepository, incidentRepository, userRepository,
-                applicationService, healthCheckService, new SsrfGuard(), notificationDispatcher);
+                applicationService, healthCheckService, new SsrfGuard(), notificationDispatcher,
+                logQueryService, previewRateLimiter, revisionService,
+                new ObjectMapper(), Validation.buildDefaultValidatorFactory().getValidator());
         when(incidentRepository.save(any(AlertIncident.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(ruleRepository.save(any(AlertRule.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -175,6 +202,94 @@ class AlertServiceTest {
         AlertRuleResponse response = service.createRule(OWNER_ID, request);
         assertEquals(null, response.getApplicationId());
         assertEquals(AlertRuleType.HEALTH_CHECK, response.getType());
+    }
+
+    private CreateAlertRuleRequest logRule() {
+        return CreateAlertRuleRequest.builder()
+                .name("Checkout timeouts")
+                .applicationId(APP_ID)
+                .type(AlertRuleType.LOG)
+                .logLevel(LogLevel.ERROR)
+                .logQuery("  timeout  ")
+                .windowMinutes(5)
+                .comparison(AlertCondition.GREATER_OR_EQUAL)
+                .countThreshold(10L)
+                .durationMinutes(1)
+                .active(true)
+                .build();
+    }
+
+    @Test
+    void createLogRulePersistsFiltersAndLegacyColumns() {
+        when(applicationService.getOwnedApplication(APP_ID, OWNER_ID)).thenReturn(new Application());
+
+        AlertRuleResponse response = service.createRule(OWNER_ID, logRule());
+
+        assertEquals(AlertRuleType.LOG, response.getType());
+        assertEquals(APP_ID, response.getApplicationId());
+        assertEquals("logs", response.getTarget());
+        assertEquals(LogLevel.ERROR, response.getLogLevel());
+        assertEquals("timeout", response.getLogQuery());
+        assertEquals(5, response.getWindowMinutes());
+        assertEquals(AlertCondition.GREATER_OR_EQUAL, response.getComparison());
+        assertEquals(10L, response.getCountThreshold());
+        assertEquals(10.0, response.getThreshold());
+        assertTrue(response.getConditions().isEmpty());
+    }
+
+    @Test
+    void createLogRuleWithoutLevelOrQueryIsRejected() {
+        CreateAlertRuleRequest request = logRule();
+        request.setLogLevel(null);
+        request.setLogQuery("  ");
+
+        assertThrows(InvalidAlertRuleException.class, () -> service.createRule(OWNER_ID, request));
+        verify(ruleRepository, never()).save(any());
+    }
+
+    @Test
+    void activeLogRuleLimitIsEnforced() {
+        when(applicationService.getOwnedApplication(APP_ID, OWNER_ID)).thenReturn(new Application());
+        when(ruleRepository.countByOrganizationIdAndTypeAndActiveTrue(OWNER_ID, AlertRuleType.LOG))
+                .thenReturn((long) AlertService.MAX_ACTIVE_LOG_RULES);
+
+        assertThrows(LogAlertRuleLimitExceededException.class,
+                () -> service.createRule(OWNER_ID, logRule()));
+        verify(ruleRepository, never()).save(any());
+    }
+
+    @Test
+    void metricRuleRejectsLogFields() {
+        CreateAlertRuleRequest request = metricRule();
+        request.setWindowMinutes(5);
+
+        assertThrows(InvalidAlertRuleException.class, () -> service.createRule(OWNER_ID, request));
+    }
+
+    @Test
+    void previewReturnsCountAndEnforcesRateLimit() {
+        when(previewRateLimiter.tryAcquire(any(), any())).thenReturn(0L);
+        when(logQueryService.countLogs(any(), any(), any(), any(), any(), any())).thenReturn(4L);
+
+        LogCountPreviewResponse response = service.previewLogCount(OWNER_ID,
+                PreviewLogCountRequest.builder()
+                        .applicationId(APP_ID)
+                        .logLevel(LogLevel.ERROR)
+                        .logQuery("timeout")
+                        .windowMinutes(5)
+                        .build());
+
+        assertEquals(4L, response.count());
+        assertEquals(5, response.windowMinutes());
+        assertTrue(response.from().isBefore(response.to()));
+
+        when(previewRateLimiter.tryAcquire(any(), any())).thenReturn(12L);
+        assertThrows(AlertPreviewRateLimitedException.class,
+                () -> service.previewLogCount(OWNER_ID, PreviewLogCountRequest.builder()
+                        .applicationId(APP_ID)
+                        .logLevel(LogLevel.ERROR)
+                        .windowMinutes(5)
+                        .build()));
     }
 
     @Test
@@ -505,5 +620,134 @@ class AlertServiceTest {
 
         assertTrue(result.isEmpty());
         verify(ruleRepository).findByOrganizationIdAndApplicationIdAndActiveTrueOrderByCreatedAtDesc(9_999L, APP_ID);
+    }
+
+    @Test
+    void createRuleRecordsASnapshotWithoutChannelSecrets() {
+        when(applicationService.getOwnedApplication(APP_ID, OWNER_ID)).thenReturn(new Application());
+        when(ruleRepository.save(any(AlertRule.class))).thenAnswer(invocation -> {
+            AlertRule saved = invocation.getArgument(0);
+            saved.setId(11L);
+            return saved;
+        });
+
+        service.createRule(OWNER_ID, metricRule());
+
+        ArgumentCaptor<String> snapshot = ArgumentCaptor.forClass(String.class);
+        verify(revisionService).recordCreate(eq(OWNER_ID), eq(ConfigResourceType.ALERT_RULE),
+                any(Long.class), eq(AlertService.SNAPSHOT_SCHEMA_VERSION), snapshot.capture());
+        assertTrue(snapshot.getValue().contains("\"name\":\"High CPU\""));
+        assertFalse(snapshot.getValue().contains("slackWebhookUrl"));
+        assertFalse(snapshot.getValue().contains("emailAddress"));
+        assertFalse(snapshot.getValue().contains("\"url\""));
+    }
+
+    @Test
+    void updateRuleRecordsBeforeAndAfterSnapshots() {
+        AlertRule rule = metricRule("Before", "system.cpu.usage", 80.0, true);
+        rule.setId(11L);
+        rule.setConditions(new ArrayList<>());
+        when(ruleRepository.findById(11L)).thenReturn(Optional.of(rule));
+        when(applicationService.getOwnedApplication(APP_ID, OWNER_ID)).thenReturn(new Application());
+
+        UpdateAlertRuleRequest request = new UpdateAlertRuleRequest();
+        request.setName("After");
+
+        service.updateRule(OWNER_ID, 11L, request);
+
+        verify(revisionService).recordUpdate(
+                eq(OWNER_ID), eq(ConfigResourceType.ALERT_RULE), eq(11L),
+                eq(AlertService.SNAPSHOT_SCHEMA_VERSION),
+                argThat(value -> value.contains("\"name\":\"Before\"")),
+                argThat(value -> value.contains("\"name\":\"After\"")));
+    }
+
+    @Test
+    void restoreRevisionAppliesTheSnapshotThroughTheUpdatePath() {
+        AlertRule rule = metricRule("Current", "system.cpu.usage", 50.0, true);
+        rule.setId(11L);
+        rule.setConditions(new ArrayList<>());
+        when(ruleRepository.findById(11L)).thenReturn(Optional.of(rule));
+        when(applicationService.getOwnedApplication(APP_ID, OWNER_ID)).thenReturn(new Application());
+        when(revisionService.requireRevision(OWNER_ID, ConfigResourceType.ALERT_RULE, 11L, 2))
+                .thenReturn(revision(2, """
+                        {"name":"Restored","type":"METRIC_THRESHOLD","applicationId":7,
+                         "durationMinutes":5,"logicOperator":"AND","active":true,
+                         "conditions":[{"target":"system.cpu.usage","operator":"GREATER_THAN","threshold":90.0}],
+                         "logLevel":null,"logQuery":null,"windowMinutes":null,
+                         "comparison":null,"countThreshold":null}
+                        """));
+
+        AlertRuleResponse response = service.restoreRevision(OWNER_ID, 11L, 2);
+
+        assertEquals("Restored", response.getName());
+        assertEquals(90.0, response.getThreshold());
+        verify(revisionService).recordRestore(eq(OWNER_ID), eq(ConfigResourceType.ALERT_RULE),
+                eq(11L), eq(2), eq(AlertService.SNAPSHOT_SCHEMA_VERSION), any());
+    }
+
+    @Test
+    void restoringARuleWithADeletedApplicationReturnsAConflict() {
+        AlertRule rule = metricRule("Current", "system.cpu.usage", 50.0, true);
+        rule.setId(11L);
+        rule.setConditions(new ArrayList<>());
+        when(ruleRepository.findById(11L)).thenReturn(Optional.of(rule));
+        when(applicationService.getOwnedApplication(APP_ID, OWNER_ID))
+                .thenThrow(new ApplicationAccessDeniedException());
+        when(revisionService.requireRevision(OWNER_ID, ConfigResourceType.ALERT_RULE, 11L, 1))
+                .thenReturn(revision(1, """
+                        {"name":"Restored","type":"METRIC_THRESHOLD","applicationId":7,
+                         "durationMinutes":5,"logicOperator":"AND","active":true,
+                         "conditions":[{"target":"system.cpu.usage","operator":"GREATER_THAN","threshold":90.0}],
+                         "logLevel":null,"logQuery":null,"windowMinutes":null,
+                         "comparison":null,"countThreshold":null}
+                        """));
+
+        assertThrows(ConfigRevisionRestoreConflictException.class,
+                () -> service.restoreRevision(OWNER_ID, 11L, 1));
+        assertEquals("Current", rule.getName());
+        verify(ruleRepository, never()).save(any());
+    }
+
+    @Test
+    void restoringAnUnknownSnapshotFieldIsRejected() {
+        AlertRule rule = metricRule("Current", "system.cpu.usage", 50.0, true);
+        rule.setId(11L);
+        when(ruleRepository.findById(11L)).thenReturn(Optional.of(rule));
+        when(revisionService.requireRevision(OWNER_ID, ConfigResourceType.ALERT_RULE, 11L, 1))
+                .thenReturn(revision(1, """
+                        {"name":"Restored","type":"METRIC_THRESHOLD","applicationId":7,
+                         "durationMinutes":5,"logicOperator":"AND","active":true,
+                         "conditions":[],"logLevel":null,"logQuery":null,"windowMinutes":null,
+                         "comparison":null,"countThreshold":null,"organizationId":999}
+                        """));
+
+        assertThrows(InvalidConfigSnapshotException.class,
+                () -> service.restoreRevision(OWNER_ID, 11L, 1));
+        assertEquals("Current", rule.getName());
+    }
+
+    @Test
+    void deleteRuleRemovesItsHistoryInTheSameOperation() {
+        AlertRule rule = metricRule("Old", "system.cpu.usage", 50.0, true);
+        rule.setId(11L);
+        when(ruleRepository.findById(11L)).thenReturn(Optional.of(rule));
+
+        service.deleteRule(OWNER_ID, 11L);
+
+        verify(revisionService).deleteAll(OWNER_ID, ConfigResourceType.ALERT_RULE, 11L);
+        verify(ruleRepository).delete(rule);
+    }
+
+    private ConfigRevision revision(int number, String snapshot) {
+        return ConfigRevision.builder()
+                .organizationId(OWNER_ID)
+                .resourceType(ConfigResourceType.ALERT_RULE)
+                .resourceId(11L)
+                .revisionNumber(number)
+                .changeType(ConfigChangeType.UPDATE)
+                .schemaVersion(AlertService.SNAPSHOT_SCHEMA_VERSION)
+                .snapshot(snapshot)
+                .build();
     }
 }

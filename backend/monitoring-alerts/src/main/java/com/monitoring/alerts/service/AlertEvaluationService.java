@@ -10,6 +10,8 @@ import com.monitoring.alerts.entity.IncidentStatus;
 import com.monitoring.alerts.entity.LogicOperator;
 import com.monitoring.alerts.repository.AlertIncidentRepository;
 import com.monitoring.alerts.repository.AlertRuleRepository;
+import com.monitoring.apps.service.ApplicationService;
+import com.monitoring.collector.service.LogQueryService;
 import com.monitoring.collector.service.MetricQueryService;
 import com.monitoring.healthcheck.dto.response.HealthCheckResultResponse;
 import com.monitoring.healthcheck.entity.HealthStatus;
@@ -21,6 +23,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,6 +61,9 @@ public class AlertEvaluationService {
     /** Absolute tolerance used for {@link AlertCondition#EQUAL} comparisons. */
     private static final double EQUALITY_EPSILON = 1e-9;
 
+    /** Synthetic target used in condition observations for log-count rules. */
+    private static final String LOG_TARGET = "logs";
+
     /** Incidents that still represent an active breach (manual resolution closes them). */
     private static final List<IncidentStatus> OPEN_STATUSES =
             List.of(IncidentStatus.FIRING, IncidentStatus.ACKNOWLEDGED);
@@ -64,26 +71,35 @@ public class AlertEvaluationService {
     private final AlertRuleRepository ruleRepository;
     private final AlertIncidentRepository incidentRepository;
     private final MetricQueryService metricQueryService;
+    private final LogQueryService logQueryService;
+    private final ApplicationService applicationService;
     private final HealthCheckService healthCheckService;
     private final MaintenanceWindowService maintenanceWindowService;
     private final long metricLookbackMinutes;
     private final long healthFreshnessMinutes;
+    private final String frontendBaseUrl;
 
     public AlertEvaluationService(
             AlertRuleRepository ruleRepository,
             AlertIncidentRepository incidentRepository,
             MetricQueryService metricQueryService,
+            LogQueryService logQueryService,
+            ApplicationService applicationService,
             HealthCheckService healthCheckService,
             MaintenanceWindowService maintenanceWindowService,
             @Value("${monitoring.alerts.metric-lookback-minutes:5}") long metricLookbackMinutes,
-            @Value("${monitoring.alerts.health-freshness-minutes:10}") long healthFreshnessMinutes) {
+            @Value("${monitoring.alerts.health-freshness-minutes:10}") long healthFreshnessMinutes,
+            @Value("${monitoring.alerts.frontend.base-url:}") String frontendBaseUrl) {
         this.ruleRepository = ruleRepository;
         this.incidentRepository = incidentRepository;
         this.metricQueryService = metricQueryService;
+        this.logQueryService = logQueryService;
+        this.applicationService = applicationService;
         this.healthCheckService = healthCheckService;
         this.maintenanceWindowService = maintenanceWindowService;
         this.metricLookbackMinutes = metricLookbackMinutes;
         this.healthFreshnessMinutes = healthFreshnessMinutes;
+        this.frontendBaseUrl = frontendBaseUrl == null ? "" : frontendBaseUrl.trim();
     }
 
     /**
@@ -179,6 +195,10 @@ public class AlertEvaluationService {
     }
 
     private Optional<Observation> observe(AlertRule rule, Instant now) {
+        if (rule.getType() == AlertRuleType.LOG) {
+            return observeLogCount(rule, now);
+        }
+
         List<AlertRuleCondition> conditions = effectiveConditions(rule);
         List<AlertEvent.ConditionObservation> evaluated = new ArrayList<>(conditions.size());
         List<Double> values = new ArrayList<>(conditions.size());
@@ -200,6 +220,47 @@ public class AlertEvaluationService {
 
         boolean breaching = combine(evaluated, rule.getLogicOperator());
         return Optional.of(new Observation(breaching, representativeValue(evaluated, values), evaluated));
+    }
+
+    /**
+     * Counts matching logs over the rule's window. A count query is bounded by the configured
+     * query timeout; on timeout or any other lookup failure the round is skipped, leaving the
+     * incident state unchanged. A failed count is never interpreted as zero.
+     */
+    private Optional<Observation> observeLogCount(AlertRule rule, Instant now) {
+        if (rule.getApplicationId() == null
+                || rule.getWindowMinutes() == null
+                || rule.getComparison() == null
+                || rule.getCountThreshold() == null) {
+            return Optional.empty();
+        }
+
+        Instant from = now.minusSeconds(rule.getWindowMinutes() * 60L);
+        long count;
+        try {
+            count = logQueryService.countLogs(
+                    rule.getOrganizationId(),
+                    rule.getApplicationId(),
+                    rule.getLogLevel(),
+                    rule.getLogQuery(),
+                    from,
+                    now);
+        } catch (RuntimeException ex) {
+            // Do not log the user's search text; it may contain sensitive data.
+            log.warn("Skipping log alert rule {} because the count failed ({})",
+                    rule.getId(), ex.getClass().getSimpleName());
+            return Optional.empty();
+        }
+
+        boolean breaching = compare(count, rule.getComparison(), rule.getCountThreshold());
+        AlertEvent.ConditionObservation observation = new AlertEvent.ConditionObservation(
+                LOG_TARGET,
+                rule.getComparison(),
+                rule.getCountThreshold().doubleValue(),
+                (double) count,
+                breaching);
+        List<AlertEvent.ConditionObservation> observations = List.of(observation);
+        return Optional.of(new Observation(breaching, (double) count, observations));
     }
 
     private List<AlertRuleCondition> effectiveConditions(AlertRule rule) {
@@ -301,12 +362,70 @@ public class AlertEvaluationService {
     private boolean compare(double value, AlertCondition condition, double threshold) {
         return switch (condition) {
             case GREATER_THAN -> value > threshold;
+            case GREATER_OR_EQUAL -> value >= threshold;
             case LESS_THAN -> value < threshold;
             case EQUAL -> Math.abs(value - threshold) < EQUALITY_EPSILON;
         };
     }
 
+    private AlertEvent.LogAlertDetails buildLogDetails(AlertRule rule, Instant now, long observedCount) {
+        String applicationName = null;
+        try {
+            applicationName = applicationService
+                    .getOwnedApplication(rule.getApplicationId(), rule.getOrganizationId())
+                    .getName();
+        } catch (RuntimeException ex) {
+            // The application may have been deleted; the alert still evaluates and notifies.
+            log.debug("Application {} for log alert {} is unavailable ({})",
+                    rule.getApplicationId(), rule.getId(), ex.getClass().getSimpleName());
+        }
+
+        Instant from = now.minusSeconds(rule.getWindowMinutes() * 60L);
+        return new AlertEvent.LogAlertDetails(
+                rule.getLogLevel(),
+                rule.getLogQuery(),
+                rule.getWindowMinutes(),
+                rule.getComparison(),
+                rule.getCountThreshold(),
+                observedCount,
+                applicationName,
+                buildExplorerUrl(rule, from, now));
+    }
+
+    /**
+     * Builds an absolute Log Explorer URL with the rule's filters and window. When no frontend base
+     * URL is configured (for example local development) the notification omits the link rather
+     * than advertising an unreachable host.
+     */
+    private String buildExplorerUrl(AlertRule rule, Instant from, Instant to) {
+        if (frontendBaseUrl.isBlank()) {
+            return null;
+        }
+        String base = frontendBaseUrl.endsWith("/")
+                ? frontendBaseUrl.substring(0, frontendBaseUrl.length() - 1)
+                : frontendBaseUrl;
+        StringBuilder url = new StringBuilder(base)
+                .append("/app/logs?applicationId=").append(rule.getApplicationId())
+                .append("&from=").append(encode(from.toString()))
+                .append("&to=").append(encode(to.toString()));
+        if (rule.getLogLevel() != null) {
+            url.append("&level=").append(encode(rule.getLogLevel().name()));
+        }
+        if (rule.getLogQuery() != null && !rule.getLogQuery().isBlank()) {
+            url.append("&searchText=").append(encode(rule.getLogQuery()));
+        }
+        return url.toString();
+    }
+
+    private String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
     private AlertEvent toEvent(AlertRule rule, AlertIncident incident, Observation observation, Instant now) {
+        long observedCount = observation.value() == null ? 0L : observation.value().longValue();
+        AlertEvent.LogAlertDetails logDetails = rule.getType() == AlertRuleType.LOG
+                ? buildLogDetails(rule, now, observedCount)
+                : null;
         return new AlertEvent(
                 incident.getId(),
                 rule.getId(),
@@ -321,7 +440,8 @@ public class AlertEvaluationService {
                 observation.conditions(),
                 rule.getLogicOperator(),
                 incident.getStatus(),
-                now);
+                now,
+                logDetails);
     }
 
     /**

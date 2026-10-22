@@ -1,12 +1,18 @@
 package com.monitoring.alerts.controller;
 
 import com.monitoring.alerts.dto.response.AlertRuleResponse;
+import com.monitoring.alerts.dto.response.LogCountPreviewResponse;
 import com.monitoring.alerts.dto.request.CreateAlertRuleRequest;
+import com.monitoring.alerts.dto.request.PreviewLogCountRequest;
 import com.monitoring.alerts.dto.request.UpdateAlertRuleRequest;
 import com.monitoring.alerts.service.AlertService;
+import com.monitoring.audit.annotation.AuditLog;
+import com.monitoring.common.dto.response.PageResponse;
 import com.monitoring.organization.entity.MembershipRole;
 import com.monitoring.organization.security.RequireRole;
 import com.monitoring.organization.tenant.CurrentTenantService;
+import com.monitoring.revisions.dto.ConfigRevisionResponse;
+import com.monitoring.revisions.dto.ConfigRevisionSummaryResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -54,6 +60,45 @@ public class AlertRuleController {
         AlertRuleResponse created = alertService.createRule(
                 currentTenantService.requireOrganizationId(), request);
         return ResponseEntity.created(URI.create("/api/v1/alert-rules/" + created.getId())).body(created);
+    }
+
+    /**
+     * Counts logs matching the prospective filters over the requested window so a user can pick a
+     * sensible threshold. Read-only and tenant-scoped; rate-limited per organization.
+     */
+    @PostMapping("/preview-log-count")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
+    public ResponseEntity<LogCountPreviewResponse> previewLogCount(
+            @Valid @RequestBody PreviewLogCountRequest request) {
+        return ResponseEntity.ok(alertService.previewLogCount(
+                currentTenantService.requireOrganizationId(), request));
+    }
+
+    @GetMapping("/{id}/revisions")
+    public ResponseEntity<PageResponse<ConfigRevisionSummaryResponse>> listRevisions(
+            @PathVariable Long id,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        return ResponseEntity.ok(alertService.listRevisions(
+                currentTenantService.requireOrganizationId(), id, page, size));
+    }
+
+    @GetMapping("/{id}/revisions/{revisionNumber}")
+    public ResponseEntity<ConfigRevisionResponse> getRevision(
+            @PathVariable Long id,
+            @PathVariable int revisionNumber) {
+        return ResponseEntity.ok(alertService.getRevision(
+                currentTenantService.requireOrganizationId(), id, revisionNumber));
+    }
+
+    @PostMapping("/{id}/revisions/{revisionNumber}/restore")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
+    @AuditLog(action = "ALERT_RULE_REVISION_RESTORED", resourceId = "#id")
+    public ResponseEntity<AlertRuleResponse> restoreRevision(
+            @PathVariable Long id,
+            @PathVariable int revisionNumber) {
+        return ResponseEntity.ok(alertService.restoreRevision(
+                currentTenantService.requireOrganizationId(), id, revisionNumber));
     }
 
     @PutMapping("/{id}")

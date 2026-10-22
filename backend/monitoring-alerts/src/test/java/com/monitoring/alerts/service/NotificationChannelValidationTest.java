@@ -10,8 +10,12 @@ import com.monitoring.alerts.repository.AlertRuleRepository;
 import com.monitoring.alerts.repository.NotificationChannelRepository;
 import com.monitoring.apps.service.ApplicationService;
 import com.monitoring.auth.repository.UserRepository;
+import com.monitoring.collector.service.LogQueryService;
 import com.monitoring.healthcheck.service.HealthCheckService;
 import com.monitoring.healthcheck.service.SsrfGuard;
+import com.monitoring.revisions.service.ConfigRevisionService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.validation.Validation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -47,12 +51,16 @@ class NotificationChannelValidationTest {
         ApplicationService applicationService = Mockito.mock(ApplicationService.class);
         HealthCheckService healthCheckService = Mockito.mock(HealthCheckService.class);
         AlertNotificationDispatcher dispatcher = Mockito.mock(AlertNotificationDispatcher.class);
+        LogQueryService logQueryService = Mockito.mock(LogQueryService.class);
+        AlertPreviewRateLimiter previewRateLimiter = Mockito.mock(AlertPreviewRateLimiter.class);
 
         SsrfGuard ssrfGuard = Mockito.mock(SsrfGuard.class);
         when(ssrfGuard.parse(anyString())).thenAnswer(invocation -> new URI(invocation.getArgument(0)));
 
         service = new AlertService(ruleRepository, channelRepository, incidentRepository, userRepository,
-                applicationService, healthCheckService, ssrfGuard, dispatcher);
+                applicationService, healthCheckService, ssrfGuard, dispatcher,
+                logQueryService, previewRateLimiter, Mockito.mock(ConfigRevisionService.class),
+                new ObjectMapper(), Validation.buildDefaultValidatorFactory().getValidator());
         when(channelRepository.save(any(NotificationChannel.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
