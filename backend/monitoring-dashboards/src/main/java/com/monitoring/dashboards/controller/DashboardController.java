@@ -16,6 +16,8 @@ import com.monitoring.common.dto.response.PageResponse;
 import com.monitoring.organization.entity.MembershipRole;
 import com.monitoring.organization.security.RequireRole;
 import com.monitoring.organization.tenant.CurrentTenantService;
+import com.monitoring.revisions.dto.ConfigRevisionResponse;
+import com.monitoring.revisions.dto.ConfigRevisionSummaryResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -84,6 +86,33 @@ public class DashboardController {
         dashboardService.deleteDashboard(
                 currentTenantService.requireOrganizationId(), id, platformAdminAccess.isPlatformAdmin());
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/revisions")
+    public ResponseEntity<PageResponse<ConfigRevisionSummaryResponse>> listRevisions(
+            @PathVariable Long id,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        return ResponseEntity.ok(dashboardService.listRevisions(
+                currentTenantService.requireOrganizationId(), id, page, size));
+    }
+
+    @GetMapping("/{id}/revisions/{revisionNumber}")
+    public ResponseEntity<ConfigRevisionResponse> getRevision(
+            @PathVariable Long id,
+            @PathVariable int revisionNumber) {
+        return ResponseEntity.ok(dashboardService.getRevision(
+                currentTenantService.requireOrganizationId(), id, revisionNumber));
+    }
+
+    @PostMapping("/{id}/revisions/{revisionNumber}/restore")
+    @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
+    @AuditLog(action = "DASHBOARD_REVISION_RESTORED", resourceId = "#id")
+    public ResponseEntity<DashboardResponse> restoreRevision(
+            @PathVariable Long id,
+            @PathVariable int revisionNumber) {
+        return ResponseEntity.ok(dashboardService.restoreRevision(
+                currentTenantService.requireOrganizationId(), id, revisionNumber));
     }
 
     /**

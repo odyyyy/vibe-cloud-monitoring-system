@@ -28,6 +28,18 @@
             <artifactId>monitoring-auth</artifactId>
         </dependency>
 
+        <!-- Application ownership checks for snapshots restored by reference. -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-apps-management</artifactId>
+        </dependency>
+
+        <!-- Shared configuration revision history. -->
+        <dependency>
+            <groupId>com.monitoring</groupId>
+            <artifactId>monitoring-revisions</artifactId>
+        </dependency>
+
         <!-- Metric and log queries used by the public shared-dashboard endpoints. -->
         <dependency>
             <groupId>com.monitoring</groupId>

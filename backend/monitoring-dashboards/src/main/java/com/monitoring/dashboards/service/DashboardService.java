@@ -2,8 +2,11 @@ package com.monitoring.dashboards.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.monitoring.apps.service.ApplicationService;
+import com.monitoring.common.dto.response.PageResponse;
 import com.monitoring.dashboards.dto.DashboardVariable;
 import com.monitoring.dashboards.dto.request.CreateDashboardRequest;
 import com.monitoring.dashboards.dto.request.CreateWidgetRequest;
@@ -11,6 +14,7 @@ import com.monitoring.dashboards.dto.response.DashboardResponse;
 import com.monitoring.dashboards.dto.request.UpdateDashboardRequest;
 import com.monitoring.dashboards.dto.request.UpdateWidgetRequest;
 import com.monitoring.dashboards.dto.response.WidgetResponse;
+import com.monitoring.dashboards.dto.snapshot.DashboardSnapshot;
 import com.monitoring.dashboards.entity.Dashboard;
 import com.monitoring.dashboards.entity.Widget;
 import com.monitoring.dashboards.exception.DashboardAccessDeniedException;
@@ -21,13 +25,24 @@ import com.monitoring.dashboards.exception.WidgetLimitExceededException;
 import com.monitoring.dashboards.exception.WidgetNotFoundException;
 import com.monitoring.dashboards.repository.DashboardRepository;
 import com.monitoring.dashboards.repository.WidgetRepository;
+import com.monitoring.revisions.dto.ConfigRevisionResponse;
+import com.monitoring.revisions.dto.ConfigRevisionSummaryResponse;
+import com.monitoring.revisions.entity.ConfigResourceType;
+import com.monitoring.revisions.entity.ConfigRevision;
+import com.monitoring.revisions.exception.ConfigRevisionRestoreConflictException;
+import com.monitoring.revisions.exception.InvalidConfigSnapshotException;
+import com.monitoring.revisions.service.ConfigRevisionService;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -50,12 +65,19 @@ public class DashboardService {
     public static final int MAX_WIDGETS_PER_DASHBOARD = 20;
     public static final int MAX_VARIABLES_PER_DASHBOARD = 20;
 
+    /** Current dashboard snapshot shape; bump when the stored fields change incompatibly. */
+    static final int SNAPSHOT_SCHEMA_VERSION = 1;
+
     private static final TypeReference<List<DashboardVariable>> VARIABLE_LIST_TYPE = new TypeReference<>() {
     };
+    private static final ConfigResourceType RESOURCE_TYPE = ConfigResourceType.DASHBOARD;
 
     private final DashboardRepository dashboardRepository;
     private final WidgetRepository widgetRepository;
     private final ObjectMapper objectMapper;
+    private final ApplicationService applicationService;
+    private final ConfigRevisionService revisionService;
+    private final Validator validator;
 
     @Transactional(readOnly = true)
     public List<DashboardResponse> listDashboards(Long organizationId) {
@@ -106,7 +128,10 @@ public class DashboardService {
                 .name(request.getName().trim())
                 .organizationId(organizationId)
                 .build();
-        return toResponse(dashboardRepository.save(dashboard));
+        Dashboard saved = dashboardRepository.save(dashboard);
+        revisionService.recordCreate(organizationId, RESOURCE_TYPE, saved.getId(),
+                SNAPSHOT_SCHEMA_VERSION, snapshot(saved));
+        return toResponse(saved);
     }
 
     @Transactional
@@ -122,11 +147,17 @@ public class DashboardService {
                                              UpdateDashboardRequest request,
                                              boolean platformAdmin) {
         Dashboard dashboard = getEditableDashboard(organizationId, dashboardId, platformAdmin);
+        String before = dashboard.isSystem() ? null : snapshot(dashboard);
         dashboard.setName(request.getName().trim());
         if (request.getVariables() != null) {
             dashboard.setVariables(validateAndSerializeVariables(request.getVariables()));
         }
-        return toResponse(dashboardRepository.save(dashboard));
+        Dashboard saved = dashboardRepository.save(dashboard);
+        if (!dashboard.isSystem()) {
+            revisionService.recordUpdate(organizationId, RESOURCE_TYPE, dashboardId,
+                    SNAPSHOT_SCHEMA_VERSION, before, snapshot(saved));
+        }
+        return toResponse(saved);
     }
 
     @Transactional
@@ -136,7 +167,9 @@ public class DashboardService {
 
     @Transactional
     public void deleteDashboard(Long organizationId, Long dashboardId, boolean platformAdmin) {
-        dashboardRepository.delete(getEditableDashboard(organizationId, dashboardId, platformAdmin));
+        Dashboard dashboard = getEditableDashboard(organizationId, dashboardId, platformAdmin);
+        revisionService.deleteAll(organizationId, RESOURCE_TYPE, dashboardId);
+        dashboardRepository.delete(dashboard);
     }
 
     @Transactional
@@ -152,7 +185,7 @@ public class DashboardService {
                                     CreateWidgetRequest request,
                                     boolean platformAdmin) {
         Dashboard dashboard = getEditableDashboard(organizationId, dashboardId, platformAdmin);
-
+        String before = dashboard.isSystem() ? null : snapshot(dashboard);
         if (widgetRepository.countByDashboard_Id(dashboardId) >= MAX_WIDGETS_PER_DASHBOARD) {
             throw new WidgetLimitExceededException(MAX_WIDGETS_PER_DASHBOARD);
         }
@@ -167,7 +200,12 @@ public class DashboardService {
                 .height(request.getHeight())
                 .build();
 
-        return WidgetResponse.fromEntity(widgetRepository.save(widget));
+        Widget saved = widgetRepository.save(widget);
+        if (!dashboard.isSystem()) {
+            revisionService.recordUpdate(organizationId, RESOURCE_TYPE, dashboardId,
+                    SNAPSHOT_SCHEMA_VERSION, before, snapshot(dashboard));
+        }
+        return WidgetResponse.fromEntity(saved);
     }
 
     @Transactional
@@ -184,7 +222,8 @@ public class DashboardService {
                                        Long widgetId,
                                        UpdateWidgetRequest request,
                                        boolean platformAdmin) {
-        getEditableDashboard(organizationId, dashboardId, platformAdmin);
+        Dashboard dashboard = getEditableDashboard(organizationId, dashboardId, platformAdmin);
+        String before = dashboard.isSystem() ? null : snapshot(dashboard);
         Widget widget = getWidget(widgetId, dashboardId);
 
         if (request.getType() != null) {
@@ -206,7 +245,12 @@ public class DashboardService {
             widget.setHeight(request.getHeight());
         }
 
-        return WidgetResponse.fromEntity(widgetRepository.save(widget));
+        Widget saved = widgetRepository.save(widget);
+        if (!dashboard.isSystem()) {
+            revisionService.recordUpdate(organizationId, RESOURCE_TYPE, dashboardId,
+                    SNAPSHOT_SCHEMA_VERSION, before, snapshot(dashboard));
+        }
+        return WidgetResponse.fromEntity(saved);
     }
 
     @Transactional
@@ -216,8 +260,13 @@ public class DashboardService {
 
     @Transactional
     public void deleteWidget(Long organizationId, Long dashboardId, Long widgetId, boolean platformAdmin) {
-        getEditableDashboard(organizationId, dashboardId, platformAdmin);
+        Dashboard dashboard = getEditableDashboard(organizationId, dashboardId, platformAdmin);
+        String before = dashboard.isSystem() ? null : snapshot(dashboard);
         widgetRepository.delete(getWidget(widgetId, dashboardId));
+        if (!dashboard.isSystem()) {
+            revisionService.recordUpdate(organizationId, RESOURCE_TYPE, dashboardId,
+                    SNAPSHOT_SCHEMA_VERSION, before, snapshot(dashboard));
+        }
     }
 
     /**
@@ -255,6 +304,203 @@ public class DashboardService {
         return dashboardRepository.findByShareToken(token)
                 .map(this::toPublicResponse)
                 .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<ConfigRevisionSummaryResponse> listRevisions(Long organizationId,
+                                                                     Long dashboardId,
+                                                                     Integer page,
+                                                                     Integer size) {
+        getTenantDashboard(organizationId, dashboardId);
+        return revisionService.list(organizationId, RESOURCE_TYPE, dashboardId, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public ConfigRevisionResponse getRevision(Long organizationId,
+                                              Long dashboardId,
+                                              int revisionNumber) {
+        getTenantDashboard(organizationId, dashboardId);
+        return revisionService.get(organizationId, RESOURCE_TYPE, dashboardId, revisionNumber);
+    }
+
+    /**
+     * Restores a previous dashboard snapshot. The snapshot is revalidated against current
+     * limits and all widget application references must still be accessible; the restore is
+     * then recorded as a new revision, leaving the history intact.
+     */
+    @Transactional
+    public DashboardResponse restoreRevision(Long organizationId,
+                                             Long dashboardId,
+                                             int revisionNumber) {
+        Dashboard dashboard = getTenantDashboard(organizationId, dashboardId);
+        ConfigRevision revision =
+                revisionService.requireRevision(organizationId, RESOURCE_TYPE, dashboardId, revisionNumber);
+        DashboardSnapshot snapshot = readSnapshot(revision);
+
+        UpdateDashboardRequest update = new UpdateDashboardRequest();
+        update.setName(snapshot.name());
+        update.setVariables(snapshot.variables() == null ? List.of() : snapshot.variables());
+        validateRestoreRequest(update);
+
+        String serializedVariables;
+        try {
+            serializedVariables = validateAndSerializeVariables(update.getVariables());
+        } catch (InvalidDashboardVariableException ex) {
+            throw new InvalidConfigSnapshotException(ex.getMessage(), ex);
+        }
+
+        List<Widget> widgets = buildRestoredWidgets(snapshot.widgets());
+        // The restored widgets belong to the dashboard they are restored into.
+        widgets.forEach(widget -> widget.setDashboard(dashboard));
+        ensureReferencedApplicationsExist(organizationId, widgets);
+
+        dashboard.setName(update.getName().trim());
+        dashboard.setVariables(serializedVariables);
+        dashboard.getWidgets().clear();
+        dashboard.getWidgets().addAll(widgets);
+        Dashboard saved = dashboardRepository.saveAndFlush(dashboard);
+
+        revisionService.recordRestore(organizationId, RESOURCE_TYPE, dashboardId,
+                revisionNumber, SNAPSHOT_SCHEMA_VERSION, snapshot(saved));
+        return toResponse(saved);
+    }
+
+    private String snapshot(Dashboard dashboard) {
+        List<Widget> widgets =
+                widgetRepository.findByDashboard_IdOrderByPositionYAscPositionXAscIdAsc(dashboard.getId());
+        DashboardSnapshot snapshot = new DashboardSnapshot(
+                dashboard.getName(),
+                parseVariables(dashboard.getVariables()),
+                widgets.stream()
+                        .map(widget -> new DashboardSnapshot.WidgetSnapshot(
+                                widget.getType(),
+                                widget.getConfig(),
+                                widget.getPositionX(),
+                                widget.getPositionY(),
+                                widget.getWidth(),
+                                widget.getHeight()))
+                        .toList());
+        try {
+            return objectMapper.writeValueAsString(snapshot);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize dashboard snapshot", e);
+        }
+    }
+
+    private DashboardSnapshot readSnapshot(ConfigRevision revision) {
+        if (revision.getSchemaVersion() != SNAPSHOT_SCHEMA_VERSION) {
+            throw new InvalidConfigSnapshotException(
+                    "Dashboard snapshot schema " + revision.getSchemaVersion() + " is not supported");
+        }
+        try {
+            DashboardSnapshot snapshot = objectMapper.copy()
+                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true)
+                    .configure(DeserializationFeature.FAIL_ON_TRAILING_TOKENS, true)
+                    .readValue(revision.getSnapshot(), DashboardSnapshot.class);
+            if (snapshot == null) {
+                throw new InvalidConfigSnapshotException("Dashboard snapshot is empty");
+            }
+            return snapshot;
+        } catch (JsonProcessingException e) {
+            throw new InvalidConfigSnapshotException("Dashboard snapshot is not valid", e);
+        }
+    }
+
+    private void validateRestoreRequest(UpdateDashboardRequest request) {
+        Set<ConstraintViolation<UpdateDashboardRequest>> violations = validator.validate(request);
+        if (!violations.isEmpty()) {
+            throw new InvalidConfigSnapshotException(
+                    "Dashboard snapshot is invalid: " + violations.iterator().next().getMessage());
+        }
+    }
+
+    private List<Widget> buildRestoredWidgets(List<DashboardSnapshot.WidgetSnapshot> snapshots) {
+        if (snapshots == null) {
+            return new ArrayList<>();
+        }
+        if (snapshots.size() > MAX_WIDGETS_PER_DASHBOARD) {
+            throw new InvalidConfigSnapshotException(
+                    "Dashboard snapshot exceeds the widget limit of " + MAX_WIDGETS_PER_DASHBOARD);
+        }
+
+        List<Widget> widgets = new ArrayList<>();
+        for (DashboardSnapshot.WidgetSnapshot snapshot : snapshots) {
+            if (snapshot == null) {
+                throw new InvalidConfigSnapshotException("Dashboard snapshot contains an empty widget");
+            }
+            CreateWidgetRequest request = CreateWidgetRequest.builder()
+                    .type(snapshot.type())
+                    .config(snapshot.config())
+                    .positionX(snapshot.positionX())
+                    .positionY(snapshot.positionY())
+                    .width(snapshot.width())
+                    .height(snapshot.height())
+                    .build();
+            Set<ConstraintViolation<CreateWidgetRequest>> violations = validator.validate(request);
+            if (!violations.isEmpty()) {
+                throw new InvalidConfigSnapshotException(
+                        "Dashboard snapshot is invalid: " + violations.iterator().next().getMessage());
+            }
+
+            String config;
+            try {
+                config = validateAndNormalizeConfig(snapshot.config());
+            } catch (InvalidWidgetConfigException ex) {
+                throw new InvalidConfigSnapshotException(ex.getMessage(), ex);
+            }
+
+            widgets.add(Widget.builder()
+                    .type(snapshot.type())
+                    .config(config)
+                    .positionX(snapshot.positionX())
+                    .positionY(snapshot.positionY())
+                    .width(snapshot.width())
+                    .height(snapshot.height())
+                    .build());
+        }
+        return widgets;
+    }
+
+    /**
+     * Dashboard widgets may point at an application. Restoring a snapshot whose application was
+     * deleted or belongs to another tenant would create a broken widget, so it is rejected.
+     */
+    private void ensureReferencedApplicationsExist(Long organizationId, List<Widget> widgets) {
+        Set<Long> applicationIds = new LinkedHashSet<>();
+        for (Widget widget : widgets) {
+            try {
+                JsonNode applicationId = objectMapper.readTree(widget.getConfig()).get("applicationId");
+                if (applicationId == null) {
+                    continue;
+                }
+                long id;
+                if (applicationId.isIntegralNumber()) {
+                    id = applicationId.asLong();
+                } else if (applicationId.isTextual()) {
+                    id = Long.parseLong(applicationId.asText());
+                } else {
+                    continue;
+                }
+                if (id > 0) {
+                    applicationIds.add(id);
+                }
+            } catch (JsonProcessingException | NumberFormatException ignored) {
+                // The config already passed JSON validation; a non-numeric reference is opaque.
+            }
+        }
+
+        List<Long> missing = new ArrayList<>();
+        for (Long applicationId : applicationIds) {
+            try {
+                applicationService.getOwnedApplication(applicationId, organizationId);
+            } catch (RuntimeException ex) {
+                missing.add(applicationId);
+            }
+        }
+        if (!missing.isEmpty()) {
+            throw new ConfigRevisionRestoreConflictException(
+                    "Cannot restore dashboard: referenced application(s) no longer exist: " + missing);
+        }
     }
 
     private Widget getWidget(Long widgetId, Long dashboardId) {
