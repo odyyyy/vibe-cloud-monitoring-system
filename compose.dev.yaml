@@ -1,6 +1,6 @@
 # Development override for compose.yaml. It keeps a single source of truth for the
 # production-style stack and only changes what local development needs:
-#   docker compose -f compose.yaml -f compose.dev.yaml up --build --watch -d
+#   docker compose -f compose.yaml -f compose.dev.yaml up --build --watch
 #
 # - publishes MySQL on the host for GUI clients and local tooling;
 # - replaces the nginx frontend image with the Vite dev server (HMR on port 3000);
