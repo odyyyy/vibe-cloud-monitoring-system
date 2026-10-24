@@ -10,7 +10,7 @@ SaaS-интерфейсе, подключают свои приложения и
 > (ingest + query), дашборды с виджетами (Metric chart / Log table / Status),
 > синтетические health-checks (HTTP-проверки с историей результатов), правила
 > алертов (по метрике или health-check, с несколькими условиями AND/OR) с уведомлениями в
-> webhook/Slack/email и историей инцидентов,
+> webhook/Slack/Teams/PagerDuty/email, журналом доставок и историей инцидентов,
 > а также настройки профиля (смена username/email с подтверждением и три темы оформления) —
 > см. раздел [Текущие ограничения](#текущие-ограничения).
 
@@ -59,7 +59,7 @@ Backend собран как Maven multi-module проект:
 | `monitoring-collector` | Приём метрик/логов (`/api/v1/ingest`) и запросы метрик/логов (`/api/v1/metrics/query`, `/api/v1/metrics/names`, `/api/v1/logs`), сохранённые представления логов (`/api/v1/saved-log-views`), учёт потребления и квот (`/api/v1/usage`) |
 | `monitoring-dashboards` | CRUD дашбордов и виджетов (`/api/v1/dashboards`) |
 | `monitoring-healthcheck` | Синтетические HTTP health-checks: CRUD, scheduler, SSRF-защита, история результатов (`/api/v1/health-checks`) |
-| `monitoring-alerts` | Правила алертов (метрики/health-checks) с составными условиями AND/OR, плановый evaluator, уведомления webhook/Slack/email (SSRF-защита, rate limit), инциденты и окна обслуживания (`/api/v1/alert-rules`, `/api/v1/notification-channels`, `/api/v1/alert-incidents`, `/api/v1/maintenance-windows`) |
+| `monitoring-alerts` | Правила алертов (метрики/health-checks) с составными условиями AND/OR, плановый evaluator, уведомления webhook/Slack/Teams/PagerDuty/email (SSRF-защита, retry, журнал доставок), инциденты и окна обслуживания (`/api/v1/alert-rules`, `/api/v1/notification-channels`, `/api/v1/notification-deliveries`, `/api/v1/alert-incidents`, `/api/v1/maintenance-windows`) |
 | `monitoring-audit` | Аудит-лог: запись событий через AOP (`@AuditLog`) и read-only API (`/api/v1/audit-events`) |
 | `monitoring-common` | Общие типы без домена: пагинация (`PageResponse`), тело ошибки (`ApiError`) |
 | `monitoring-api` | Точка входа, конфигурация, композиция модулей, Actuator, OpenAPI |
@@ -364,6 +364,13 @@ go build -o agent ./cmd/agent        # Windows: go build -o agent.exe ./cmd/agen
 | `MONITORING_ALERTS_FRONTEND_BASE_URL` | Базовый URL фронтенда для deep-link в уведомлениях; пусто — ссылки не добавляются | `https://app.example.com` |
 | `MONITORING_ALERTS_PREVIEW_MAX_REQUESTS` | Лимит запросов preview-log-count на организацию в окне | `30` |
 | `MONITORING_ALERTS_PREVIEW_WINDOW_SECONDS` | Длина окна rate limit для preview-log-count, секунды | `60` |
+| `MONITORING_ALERTS_COMMENTS_MAX_REQUESTS` | Лимит комментариев инцидента на пользователя в окне | `20` |
+| `MONITORING_ALERTS_COMMENTS_WINDOW_SECONDS` | Длина окна rate limit комментариев инцидента, секунды | `60` |
+| `MONITORING_ALERTS_NOTIFICATIONS_MAX_ATTEMPTS` | Максимум попыток доставки уведомления (1–5) | `3` |
+| `MONITORING_ALERTS_NOTIFICATIONS_RETRY_BASE_DELAY_MS` | Базовая задержка экспоненциального backoff, мс | `1000` |
+| `MONITORING_ALERTS_NOTIFICATIONS_CONNECT_TIMEOUT_MS` | Таймаут установки соединения с webhook, мс | `5000` |
+| `MONITORING_ALERTS_NOTIFICATIONS_REQUEST_TIMEOUT_MS` | Таймаут HTTP-запроса к webhook, мс | `5000` |
+| `MONITORING_ALERTS_NOTIFICATIONS_ALLOW_INSECURE_HTTP` | Разрешить http для webhook в разработке (приватные адреса всё равно запрещены) | `false` |
 | `MONITORING_PLATFORM_METRICS_ENABLED` | Сбор собственных метрик платформы (dogfooding) | `true` |
 | `MONITORING_PLATFORM_ADMIN_USERNAME` | Логин пользователя, которому на старте выдаётся роль `PLATFORM_ADMIN` (пусто — платформенного администратора нет) | |
 | `MONITORING_PLATFORM_ADMIN_SYNC_INTERVAL_MS` | Как часто перепроверять назначение `PLATFORM_ADMIN` | `300000` |
@@ -1207,12 +1214,15 @@ link-local, CGNAT, multicast, `169.254.169.254` и т.п. отклоняются
 | `POST` | `/api/v1/alert-rules/preview-log-count` | Предварительный подсчёт логов для калибровки порога (rate limit на организацию) | JWT (`ADMIN`/`OWNER`) |
 | `PUT` | `/api/v1/alert-rules/{id}` | Обновить (частично) | JWT (владелец) |
 | `DELETE` | `/api/v1/alert-rules/{id}` | Удалить правило и его инциденты | JWT (владелец) |
-| `GET` | `/api/v1/notification-channels` | Список каналов (webhook/Slack/email) | JWT (владелец) |
-| `POST` | `/api/v1/notification-channels` | Добавить канал | JWT |
-| `PUT` | `/api/v1/notification-channels/{id}` | Обновить канал | JWT (владелец) |
-| `DELETE` | `/api/v1/notification-channels/{id}` | Удалить канал | JWT (владелец) |
-| `POST` | `/api/v1/notification-channels/{id}/test` | Отправить тестовое уведомление (async, `202 Accepted`) | JWT (владелец) |
+| `GET` | `/api/v1/notification-channels` | Список каналов (webhook/Slack/email/PagerDuty/Teams), секреты замаскированы | JWT (владелец) |
+| `POST` | `/api/v1/notification-channels` | Добавить канал (не более 20 на организацию) | JWT (`ADMIN`/`OWNER`) |
+| `PUT` | `/api/v1/notification-channels/{id}` | Обновить канал | JWT (`ADMIN`/`OWNER`) |
+| `DELETE` | `/api/v1/notification-channels/{id}` | Удалить канал (история доставок сохраняется) | JWT (`ADMIN`/`OWNER`) |
+| `POST` | `/api/v1/notification-channels/{id}/test` | Синхронно отправить тест (одна попытка, `200` с результатом) | JWT (владелец) |
+| `GET` | `/api/v1/notification-deliveries` | Журнал доставок (`page`, `size`, `status`, `channelId`, `incidentId`) | JWT |
 | `GET` | `/api/v1/alert-incidents` | История инцидентов (`limit`, по умолчанию 50, максимум 500) | JWT (владелец) |
+| `GET` | `/api/v1/alert-incidents/{id}/comments` | Обсуждение инцидента (`page`, `size`, новые первыми, максимум 200) | JWT (участник организации) |
+| `POST` | `/api/v1/alert-incidents/{id}/comments` | Добавить комментарий; поддерживает `/acknowledge` и `/resolve` | JWT (участник организации) |
 
 Правило: `name` (1–100), `type` (`METRIC_THRESHOLD|HEALTH_CHECK|LOG`), список `conditions`
 (до 10; каждая — `target`, `operator` и `threshold`), `logicOperator` (`AND|OR`),
@@ -1221,6 +1231,16 @@ link-local, CGNAT, multicast, `169.254.169.254` и т.п. отклоняются
 id health-check). Устаревшие поля `target`/`condition`/`threshold` по-прежнему принимаются
 (одно условие) и в ответе зеркалят первое условие. Инцидент: `id`, `ruleId`, `ruleName`,
 `status` (`FIRING|RESOLVED`), `triggeredAt`, `resolvedAt`.
+
+Тред инцидента (war room): комментарии привязаны к инциденту и организации, текст
+очищается от HTML/скриптов на backend, хранится как обычный текст (1–2000 символов)
+и отдаётся с автором и его ролью в организации. `POST` ограничен per-user rate limit
+(`monitoring.alerts.comments.*`, по умолчанию 20 сообщений за 60 секунд; превышение —
+`429` с `Retry-After`). Команды `/acknowledge` и `/resolve` (в любом регистре, как
+отдельное слово) выполняют переход статуса только для `ADMIN`/`OWNER`, а при отказе
+сообщение не сохраняется. После успешного перехода в тред добавляется системный
+комментарий. Ссылки вида `dashboard:<id>` рендерятся как переходы на дашборд;
+frontend не вставляет HTML и не использует `dangerouslySetInnerHTML`.
 
 Для `LOG` правило задаётся полями `applicationId`, `logLevel` (необязательно), `logQuery`
 (до 200 символов, необязательно), `windowMinutes` (1–60), `comparison`
@@ -1247,24 +1267,50 @@ Log-правило считает `COUNT(*)` событий приложения
 ограничен per-organization rate limit (`monitoring.alerts.preview.*`, по умолчанию 30
 запросов за 60 секунд; превышение — `429`).
 
-Каналы уведомлений бывают трёх типов: `WEBHOOK` (произвольный https-URL), `SLACK` (incoming
-webhook на хосте `slack.com`, сообщение в формате Block Kit) и `EMAIL` (адрес получателя).
-Webhook- и Slack-URL допускают только https и проходят SSRF-проверку (хост должен разрешаться
-исключительно в публичные адреса) при сохранении и повторно перед каждой отправкой. Все
-отправки выполняются асинхронно после коммита транзакции, без редиректов и с таймаутами;
-email использует `spring-boot-starter-mail` (нужен `spring.mail.host`) и отдельный пул
-`monitoring.alerts.email.*`, поэтому недоступный SMTP не блокирует evaluation. Повторные
-уведомления по одному правилу и каналу ограничены `monitoring.alerts.notifications.min-interval-seconds`
-(по умолчанию 900). Тестовое сообщение в канал отправляется через
-`POST /api/v1/notification-channels/{id}/test`. Уведомления по log-правилам содержат
-фильтры, окно, порог и фактический `observedCount`, а при заданном
-`monitoring.alerts.frontend.base-url` (`MONITORING_ALERTS_FRONTEND_BASE_URL`) — ссылку на
-Log Explorer с тем же приложением, окном, уровнем и поисковой строкой.
+Каналы уведомлений поддерживают пять типов:
+
+- `WEBHOOK` — произвольный https-URL, JSON-событие и (опционально) HMAC-SHA256 подпись в
+  `X-Signature-256`/`X-Timestamp`; до 5 статических заголовков, платформенные и hop-by-hop
+  заголовки запрещены.
+- `SLACK` — incoming webhook на хосте `slack.com`, сообщение в формате Block Kit.
+- `TEAMS` — incoming webhook Microsoft Teams, MessageCard.
+- `PAGERDUTY` — Events API v2 с routing key; открытие/подтверждение/закрытие инцидента
+  отправляются как `trigger`/`acknowledge`/`resolve` с `dedup_key` = id инцидента.
+- `EMAIL` — адрес получателя.
+
+URL-адреса webhook, Slack и Teams допускают только https (plain HTTP — лишь при явном
+development-флаге `monitoring.alerts.notifications.allow-insecure-http=true`) и проходят
+SSRF-проверку: хост должен разрешаться исключительно в публичные адреса. Проверка выполняется
+при сохранении и повторно перед каждой отправкой; редиректы не выполняются. URL, routing key,
+webhook-секрет и значения заголовков не возвращаются API в открытом виде, а секреты хранятся
+в БД в plaintext по аналогии с существующим механизмом Slack/email — это известное ограничение.
+
+Обычные доставки выполняются асинхронно после коммита транзакции на отдельных ограниченных
+пулах и не блокируют evaluation. Для сетевых ошибок, `429` и `5xx` выполняется до 3 попыток
+с экспоненциальной задержкой; прочие `4xx` считаются постоянной ошибкой. Таймауты и размер
+ответа ограничены (`monitoring.alerts.notifications.*`). SMTP использует
+`spring-boot-starter-mail` (нужен `spring.mail.host`) и отдельный пул, поэтому недоступный
+SMTP не блокирует evaluation. Повторные уведомления по одному правилу и каналу ограничены
+`monitoring.alerts.notifications.min-interval-seconds` (по умолчанию 900). Тестовое сообщение
+отправляется синхронно через `POST /api/v1/notification-channels/{id}/test` и сразу возвращает
+статус, HTTP-код и текст ошибки. Уведомления по log-правилам содержат фильтры, окно, порог и
+фактический `observedCount`, а при заданном `monitoring.alerts.frontend.base-url`
+(`MONITORING_ALERTS_FRONTEND_BASE_URL`) — ссылку на Log Explorer.
+
+Каждая попытка доставки записывается в журнал: канал, инцидент, тип события, статус
+(`PENDING`/`SUCCESS`/`FAILED`), число попыток, HTTP-код и последняя ошибка. Журнал доступен
+на странице **Delivery log** (`/app/notification-deliveries`) с фильтрами по статусу, каналу
+и инциденту, а также в диалоге доставок на странице **Incidents**.
 
 Страница **Alerts** (`/app/alerts`) показывает список правил с переключателями активности,
 диалог создания/редактирования (несколько условий с переключателем AND/OR) и настройку
-notification-каналов (webhook/Slack/email с кнопкой тестовой отправки); страница **Incidents**
-(`/app/incidents`) — таблицу инцидентов (новые первыми) с автообновлением раз в 30 секунд.
+notification-каналов (все пять типов, секрет и статические заголовки webhook, кнопка
+тестовой отправки); страница **Incidents** (`/app/incidents`) — таблицу инцидентов (новые
+первыми) с автообновлением раз в 30 секунд, журналом доставок по инциденту и кнопкой
+**War room** для обсуждения: история сообщений (обновление раз в 15 секунд при открытом
+диалоге и видимой вкладке), подсветка автора и роли, системные записи о смене статуса,
+команды `/acknowledge` и `/resolve`, переходы `dashboard:<id>`, состояния загрузки, пустого
+треда и ошибок отправки.
 
 ### Maintenance windows — `/api/v1/maintenance-windows`
 
@@ -1398,9 +1444,11 @@ CI (`.github/workflows/ci.yml`) запускается на pull request и push
   токенов в лог.
 - Агент пока собирает только хост-метрики; сбор логов и интеграции приложений — в
   планах.
-- Каналы уведомлений поддерживают webhook, Slack и email. Отправка email требует
-  настроенного SMTP (`spring.mail.host`); пока он не задан, канал сохраняется, но доставка
-  не выполняется (ошибка логируется). Правила поддерживают несколько условий с логикой AND/OR.
+- Каналы уведомлений поддерживают webhook, Slack, Teams, PagerDuty и email. Отправка email
+  требует настроенного SMTP (`spring.mail.host`); пока он не задан, канал сохраняется, но
+  доставка завершается ошибкой. Webhook-секреты и статические заголовки хранятся в БД в
+  plaintext (как и Slack URL) и только маскируются в API; шифрование at-rest не реализовано.
+  Правила поддерживают несколько условий с логикой AND/OR.
 - Тема оформления перекрашивает интерфейс (поверхности, нейтральный текст, акценты и статусы),
   но серии графиков (Recharts), маркетинговый лендинг и изображения используют фиксированные
   цвета. В светлой теме **Daylight** акценты монохромные, поэтому разные серии на графике
