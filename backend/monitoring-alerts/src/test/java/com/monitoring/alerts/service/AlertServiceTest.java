@@ -100,8 +100,10 @@ class AlertServiceTest {
         logQueryService = Mockito.mock(LogQueryService.class);
         previewRateLimiter = Mockito.mock(AlertPreviewRateLimiter.class);
         revisionService = Mockito.mock(ConfigRevisionService.class);
+        SsrfGuard ssrfGuard = new SsrfGuard();
         service = new AlertService(ruleRepository, channelRepository, incidentRepository, userRepository,
-                applicationService, healthCheckService, new SsrfGuard(), notificationDispatcher,
+                applicationService, healthCheckService, ssrfGuard,
+                new NotificationUrlPolicy(ssrfGuard, false), notificationDispatcher,
                 logQueryService, previewRateLimiter, revisionService,
                 new ObjectMapper(), Validation.buildDefaultValidatorFactory().getValidator());
         when(incidentRepository.save(any(AlertIncident.class)))
@@ -311,7 +313,7 @@ class AlertServiceTest {
                 .build();
 
         NotificationChannelResponse response = service.createChannel(OWNER_ID, request);
-        assertEquals("https://8.8.8.8/hook", response.getUrl());
+        assertEquals("https://8.8.8.8/****hook", response.getUrl());
         assertTrue(response.isActive());
     }
 

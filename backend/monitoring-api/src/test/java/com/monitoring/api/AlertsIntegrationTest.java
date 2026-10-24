@@ -449,7 +449,7 @@ class AlertsIntegrationTest {
                 .type(NotificationChannelType.WEBHOOK)
                 .url("https://8.8.8.8/hook")
                 .build());
-        assertEquals("https://8.8.8.8/hook", created.getUrl());
+        assertEquals("https://8.8.8.8/****hook", created.getUrl());
         assertEquals(1, alertService.listChannels(OWNER_ID).size());
 
         assertThrows(InvalidWebhookUrlException.class,

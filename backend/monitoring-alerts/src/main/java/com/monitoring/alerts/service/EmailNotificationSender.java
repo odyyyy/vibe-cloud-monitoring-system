@@ -3,6 +3,7 @@ package com.monitoring.alerts.service;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.NotificationChannel;
 import com.monitoring.alerts.entity.NotificationChannelType;
+import com.monitoring.alerts.entity.ScheduledReport;
 import com.monitoring.alerts.event.AlertEvent;
 import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
@@ -44,10 +45,11 @@ public class EmailNotificationSender implements NotificationSender {
     }
 
     @Override
-    public void deliver(NotificationChannel channel, AlertEvent event) {
+    public NotificationSendResult deliver(NotificationChannel channel, AlertEvent event) {
         JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
         if (mailSender == null) {
-            throw new IllegalStateException("Email delivery is not configured (spring.mail.host is missing)");
+            return NotificationSendResult.permanentFailure(
+                    "Email delivery is not configured (spring.mail.host is missing)");
         }
 
         try {
@@ -58,13 +60,42 @@ public class EmailNotificationSender implements NotificationSender {
             helper.setSubject(subject(event));
             helper.setText(htmlBody(event), true);
             mailSender.send(message);
+            return NotificationSendResult.delivered();
         } catch (Exception ex) {
-            throw new IllegalStateException("Email delivery failed: " + ex.getMessage(), ex);
+            return NotificationSendResult.networkFailure(
+                    "SMTP delivery failed (" + ex.getClass().getSimpleName() + ")");
         }
     }
 
     private String subject(AlertEvent event) {
         return "[VibeMonitoring] Alert " + event.status().name().toLowerCase() + ": " + event.ruleName();
+    }
+
+    @Override
+    public NotificationSendResult deliverReport(
+            NotificationChannel channel, ScheduledReport report, ReportMessage message) {
+        JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
+        if (mailSender == null) {
+            return NotificationSendResult.permanentFailure(
+                    "Email delivery is not configured (spring.mail.host is missing)");
+        }
+        if (report.getRecipients() == null || report.getRecipients().isEmpty()) {
+            return NotificationSendResult.permanentFailure("Scheduled report has no email recipients");
+        }
+
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, false, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(report.getRecipients().toArray(String[]::new));
+            helper.setSubject(message.subject());
+            helper.setText(message.html(), true);
+            mailSender.send(mimeMessage);
+            return NotificationSendResult.delivered();
+        } catch (Exception ex) {
+            return NotificationSendResult.networkFailure(
+                    "SMTP delivery failed (" + ex.getClass().getSimpleName() + ")");
+        }
     }
 
     /** Builds the HTML body. Visible for testing. */

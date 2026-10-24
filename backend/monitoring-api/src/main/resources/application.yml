@@ -153,10 +153,22 @@ monitoring:
     evaluation-pool-size: ${MONITORING_ALERTS_EVALUATION_POOL_SIZE:4}
     evaluation-queue-capacity: ${MONITORING_ALERTS_EVALUATION_QUEUE_CAPACITY:100}
     evaluation-timeout-ms: ${MONITORING_ALERTS_EVALUATION_TIMEOUT_MS:120000}
+    # Scheduled reports run every minute and select only reports whose configured minute matches.
+    # Report times use this zone; MONTHLY reports run on the first day of the month.
+    reports:
+      cron: "${MONITORING_ALERTS_REPORTS_CRON:0 * * * * *}"
+      zone: ${MONITORING_ALERTS_REPORTS_ZONE:UTC}
+      pool-size: ${MONITORING_ALERTS_REPORTS_POOL_SIZE:2}
+      queue-capacity: ${MONITORING_ALERTS_REPORTS_QUEUE_CAPACITY:50}
     # Log-count preview is a read-only, tenant-scoped COUNT query; bound its cost per organization.
     preview:
       max-requests: ${MONITORING_ALERTS_PREVIEW_MAX_REQUESTS:30}
       window-seconds: ${MONITORING_ALERTS_PREVIEW_WINDOW_SECONDS:60}
+    # Incident war-room comments are throttled per user to prevent spam in a busy thread.
+    comments:
+      max-requests: ${MONITORING_ALERTS_COMMENTS_MAX_REQUESTS:20}
+      window-seconds: ${MONITORING_ALERTS_COMMENTS_WINDOW_SECONDS:60}
+      max-tracked-users: ${MONITORING_ALERTS_COMMENTS_MAX_TRACKED_USERS:10000}
     # Customer-facing base URL used to build Log Explorer links in notifications.
     # Leave blank in local development to omit the link instead of emitting localhost URLs.
     frontend:
@@ -180,6 +192,13 @@ monitoring:
     # Minimum time between two notifications for the same rule and channel (spam prevention).
     notifications:
       min-interval-seconds: ${MONITORING_ALERTS_NOTIFICATIONS_MIN_INTERVAL_SECONDS:900}
+      # Alert deliveries are retried with exponential backoff for network errors, 429 and 5xx.
+      max-attempts: ${MONITORING_ALERTS_NOTIFICATIONS_MAX_ATTEMPTS:3}
+      retry-base-delay-ms: ${MONITORING_ALERTS_NOTIFICATIONS_RETRY_BASE_DELAY_MS:1000}
+      connect-timeout-ms: ${MONITORING_ALERTS_NOTIFICATIONS_CONNECT_TIMEOUT_MS:5000}
+      request-timeout-ms: ${MONITORING_ALERTS_NOTIFICATIONS_REQUEST_TIMEOUT_MS:5000}
+      # Development-only escape hatch. Even when true, private/loopback/metadata hosts are rejected.
+      allow-insecure-http: ${MONITORING_ALERTS_NOTIFICATIONS_ALLOW_INSECURE_HTTP:false}
 
 # Actuator. Only health and Prometheus endpoints are exposed. Health details are hidden
 # from anonymous clients; the dev profile shows them. Kubernetes-style liveness and

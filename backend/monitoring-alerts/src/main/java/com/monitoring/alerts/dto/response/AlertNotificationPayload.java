@@ -1,92 +1,52 @@
 package com.monitoring.alerts.dto.response;
 
-import com.monitoring.alerts.entity.AlertCondition;
-import com.monitoring.alerts.entity.AlertRuleType;
-import com.monitoring.alerts.entity.IncidentStatus;
-import com.monitoring.alerts.entity.LogicOperator;
+import com.monitoring.alerts.entity.NotificationEventType;
 import com.monitoring.alerts.event.AlertEvent;
-import com.monitoring.collector.entity.LogLevel;
 
 import java.time.Instant;
-import java.util.List;
 
 /**
- * JSON body posted to notification webhooks. It is a stable, self-contained description of the
- * alert transition. Field values originate from the platform (not from untrusted telemetry) and
- * are bounded by the entity constraints.
+ * Stable JSON body posted to generic webhook channels.
  *
- * <p>{@code condition}/{@code threshold} describe the primary (first) condition of the rule;
- * {@code conditions} carries every evaluated condition for compound rules.
+ * <p>It contains only platform-authored fields: incident identity, rule name, severity,
+ * application metadata, the representative observed value/threshold, the incident start instant
+ * and an optional deep link. Raw log content and channel secrets are never included.
  */
 public record AlertNotificationPayload(
+        NotificationEventType eventType,
         Long incidentId,
-        Long ruleId,
         String ruleName,
+        String severity,
         Long applicationId,
-        AlertRuleType ruleType,
-        String target,
-        AlertCondition condition,
+        String applicationName,
+        Double value,
         double threshold,
-        Double observedValue,
-        List<ConditionSnapshot> conditions,
-        LogicOperator logicOperator,
-        IncidentStatus status,
-        Instant timestamp,
-        LogAlertSnapshot logDetails) {
+        Instant startedAt,
+        String deepLinkUrl,
+        boolean test) {
 
-    /**
-     * Log-rule filters and the deep link. Matching log messages are intentionally not included.
-     */
-    public record LogAlertSnapshot(
-            LogLevel level,
-            String query,
-            int windowMinutes,
-            AlertCondition comparison,
-            long countThreshold,
-            long observedCount,
-            String applicationName,
-            String explorerUrl) {
-    }
-
-    /** Serialized per-condition view of an evaluation. */
-    public record ConditionSnapshot(
-            String target,
-            AlertCondition operator,
-            double threshold,
-            Double observedValue,
-            boolean breaching) {
-    }
-
-    public static AlertNotificationPayload from(AlertEvent event) {
+    public static AlertNotificationPayload from(
+            AlertEvent event, String applicationName, String deepLinkUrl, boolean test) {
         return new AlertNotificationPayload(
+                NotificationEventType.fromStatus(event.status()),
                 event.incidentId(),
-                event.ruleId(),
                 event.ruleName(),
+                severity(event),
                 event.applicationId(),
-                event.type(),
-                event.target(),
-                event.condition(),
-                event.threshold(),
+                applicationName,
                 event.observedValue(),
-                event.conditions().stream()
-                        .map(condition -> new ConditionSnapshot(
-                                condition.target(),
-                                condition.operator(),
-                                condition.threshold(),
-                                condition.observedValue(),
-                                condition.breaching()))
-                        .toList(),
-                event.logicOperator(),
-                event.status(),
-                event.timestamp(),
-                event.logDetails() == null ? null : new LogAlertSnapshot(
-                        event.logDetails().level(),
-                        event.logDetails().query(),
-                        event.logDetails().windowMinutes(),
-                        event.logDetails().comparison(),
-                        event.logDetails().countThreshold(),
-                        event.logDetails().observedCount(),
-                        event.logDetails().applicationName(),
-                        event.logDetails().explorerUrl()));
+                event.threshold(),
+                event.incidentStartedAt() == null ? event.timestamp() : event.incidentStartedAt(),
+                deepLinkUrl,
+                test);
+    }
+
+    /** Notification severity derived from the incident transition. */
+    public static String severity(AlertEvent event) {
+        return switch (event.status()) {
+            case FIRING -> "CRITICAL";
+            case ACKNOWLEDGED -> "WARNING";
+            case RESOLVED -> "INFO";
+        };
     }
 }

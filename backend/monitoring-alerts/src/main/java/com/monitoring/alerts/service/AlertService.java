@@ -11,6 +11,7 @@ import com.monitoring.alerts.dto.response.AlertIncidentResponse;
 import com.monitoring.alerts.dto.response.AlertRuleResponse;
 import com.monitoring.alerts.dto.response.LogCountPreviewResponse;
 import com.monitoring.alerts.dto.response.NotificationChannelResponse;
+import com.monitoring.alerts.dto.response.NotificationTestResult;
 import com.monitoring.alerts.dto.snapshot.AlertRuleSnapshot;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.AlertIncident;
@@ -34,6 +35,7 @@ import com.monitoring.alerts.exception.InvalidIncidentStateException;
 import com.monitoring.alerts.exception.InvalidNotificationChannelException;
 import com.monitoring.alerts.exception.InvalidWebhookUrlException;
 import com.monitoring.alerts.exception.NotificationChannelAccessDeniedException;
+import com.monitoring.alerts.exception.NotificationChannelLimitExceededException;
 import com.monitoring.alerts.exception.NotificationChannelNotFoundException;
 import com.monitoring.alerts.repository.AlertIncidentRepository;
 import com.monitoring.alerts.repository.AlertRuleRepository;
@@ -66,6 +68,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.net.URI;
 import java.time.Instant;
@@ -103,12 +107,15 @@ public class AlertService {
     public static final int MAX_INCIDENTS_LIMIT = 500;
     /** Bounds the number of log COUNT queries the scheduler can run for one tenant. */
     public static final int MAX_ACTIVE_LOG_RULES = 50;
+    /** Bounds notification channels per organization to keep fan-out and UI bounded. */
+    public static final int MAX_NOTIFICATION_CHANNELS = 20;
 
     /** Legacy NOT NULL target column value for log rules; they have no metric/health target. */
     private static final String LOG_RULE_TARGET = "logs";
 
     private static final String WEBHOOK_SCHEME = "https";
     private static final String SLACK_HOST_SUFFIX = "slack.com";
+    private static final Pattern PAGERDUTY_ROUTING_KEY = Pattern.compile("^[A-Za-z0-9]{16,255}$");
     /**
      * Deliberately conservative email check: a single {@code @}, a non-empty local part and a
      * dotted domain. Full RFC 5322 validation is unnecessary here and invitation to ReDoS; the
@@ -124,6 +131,7 @@ public class AlertService {
     private final ApplicationService applicationService;
     private final HealthCheckService healthCheckService;
     private final SsrfGuard ssrfGuard;
+    private final NotificationUrlPolicy notificationUrlPolicy;
     private final AlertNotificationDispatcher notificationDispatcher;
     private final LogQueryService logQueryService;
     private final AlertPreviewRateLimiter previewRateLimiter;
@@ -538,13 +546,18 @@ public class AlertService {
         if (type == null) {
             throw new InvalidNotificationChannelException("Notification channel type is required");
         }
+        if (channelRepository.countByOrganizationId(organizationId) >= MAX_NOTIFICATION_CHANNELS) {
+            throw new NotificationChannelLimitExceededException(MAX_NOTIFICATION_CHANNELS);
+        }
 
         NotificationChannel channel = NotificationChannel.builder()
                 .organizationId(organizationId)
                 .type(type)
                 .active(request.getActive() == null || request.getActive())
                 .build();
-        applyDestination(channel, request.getUrl(), request.getSlackWebhookUrl(), request.getEmailAddress());
+        applyDestination(channel, request.getUrl(), request.getSlackWebhookUrl(), request.getEmailAddress(),
+                request.getTeamsWebhookUrl(), request.getRoutingKey());
+        applyWebhookSigning(channel, request.getSecret(), request.getHeaders());
         requireDestination(channel);
 
         return NotificationChannelResponse.fromEntity(channelRepository.save(channel));
@@ -557,11 +570,13 @@ public class AlertService {
         if (request.getType() != null && request.getType() != channel.getType()) {
             // Switching type invalidates the previous destination; a new one must be supplied.
             channel.setType(request.getType());
-            channel.setUrl(null);
-            channel.setSlackWebhookUrl(null);
-            channel.setEmailAddress(null);
+            clearDestinations(channel);
+            channel.setWebhookSecret(null);
+            channel.setWebhookHeaders(null);
         }
-        applyDestination(channel, request.getUrl(), request.getSlackWebhookUrl(), request.getEmailAddress());
+        applyDestination(channel, request.getUrl(), request.getSlackWebhookUrl(), request.getEmailAddress(),
+                request.getTeamsWebhookUrl(), request.getRoutingKey());
+        applyWebhookSigning(channel, request.getSecret(), request.getHeaders());
         if (request.getActive() != null) {
             channel.setActive(request.getActive());
         }
@@ -578,15 +593,18 @@ public class AlertService {
 
     /**
      * Sends a synthetic test notification to one owned channel so a user can verify the
-     * configuration. The rate limiter is bypassed; delivery still happens asynchronously on the
-     * notification executor and its failures are only logged.
+     * configuration. The rate limiter and maintenance windows are bypassed. The event is
+     * delivered synchronously (one attempt) so the user immediately sees success or the error.
+     *
+     * <p>Deliberately not transactional: the network call must not hold a database transaction.
      */
-    @Transactional(readOnly = true)
-    public void sendTestNotification(Long organizationId, Long id) {
+    public NotificationTestResult sendTestNotification(Long organizationId, Long id) {
         NotificationChannel channel = getOwnedChannel(organizationId, id);
+        Instant now = Instant.now();
 
         AlertEvent event = new AlertEvent(
                 null,
+                now,
                 0L,
                 "Test notification",
                 organizationId,
@@ -600,10 +618,10 @@ public class AlertService {
                         "test.metric", AlertCondition.GREATER_THAN, 0.0, 1.0, true)),
                 LogicOperator.AND,
                 IncidentStatus.FIRING,
-                Instant.now(),
+                now,
                 null);
 
-        notificationDispatcher.dispatchTest(channel, event);
+        return notificationDispatcher.dispatchTest(channel, event);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -647,10 +665,13 @@ public class AlertService {
             throw new InvalidIncidentStateException("The incident is already acknowledged");
         }
 
+        Instant now = Instant.now();
         incident.setStatus(IncidentStatus.ACKNOWLEDGED);
         incident.setAcknowledgedBy(userId);
-        incident.setAcknowledgedAt(Instant.now());
-        return toResponse(incidentRepository.save(incident));
+        incident.setAcknowledgedAt(now);
+        AlertIncident saved = incidentRepository.save(incident);
+        dispatchAfterCommit(incidentEvent(saved, now));
+        return toResponse(saved);
     }
 
     /**
@@ -664,10 +685,13 @@ public class AlertService {
             throw new InvalidIncidentStateException("The incident is already resolved");
         }
 
+        Instant now = Instant.now();
         incident.setStatus(IncidentStatus.RESOLVED);
         incident.setResolvedBy(userId);
-        incident.setResolvedAt(Instant.now());
-        return toResponse(incidentRepository.save(incident));
+        incident.setResolvedAt(now);
+        AlertIncident saved = incidentRepository.save(incident);
+        dispatchAfterCommit(incidentEvent(saved, now));
+        return toResponse(saved);
     }
 
     /** Replaces the plain-text notes. An empty value clears them. */
@@ -973,10 +997,16 @@ public class AlertService {
     }
 
     /**
-     * Validates and stores the destination that matches the channel's type. Only non-blank values
-     * are applied, so a partial update without a new destination keeps the existing one.
+     * Validates and stores every supplied destination. Only non-blank values are applied, so a
+     * partial update without a new destination keeps the existing one.
      */
-    private void applyDestination(NotificationChannel channel, String rawUrl, String rawSlackUrl, String rawEmail) {
+    private void applyDestination(
+            NotificationChannel channel,
+            String rawUrl,
+            String rawSlackUrl,
+            String rawEmail,
+            String rawTeamsUrl,
+            String rawRoutingKey) {
         if (rawUrl != null && !rawUrl.isBlank()) {
             channel.setUrl(validateWebhookUrl(rawUrl));
         }
@@ -986,36 +1016,101 @@ public class AlertService {
         if (rawEmail != null && !rawEmail.isBlank()) {
             channel.setEmailAddress(validateEmail(rawEmail));
         }
+        if (rawTeamsUrl != null && !rawTeamsUrl.isBlank()) {
+            channel.setTeamsWebhookUrl(validateTeamsUrl(rawTeamsUrl));
+        }
+        if (rawRoutingKey != null && !rawRoutingKey.isBlank()) {
+            channel.setPagerDutyRoutingKey(validateRoutingKey(rawRoutingKey));
+        }
+    }
+
+    /** Applies optional webhook signing material; only WEBHOOK channels can keep it. */
+    private void applyWebhookSigning(
+            NotificationChannel channel, String rawSecret, Map<String, String> rawHeaders) {
+        if (rawSecret != null) {
+            String secret = rawSecret.trim();
+            if (!secret.isEmpty() && channel.getType() != NotificationChannelType.WEBHOOK) {
+                throw new InvalidNotificationChannelException(
+                        "A webhook secret can only be set on a webhook channel");
+            }
+            if (secret.length() > NotificationChannel.MAX_SECRET_LENGTH) {
+                throw new InvalidNotificationChannelException(
+                        "Webhook secret must be at most "
+                                + NotificationChannel.MAX_SECRET_LENGTH + " characters");
+            }
+            channel.setWebhookSecret(secret.isEmpty() ? null : secret);
+        }
+        if (rawHeaders != null) {
+            if (!rawHeaders.isEmpty() && channel.getType() != NotificationChannelType.WEBHOOK) {
+                throw new InvalidNotificationChannelException(
+                        "Static headers can only be set on a webhook channel");
+            }
+            channel.setWebhookHeaders(WebhookHeaderCodec.serialize(rawHeaders));
+        }
     }
 
     /**
-     * Ensures the channel has a destination for its type. WEBHOOK and SLACK store a URL,
-     * EMAIL stores an address; the other columns are cleared so exactly one destination is kept.
+     * Ensures the channel has a destination for its type and clears configuration that belongs to
+     * other channel types, so exactly one destination and its options are stored.
      */
     private void requireDestination(NotificationChannel channel) {
+        String url = channel.getUrl();
+        String slackUrl = channel.getSlackWebhookUrl();
+        String email = channel.getEmailAddress();
+        String teamsUrl = channel.getTeamsWebhookUrl();
+        String routingKey = channel.getPagerDutyRoutingKey();
+        clearDestinations(channel);
+
         switch (channel.getType()) {
             case WEBHOOK -> {
-                if (channel.getUrl() == null || channel.getUrl().isBlank()) {
+                if (url == null || url.isBlank()) {
                     throw new InvalidNotificationChannelException("A webhook channel requires a URL");
                 }
-                channel.setSlackWebhookUrl(null);
-                channel.setEmailAddress(null);
+                channel.setUrl(url);
             }
             case SLACK -> {
-                if (channel.getSlackWebhookUrl() == null || channel.getSlackWebhookUrl().isBlank()) {
+                if (slackUrl == null || slackUrl.isBlank()) {
                     throw new InvalidNotificationChannelException("A Slack channel requires a webhook URL");
                 }
-                channel.setUrl(null);
-                channel.setEmailAddress(null);
+                channel.setSlackWebhookUrl(slackUrl);
+                channel.setWebhookSecret(null);
+                channel.setWebhookHeaders(null);
             }
             case EMAIL -> {
-                if (channel.getEmailAddress() == null || channel.getEmailAddress().isBlank()) {
+                if (email == null || email.isBlank()) {
                     throw new InvalidNotificationChannelException("An email channel requires an address");
                 }
-                channel.setUrl(null);
-                channel.setSlackWebhookUrl(null);
+                channel.setEmailAddress(email);
+                channel.setWebhookSecret(null);
+                channel.setWebhookHeaders(null);
+            }
+            case PAGERDUTY -> {
+                if (routingKey == null || routingKey.isBlank()) {
+                    throw new InvalidNotificationChannelException(
+                            "A PagerDuty channel requires a routing key");
+                }
+                channel.setPagerDutyRoutingKey(routingKey);
+                channel.setWebhookSecret(null);
+                channel.setWebhookHeaders(null);
+            }
+            case TEAMS -> {
+                if (teamsUrl == null || teamsUrl.isBlank()) {
+                    throw new InvalidNotificationChannelException(
+                            "A Microsoft Teams channel requires a webhook URL");
+                }
+                channel.setTeamsWebhookUrl(teamsUrl);
+                channel.setWebhookSecret(null);
+                channel.setWebhookHeaders(null);
             }
         }
+    }
+
+    private void clearDestinations(NotificationChannel channel) {
+        channel.setUrl(null);
+        channel.setSlackWebhookUrl(null);
+        channel.setEmailAddress(null);
+        channel.setTeamsWebhookUrl(null);
+        channel.setPagerDutyRoutingKey(null);
     }
 
     /**
@@ -1023,16 +1118,31 @@ public class AlertService {
      * so a tenant cannot make the platform POST to internal services.
      */
     private String validateWebhookUrl(String rawUrl) {
-        URI uri = ssrfGuard.parse(rawUrl.trim());
-        if (!WEBHOOK_SCHEME.equals(uri.getScheme().toLowerCase(Locale.ROOT))) {
-            throw new InvalidWebhookUrlException("Webhook URL must use https");
-        }
         try {
-            ssrfGuard.assertPublicHost(uri);
+            return notificationUrlPolicy.validatePublicHttpsUrl(rawUrl.trim(), "Webhook").toString();
+        } catch (InvalidWebhookUrlException ex) {
+            throw ex;
         } catch (RuntimeException ex) {
             throw new InvalidWebhookUrlException(ex.getMessage());
         }
-        return uri.toString();
+    }
+
+    /** Microsoft Teams webhooks use the same SSRF-safe policy as generic webhooks. */
+    private String validateTeamsUrl(String rawUrl) {
+        try {
+            return notificationUrlPolicy.validatePublicHttpsUrl(rawUrl.trim(), "Microsoft Teams").toString();
+        } catch (RuntimeException ex) {
+            throw new InvalidNotificationChannelException(ex.getMessage());
+        }
+    }
+
+    private String validateRoutingKey(String rawKey) {
+        String key = rawKey.trim();
+        if (!PAGERDUTY_ROUTING_KEY.matcher(key).matches()) {
+            throw new InvalidNotificationChannelException(
+                    "PagerDuty routing keys must be 16-255 letters or digits");
+        }
+        return key;
     }
 
     /** Slack incoming webhooks must be https Slack hosts and resolve to public addresses. */
@@ -1059,6 +1169,45 @@ public class AlertService {
             throw new InvalidNotificationChannelException("Enter a valid email address");
         }
         return email;
+    }
+
+    /**
+     * Builds a transition event for a manual acknowledgment/resolution. The original breach
+     * observations are not re-read; the notification only needs identity, status and timing.
+     */
+    private AlertEvent incidentEvent(AlertIncident incident, Instant now) {
+        AlertRule rule = incident.getRule();
+        return new AlertEvent(
+                incident.getId(),
+                incident.getTriggeredAt(),
+                rule.getId(),
+                rule.getName(),
+                incident.getOrganizationId(),
+                rule.getApplicationId(),
+                rule.getType(),
+                rule.getTarget(),
+                rule.getCondition(),
+                rule.getThreshold(),
+                null,
+                List.of(),
+                rule.getLogicOperator(),
+                incident.getStatus(),
+                now,
+                null);
+    }
+
+    /** Defers delivery until the transaction commits so a rollback never sends a notification. */
+    private void dispatchAfterCommit(AlertEvent event) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    notificationDispatcher.dispatch(event);
+                }
+            });
+        } else {
+            notificationDispatcher.dispatch(event);
+        }
     }
 
     private void resolveOpenIncidents(Long ruleId) {

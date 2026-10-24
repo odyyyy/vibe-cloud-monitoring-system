@@ -15,6 +15,8 @@ import java.util.List;
  * <p>It carries everything needed to deliver a notification outside the evaluation transaction,
  * so the network call never runs while a database transaction is open.
  *
+ * @param incidentId        incident identifier; {@code null} for ad-hoc test notifications
+ * @param incidentStartedAt instant the incident first started firing (not the transition time)
  * @param condition  the primary (first) condition of the rule, kept for backward-compatible
  *                   payloads
  * @param threshold  the primary condition threshold
@@ -26,6 +28,7 @@ import java.util.List;
  */
 public record AlertEvent(
         Long incidentId,
+        Instant incidentStartedAt,
         Long ruleId,
         String ruleName,
         Long organizationId,

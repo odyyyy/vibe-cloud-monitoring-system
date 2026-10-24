@@ -63,6 +63,8 @@ class PatScopePolicyTest {
                 .contains(PatScopes.WRITE_APPLICATIONS);
         assertThat(PatScopePolicy.requiredScope("GET", "/api/v1/alert-incidents"))
                 .contains(PatScopes.READ_ALERTS);
+        assertThat(PatScopePolicy.requiredScope("GET", "/api/v1/notification-deliveries"))
+                .contains(PatScopes.READ_ALERTS);
         assertThat(PatScopePolicy.requiredScope("POST", "/api/v1/alert-rules"))
                 .contains(PatScopes.WRITE_ALERTS);
     }

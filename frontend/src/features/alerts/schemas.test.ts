@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  MAX_WEBHOOK_HEADERS,
   alertRuleFormSchema,
   isEmailAddress,
   isHttpsUrl,
   isSlackWebhookUrl,
+  isWebhookHeaderName,
   notificationChannelFormSchema,
+  updateNotificationChannelFormSchema,
 } from './schemas'
 
 function condition(overrides: Record<string, unknown> = {}) {
@@ -223,16 +226,89 @@ describe('alertRuleFormSchema', () => {
 })
 
 describe('notificationChannelFormSchema', () => {
-  it('accepts a valid https webhook', () => {
-    expect(
-      notificationChannelFormSchema.safeParse({ type: 'WEBHOOK', url: 'https://hooks.example.com/alerts', isActive: true })
-        .success,
-    ).toBe(true)
+  it('accepts a valid https webhook with signing secret and headers', () => {
+    const result = notificationChannelFormSchema.safeParse({
+      type: 'WEBHOOK',
+      url: 'https://hooks.example.com/alerts',
+      secret: 'top-secret',
+      headers: { 'X-Custom-Header': 'value' },
+      isActive: true,
+    })
+    expect(result.success).toBe(true)
   })
 
   it('rejects a non-https webhook URL', () => {
     expect(
-      notificationChannelFormSchema.safeParse({ type: 'WEBHOOK', url: 'http://hooks.example.com', isActive: true }).success,
+      notificationChannelFormSchema.safeParse({
+        type: 'WEBHOOK',
+        url: 'http://hooks.example.com',
+        headers: {},
+        isActive: true,
+      }).success,
+    ).toBe(false)
+  })
+
+  it('rejects reserved and malformed webhook header names', () => {
+    expect(isWebhookHeaderName('X-Custom-Header')).toBe(true)
+    expect(isWebhookHeaderName('X-Signature-256')).toBe(false)
+    expect(isWebhookHeaderName('Host')).toBe(false)
+    expect(isWebhookHeaderName('Bad Header')).toBe(false)
+    expect(isWebhookHeaderName('')).toBe(false)
+  })
+
+  it('rejects too many webhook headers and header injection', () => {
+    const tooMany = Object.fromEntries(
+      Array.from({ length: MAX_WEBHOOK_HEADERS + 1 }, (_, index) => [`X-Header-${index}`, 'value']),
+    )
+    expect(
+      notificationChannelFormSchema.safeParse({
+        type: 'WEBHOOK',
+        url: 'https://hooks.example.com/alerts',
+        headers: tooMany,
+        isActive: true,
+      }).success,
+    ).toBe(false)
+    expect(
+      notificationChannelFormSchema.safeParse({
+        type: 'WEBHOOK',
+        url: 'https://hooks.example.com/alerts',
+        headers: { 'X-Custom': 'value\r\nX-Injected: yes' },
+        isActive: true,
+      }).success,
+    ).toBe(false)
+  })
+
+  it('accepts PagerDuty routing keys and rejects invalid ones', () => {
+    expect(
+      notificationChannelFormSchema.safeParse({
+        type: 'PAGERDUTY',
+        routingKey: '0123456789abcdef0123456789abcdef',
+        isActive: true,
+      }).success,
+    ).toBe(true)
+    expect(
+      notificationChannelFormSchema.safeParse({
+        type: 'PAGERDUTY',
+        routingKey: 'short-key!',
+        isActive: true,
+      }).success,
+    ).toBe(false)
+  })
+
+  it('accepts an https Teams webhook and rejects http', () => {
+    expect(
+      notificationChannelFormSchema.safeParse({
+        type: 'TEAMS',
+        teamsWebhookUrl: 'https://example.webhook.office.com/webhookb2/abc',
+        isActive: true,
+      }).success,
+    ).toBe(true)
+    expect(
+      notificationChannelFormSchema.safeParse({
+        type: 'TEAMS',
+        teamsWebhookUrl: 'http://example.webhook.office.com/webhookb2/abc',
+        isActive: true,
+      }).success,
     ).toBe(false)
   })
 
@@ -261,5 +337,39 @@ describe('notificationChannelFormSchema', () => {
     expect(
       notificationChannelFormSchema.safeParse({ type: 'EMAIL', emailAddress: '   ', isActive: true }).success,
     ).toBe(false)
+  })
+})
+
+describe('updateNotificationChannelFormSchema', () => {
+  it('allows omitted and blank destinations so the stored value is kept', () => {
+    expect(updateNotificationChannelFormSchema.safeParse({ type: 'WEBHOOK', isActive: true }).success).toBe(true)
+    expect(
+      updateNotificationChannelFormSchema.safeParse({ type: 'TEAMS', teamsWebhookUrl: '', isActive: false }).success,
+    ).toBe(true)
+    expect(
+      updateNotificationChannelFormSchema.safeParse({ type: 'PAGERDUTY', routingKey: '', isActive: true }).success,
+    ).toBe(true)
+  })
+
+  it('still rejects invalid non-blank destinations', () => {
+    expect(
+      updateNotificationChannelFormSchema.safeParse({ type: 'WEBHOOK', url: 'http://example.com', isActive: true })
+        .success,
+    ).toBe(false)
+    expect(
+      updateNotificationChannelFormSchema.safeParse({ type: 'SLACK', slackWebhookUrl: 'https://evil.example.com', isActive: true })
+        .success,
+    ).toBe(false)
+  })
+
+  it('accepts a new secret and a complete header set', () => {
+    expect(
+      updateNotificationChannelFormSchema.safeParse({
+        type: 'WEBHOOK',
+        secret: 'new-secret',
+        headers: { 'X-Custom': 'value' },
+        isActive: true,
+      }).success,
+    ).toBe(true)
   })
 })

@@ -49,6 +49,7 @@ public final class PatScopePolicy {
             new Rule("GET", "/api/v1/alert-rules", PatScopes.READ_ALERTS),
             new Rule("GET", "/api/v1/alert-incidents", PatScopes.READ_ALERTS),
             new Rule("GET", "/api/v1/notification-channels", PatScopes.READ_ALERTS),
+            new Rule("GET", "/api/v1/notification-deliveries", PatScopes.READ_ALERTS),
             new Rule("POST", "/api/v1/alert-rules", PatScopes.WRITE_ALERTS),
             new Rule("PUT", "/api/v1/alert-rules", PatScopes.WRITE_ALERTS),
             new Rule("DELETE", "/api/v1/alert-rules", PatScopes.WRITE_ALERTS),

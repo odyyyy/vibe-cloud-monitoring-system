@@ -29,7 +29,7 @@ class NotificationFormatterTest {
 
     private AlertEvent event(String ruleName) {
         return new AlertEvent(
-                1L, 2L, ruleName, 3L, 4L, AlertRuleType.METRIC_THRESHOLD,
+                1L, NOW, 2L, ruleName, 3L, 4L, AlertRuleType.METRIC_THRESHOLD,
                 "system.cpu.usage", AlertCondition.GREATER_THAN, 90.0, 95.0,
                 List.of(
                         new AlertEvent.ConditionObservation(
@@ -41,7 +41,7 @@ class NotificationFormatterTest {
 
     private AlertEvent logEvent() {
         return new AlertEvent(
-                1L, 2L, "Checkout timeouts", 3L, 4L, AlertRuleType.LOG,
+                1L, NOW, 2L, "Checkout timeouts", 3L, 4L, AlertRuleType.LOG,
                 "logs", AlertCondition.GREATER_OR_EQUAL, 5.0, 6.0,
                 List.of(new AlertEvent.ConditionObservation(
                         "logs", AlertCondition.GREATER_OR_EQUAL, 5.0, 6.0, true)),
@@ -55,7 +55,8 @@ class NotificationFormatterTest {
     @Test
     void slackMessageContainsBlockKitHeaderAndConditions() {
         SlackNotificationSender sender = new SlackNotificationSender(
-                Mockito.mock(SsrfGuard.class), new ObjectMapper(), 1000, 1000);
+                Mockito.mock(SsrfGuard.class), new ObjectMapper(),
+                new NotificationHttpClient(1000, 1000));
 
         Map<String, Object> message = sender.buildMessage(event("High CPU"));
 
@@ -69,7 +70,8 @@ class NotificationFormatterTest {
     @Test
     void slackLogMessageIncludesObservedCountAndExplorerLink() {
         SlackNotificationSender sender = new SlackNotificationSender(
-                Mockito.mock(SsrfGuard.class), new ObjectMapper(), 1000, 1000);
+                Mockito.mock(SsrfGuard.class), new ObjectMapper(),
+                new NotificationHttpClient(1000, 1000));
 
         Map<String, Object> message = sender.buildMessage(logEvent());
 
@@ -92,10 +94,12 @@ class NotificationFormatterTest {
     }
 
     @Test
-    void webhookPayloadIncludesObservedCountForLogAlerts() {
-        AlertNotificationPayload payload = AlertNotificationPayload.from(logEvent());
+    void webhookPayloadIncludesObservedValueAndTimestamp() {
+        AlertNotificationPayload payload = AlertNotificationPayload.from(logEvent(), "checkout", null, false);
 
-        assertEquals(6L, payload.logDetails().observedCount());
+        assertEquals(6.0, payload.value());
+        assertEquals(NOW, payload.startedAt());
+        assertFalse(payload.test());
     }
 
     @Test

@@ -14,4 +14,7 @@ public interface NotificationChannelRepository extends JpaRepository<Notificatio
 
     /** Channels that should receive notifications for a tenant. */
     List<NotificationChannel> findByOrganizationIdAndActiveTrue(Long organizationId);
+
+    /** Number of channels configured by a tenant (backs the per-organization limit). */
+    long countByOrganizationId(Long organizationId);
 }

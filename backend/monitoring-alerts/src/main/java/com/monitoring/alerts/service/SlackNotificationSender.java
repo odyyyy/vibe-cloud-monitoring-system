@@ -5,17 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.monitoring.alerts.entity.AlertCondition;
 import com.monitoring.alerts.entity.NotificationChannel;
 import com.monitoring.alerts.entity.NotificationChannelType;
+import com.monitoring.alerts.entity.ScheduledReport;
 import com.monitoring.alerts.event.AlertEvent;
 import com.monitoring.healthcheck.service.SsrfGuard;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,7 +26,6 @@ import java.util.Map;
  * as executable content.
  */
 @Component
-@Slf4j
 public class SlackNotificationSender implements NotificationSender {
 
     private static final String USER_AGENT = "vibemonitoring-alerts/1.0";
@@ -40,21 +34,15 @@ public class SlackNotificationSender implements NotificationSender {
 
     private final SsrfGuard ssrfGuard;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
-    private final Duration requestTimeout;
+    private final NotificationHttpClient httpClient;
 
     public SlackNotificationSender(
             SsrfGuard ssrfGuard,
             ObjectMapper objectMapper,
-            @Value("${monitoring.alerts.slack.connect-timeout-ms:5000}") long connectTimeoutMs,
-            @Value("${monitoring.alerts.slack.request-timeout-ms:10000}") long requestTimeoutMs) {
+            NotificationHttpClient httpClient) {
         this.ssrfGuard = ssrfGuard;
         this.objectMapper = objectMapper;
-        this.requestTimeout = Duration.ofMillis(requestTimeoutMs);
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofMillis(connectTimeoutMs))
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .build();
+        this.httpClient = httpClient;
     }
 
     @Override
@@ -63,41 +51,49 @@ public class SlackNotificationSender implements NotificationSender {
     }
 
     @Override
-    public void deliver(NotificationChannel channel, AlertEvent event) {
+    public NotificationSendResult deliver(NotificationChannel channel, AlertEvent event) {
         URI uri = validate(channel.getSlackWebhookUrl());
         String body;
         try {
             body = objectMapper.writeValueAsString(buildMessage(event));
         } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("Failed to serialize Slack message", ex);
+            return NotificationSendResult.permanentFailure("Failed to serialize Slack message");
         }
 
-        HttpRequest request = HttpRequest.newBuilder(uri)
-                .timeout(requestTimeout)
-                .header("Content-Type", "application/json")
-                .header("User-Agent", USER_AGENT)
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
+        return httpClient.post(uri, body, Map.of(
+                "Content-Type", "application/json",
+                "User-Agent", USER_AGENT));
+    }
 
+    @Override
+    public NotificationSendResult deliverReport(
+            NotificationChannel channel, ScheduledReport report, ReportMessage message) {
+        if (channel == null) {
+            return NotificationSendResult.permanentFailure("Slack report channel is missing");
+        }
+        if (message.slackMessage() == null) {
+            return NotificationSendResult.permanentFailure("Scheduled report has no Slack payload");
+        }
+        URI uri = validate(channel.getSlackWebhookUrl());
+        String body;
         try {
-            HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
-            if (response.statusCode() >= 400) {
-                log.warn("Slack channel {} responded with status {}", channel.getId(), response.statusCode());
-            }
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Slack delivery was interrupted", ex);
-        } catch (Exception ex) {
-            throw new IllegalStateException("Slack delivery failed: " + ex.getMessage(), ex);
+            body = objectMapper.writeValueAsString(message.slackMessage());
+        } catch (JsonProcessingException ex) {
+            return NotificationSendResult.permanentFailure("Failed to serialize Slack message");
         }
+        return httpClient.post(uri, body, Map.of(
+                "Content-Type", "application/json",
+                "User-Agent", USER_AGENT));
     }
 
     /** Builds a Block Kit message. Visible for testing. */
     Map<String, Object> buildMessage(AlertEvent event) {
         String status = event.status().name();
-        String headline = status.equals("FIRING")
-                ? "Alert firing: " + event.ruleName()
-                : "Alert resolved: " + event.ruleName();
+        String headline = switch (event.status()) {
+            case FIRING -> "Alert firing: " + event.ruleName();
+            case ACKNOWLEDGED -> "Alert acknowledged: " + event.ruleName();
+            case RESOLVED -> "Alert resolved: " + event.ruleName();
+        };
 
         Map<String, Object> message = new LinkedHashMap<>();
         message.put("text", headline);

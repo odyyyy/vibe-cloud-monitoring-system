@@ -26,10 +26,16 @@ import java.time.Instant;
  *
  * <p>The single destination field depends on {@link #type}: {@code url} for
  * {@link NotificationChannelType#WEBHOOK}, {@code slackWebhookUrl} for
- * {@link NotificationChannelType#SLACK} and {@code emailAddress} for
- * {@link NotificationChannelType#EMAIL}. Webhook and Slack URLs are validated for SSRF safety
- * (https only, public host) before they are stored and again right before each delivery
- * ({@code SsrfGuard}). Ownership is enforced by {@code organizationId} in the service layer.
+ * {@link NotificationChannelType#SLACK}, {@code emailAddress} for
+ * {@link NotificationChannelType#EMAIL}, {@code pagerDutyRoutingKey} for
+ * {@link NotificationChannelType#PAGERDUTY} and {@code teamsWebhookUrl} for
+ * {@link NotificationChannelType#TEAMS}. Webhook, Slack and Teams URLs are validated for SSRF
+ * safety (https only, public host) before they are stored and again right before each delivery.
+ * Ownership is enforced by {@code organizationId} in the service layer.
+ *
+ * <p>Like the existing Slack webhook URLs, the webhook secret, static headers and PagerDuty
+ * routing key are stored in plaintext in the application database. They are never returned by the
+ * API (responses expose masked values) or written to logs/audit entries.
  */
 @Entity
 @Table(
@@ -45,6 +51,12 @@ public class NotificationChannel {
 
     public static final int MAX_URL_LENGTH = 2048;
     public static final int MAX_EMAIL_LENGTH = 320;
+    public static final int MAX_SECRET_LENGTH = 255;
+    public static final int MAX_ROUTING_KEY_LENGTH = 255;
+    public static final int MAX_HEADERS = 5;
+    public static final int MAX_HEADER_NAME_LENGTH = 128;
+    public static final int MAX_HEADER_VALUE_LENGTH = 1024;
+    public static final int MAX_HEADERS_JSON_LENGTH = 4096;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -69,6 +81,22 @@ public class NotificationChannel {
     /** Destination for a {@link NotificationChannelType#EMAIL} channel; null otherwise. */
     @Column(name = "email_address", length = MAX_EMAIL_LENGTH)
     private String emailAddress;
+
+    /** Destination for a {@link NotificationChannelType#TEAMS} channel; null otherwise. */
+    @Column(name = "teams_webhook_url", length = MAX_URL_LENGTH)
+    private String teamsWebhookUrl;
+
+    /** PagerDuty Events API v2 integration key; null for other channel types. */
+    @Column(name = "pagerduty_routing_key", length = MAX_ROUTING_KEY_LENGTH)
+    private String pagerDutyRoutingKey;
+
+    /** Optional HMAC-SHA256 secret for generic webhooks; null when signing is disabled. */
+    @Column(name = "webhook_secret", length = MAX_SECRET_LENGTH)
+    private String webhookSecret;
+
+    /** Optional static webhook headers serialized as a JSON object (maximum five). */
+    @Column(name = "webhook_headers", length = MAX_HEADERS_JSON_LENGTH)
+    private String webhookHeaders;
 
     @Column(name = "is_active", nullable = false)
     private boolean active;

@@ -2,8 +2,10 @@ package com.monitoring.alerts.controller;
 
 import com.monitoring.alerts.dto.request.CreateNotificationChannelRequest;
 import com.monitoring.alerts.dto.response.NotificationChannelResponse;
+import com.monitoring.alerts.dto.response.NotificationTestResult;
 import com.monitoring.alerts.dto.request.UpdateNotificationChannelRequest;
 import com.monitoring.alerts.service.AlertService;
+import com.monitoring.audit.annotation.AuditLog;
 import com.monitoring.organization.entity.MembershipRole;
 import com.monitoring.organization.security.RequireRole;
 import com.monitoring.organization.tenant.CurrentTenantService;
@@ -41,6 +43,7 @@ public class NotificationChannelController {
 
     @PostMapping
     @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
+    @AuditLog(action = "NOTIFICATION_CHANNEL_CREATED")
     public ResponseEntity<NotificationChannelResponse> create(
             @Valid @RequestBody CreateNotificationChannelRequest request) {
         NotificationChannelResponse created = alertService.createChannel(
@@ -50,6 +53,7 @@ public class NotificationChannelController {
 
     @PutMapping("/{id}")
     @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
+    @AuditLog(action = "NOTIFICATION_CHANNEL_UPDATED", resourceId = "#id")
     public ResponseEntity<NotificationChannelResponse> update(
             @PathVariable Long id,
             @Valid @RequestBody UpdateNotificationChannelRequest request) {
@@ -59,19 +63,20 @@ public class NotificationChannelController {
 
     @DeleteMapping("/{id}")
     @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
+    @AuditLog(action = "NOTIFICATION_CHANNEL_DELETED", resourceId = "#id")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         alertService.deleteChannel(currentTenantService.requireOrganizationId(), id);
         return ResponseEntity.noContent().build();
     }
 
     /**
-     * Queues a test notification to the channel. Returns {@code 202 Accepted} because delivery is
-     * asynchronous; the response does not prove the destination accepted the message.
+     * Sends one synchronous test notification (one attempt, no retries) and reports the actual
+     * outcome, including the HTTP status returned by the destination.
      */
     @PostMapping("/{id}/test")
     @RequireRole({MembershipRole.ADMIN, MembershipRole.OWNER})
-    public ResponseEntity<Void> test(@PathVariable Long id) {
-        alertService.sendTestNotification(currentTenantService.requireOrganizationId(), id);
-        return ResponseEntity.accepted().build();
+    public ResponseEntity<NotificationTestResult> test(@PathVariable Long id) {
+        return ResponseEntity.ok(
+                alertService.sendTestNotification(currentTenantService.requireOrganizationId(), id));
     }
 }

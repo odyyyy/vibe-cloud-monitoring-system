@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Mail, Pencil, Plus, Send, Slack, Trash2, Webhook } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { BellRing, History, Lock, Mail, MessagesSquare, Pencil, Plus, Send, Slack, Trash2, Webhook, X } from 'lucide-react'
 import { toast } from 'sonner'
-import type { NotificationChannel, NotificationChannelType } from '../../api/alerts'
+import type {
+  CreateNotificationChannelRequest,
+  NotificationChannel,
+  NotificationChannelType,
+  UpdateNotificationChannelRequest,
+} from '../../api/alerts'
 import {
   useCreateNotificationChannelMutation,
   useDeleteNotificationChannelMutation,
@@ -11,8 +17,10 @@ import {
 } from '../../api/alerts'
 import { ApiError } from '../../api/client'
 import {
+  MAX_WEBHOOK_HEADERS,
   NOTIFICATION_CHANNEL_TYPES,
   notificationChannelFormSchema,
+  updateNotificationChannelFormSchema,
   type NotificationChannelTypeValue,
 } from '../../features/alerts/schemas'
 import { notificationChannelTypeLabel } from '../../features/alerts/labels'
@@ -40,10 +48,17 @@ interface NotificationChannelsDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
+interface HeaderRow {
+  name: string
+  value: string
+}
+
 const TYPE_ICONS = {
   WEBHOOK: Webhook,
   SLACK: Slack,
   EMAIL: Mail,
+  PAGERDUTY: BellRing,
+  TEAMS: MessagesSquare,
 } as const
 
 const DESTINATION_FIELDS: Record<
@@ -53,7 +68,7 @@ const DESTINATION_FIELDS: Record<
   WEBHOOK: {
     label: 'Webhook URL',
     placeholder: 'https://hooks.example.com/alerts',
-    hint: 'Must be an absolute https:// URL. Internal, loopback and private addresses are rejected.',
+    hint: 'Must be an absolute https:// URL. Internal, loopback, private and metadata addresses are rejected.',
   },
   SLACK: {
     label: 'Slack webhook URL',
@@ -65,11 +80,28 @@ const DESTINATION_FIELDS: Record<
     placeholder: 'oncall@example.com',
     hint: 'Alert emails are delivered asynchronously and rate limited per rule.',
   },
+  PAGERDUTY: {
+    label: 'PagerDuty integration key',
+    placeholder: '0123456789abcdef0123456789abcdef',
+    hint: 'Routing key from a PagerDuty Events API v2 integration. The key is masked after saving.',
+  },
+  TEAMS: {
+    label: 'Microsoft Teams webhook URL',
+    placeholder: 'https://example.webhook.office.com/webhookb2/...',
+    hint: 'Incoming webhook URL of the Teams channel. Only public https hosts are accepted.',
+  },
 }
 
 /** Returns the single destination stored on a channel, regardless of its type. */
 function channelDestination(channel: NotificationChannel): string {
-  return channel.url ?? channel.slackWebhookUrl ?? channel.emailAddress ?? ''
+  return (
+    channel.url ??
+    channel.slackWebhookUrl ??
+    channel.emailAddress ??
+    channel.teamsWebhookUrl ??
+    channel.pagerDutyRoutingKey ??
+    ''
+  )
 }
 
 export function NotificationChannelsDialog({ open, onOpenChange }: NotificationChannelsDialogProps) {
@@ -86,25 +118,14 @@ export function NotificationChannelsDialog({ open, onOpenChange }: NotificationC
   const [url, setUrl] = useState('')
   const [slackWebhookUrl, setSlackWebhookUrl] = useState('')
   const [emailAddress, setEmailAddress] = useState('')
+  const [teamsWebhookUrl, setTeamsWebhookUrl] = useState('')
+  const [routingKey, setRoutingKey] = useState('')
+  const [secret, setSecret] = useState('')
+  const [headerRows, setHeaderRows] = useState<HeaderRow[]>([])
   const [isActive, setIsActive] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<NotificationChannel | null>(null)
   const [testingId, setTestingId] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-    setEditing(null)
-    setType('WEBHOOK')
-    setUrl('')
-    setSlackWebhookUrl('')
-    setEmailAddress('')
-    setIsActive(true)
-    setError(null)
-    setDeleteTarget(null)
-    setTestingId(null)
-  }, [open])
 
   function resetForm() {
     setEditing(null)
@@ -112,40 +133,116 @@ export function NotificationChannelsDialog({ open, onOpenChange }: NotificationC
     setUrl('')
     setSlackWebhookUrl('')
     setEmailAddress('')
+    setTeamsWebhookUrl('')
+    setRoutingKey('')
+    setSecret('')
+    setHeaderRows([])
     setIsActive(true)
     setError(null)
   }
 
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    resetForm()
+    setDeleteTarget(null)
+    setTestingId(null)
+  }, [open])
+
   const startEdit = (channel: NotificationChannel) => {
     setEditing(channel)
     setType(channel.type)
-    setUrl(channel.url ?? '')
-    setSlackWebhookUrl(channel.slackWebhookUrl ?? '')
+    // URLs are returned masked and must never be re-submitted; require a fresh value.
+    setUrl('')
+    setSlackWebhookUrl('')
     setEmailAddress(channel.emailAddress ?? '')
+    setTeamsWebhookUrl('')
+    setRoutingKey('')
+    setSecret('')
+    setHeaderRows([])
     setIsActive(channel.isActive)
     setError(null)
   }
 
+  function buildHeaders(): { headers: Record<string, string> | null; error: string | null } {
+    const filled = headerRows.filter((row) => row.name.trim() !== '' || row.value.trim() !== '')
+    if (filled.length > MAX_WEBHOOK_HEADERS) {
+      return { headers: null, error: `At most ${MAX_WEBHOOK_HEADERS} static headers are allowed.` }
+    }
+    const headers: Record<string, string> = {}
+    const seen = new Set<string>()
+    for (const row of filled) {
+      const name = row.name.trim()
+      if (name === '' || row.value.trim() === '') {
+        return { headers: null, error: 'Each header needs both a name and a value.' }
+      }
+      const normalized = name.toLowerCase()
+      if (seen.has(normalized)) {
+        return { headers: null, error: `Header "${name}" is configured more than once.` }
+      }
+      seen.add(normalized)
+      headers[name] = row.value.trim()
+    }
+    return { headers: filled.length === 0 ? null : headers, error: null }
+  }
+
   const handleSubmit = async () => {
-    const parsed = notificationChannelFormSchema.safeParse(
-      type === 'WEBHOOK'
-        ? { type, url, isActive }
-        : type === 'SLACK'
-          ? { type, slackWebhookUrl, isActive }
-          : { type, emailAddress, isActive },
-    )
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Please correct the highlighted fields.')
+    const built = buildHeaders()
+    if (type === 'WEBHOOK' && built.error) {
+      setError(built.error)
       return
     }
 
-    setError(null)
     try {
       if (editing) {
-        await updateMutation.mutateAsync({ id: editing.id, data: parsed.data })
+        const candidate: Record<string, unknown> = { type, isActive }
+        if (secret.trim() !== '') {
+          candidate.secret = secret.trim()
+        }
+        if (built.headers) {
+          candidate.headers = built.headers
+        }
+        if (url.trim() !== '') candidate.url = url.trim()
+        if (slackWebhookUrl.trim() !== '') candidate.slackWebhookUrl = slackWebhookUrl.trim()
+        if (emailAddress.trim() !== '') candidate.emailAddress = emailAddress.trim()
+        if (teamsWebhookUrl.trim() !== '') candidate.teamsWebhookUrl = teamsWebhookUrl.trim()
+        if (routingKey.trim() !== '') candidate.routingKey = routingKey.trim()
+
+        const parsed = updateNotificationChannelFormSchema.safeParse(candidate)
+        if (!parsed.success) {
+          setError(parsed.error.issues[0]?.message ?? 'Please correct the highlighted fields.')
+          return
+        }
+        await updateMutation.mutateAsync({
+          id: editing.id,
+          data: parsed.data as UpdateNotificationChannelRequest,
+        })
         toast.success('Channel updated.')
       } else {
-        await createMutation.mutateAsync(parsed.data)
+        const candidate =
+          type === 'WEBHOOK'
+            ? {
+                type,
+                url,
+                secret: secret.trim() === '' ? undefined : secret.trim(),
+                headers: built.headers ?? {},
+                isActive,
+              }
+            : type === 'SLACK'
+              ? { type, slackWebhookUrl, isActive }
+              : type === 'EMAIL'
+                ? { type, emailAddress, isActive }
+                : type === 'PAGERDUTY'
+                  ? { type, routingKey, isActive }
+                  : { type, teamsWebhookUrl, isActive }
+
+        const parsed = notificationChannelFormSchema.safeParse(candidate)
+        if (!parsed.success) {
+          setError(parsed.error.issues[0]?.message ?? 'Please correct the highlighted fields.')
+          return
+        }
+        await createMutation.mutateAsync(parsed.data as CreateNotificationChannelRequest)
         toast.success('Channel added.')
       }
       resetForm()
@@ -183,17 +280,27 @@ export function NotificationChannelsDialog({ open, onOpenChange }: NotificationC
   const handleTest = async (channel: NotificationChannel) => {
     setTestingId(channel.id)
     try {
-      await testMutation.mutateAsync(channel.id)
-      toast.success('Test notification queued.')
+      const result = await testMutation.mutateAsync(channel.id)
+      if (result.status === 'SUCCESS') {
+        toast.success(result.message)
+      } else {
+        toast.error(result.message)
+      }
     } catch (testError) {
-      toast.error(testError instanceof ApiError ? testError.message : 'Could not queue the test notification.')
+      toast.error(testError instanceof ApiError ? testError.message : 'Could not send the test notification.')
     } finally {
       setTestingId(null)
     }
   }
 
+  const updateHeaderRow = (index: number, patch: Partial<HeaderRow>) => {
+    setHeaderRows((rows) => rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)))
+  }
+
   const DestinationIcon = TYPE_ICONS[type]
   const destination = DESTINATION_FIELDS[type]
+  const currentDestination = editing ? channelDestination(editing) : null
+  const existingHeaderNames = editing?.webhookHeaderNames ?? []
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -201,12 +308,21 @@ export function NotificationChannelsDialog({ open, onOpenChange }: NotificationC
         <DialogHeader>
           <DialogTitle>Notification channels</DialogTitle>
           <DialogDescription>
-            When an alert fires or recovers, the platform delivers a message to every active webhook, Slack channel and
-            email address.
+            When an alert opens, is acknowledged or recovers, the platform delivers a message to every active
+            webhook, Slack, Teams, PagerDuty and email destination.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-6 space-y-6">
+        <div className="mt-2 flex justify-end">
+          <Button asChild variant="link" size="sm">
+            <Link to="/app/notification-deliveries" onClick={() => onOpenChange(false)}>
+              <History className="h-4 w-4" aria-hidden="true" />
+              View delivery log
+            </Link>
+          </Button>
+        </div>
+
+        <div className="mt-4 space-y-6">
           <div className="space-y-2">
             {isLoading ? (
               <div className="space-y-2" aria-busy="true">
@@ -286,7 +402,10 @@ export function NotificationChannelsDialog({ open, onOpenChange }: NotificationC
               <Label htmlFor="channel-type">Channel type</Label>
               <Select
                 value={type}
-                onValueChange={(value) => setType(value as NotificationChannelType)}
+                onValueChange={(value) => {
+                  setType(value as NotificationChannelType)
+                  setError(null)
+                }}
               >
                 <SelectTrigger id="channel-type">
                   <SelectValue />
@@ -301,9 +420,15 @@ export function NotificationChannelsDialog({ open, onOpenChange }: NotificationC
               </Select>
             </div>
 
+            {currentDestination ? (
+              <p className="text-xs text-slate-500">
+                Current destination: <span className="break-all text-slate-400">{currentDestination}</span>
+              </p>
+            ) : null}
+
             {type === 'WEBHOOK' ? (
               <FormField
-                label={editing ? 'Edit webhook URL' : 'New webhook URL'}
+                label={editing ? 'New webhook URL (leave blank to keep current)' : 'New webhook URL'}
                 icon={DestinationIcon}
                 autoComplete="off"
                 placeholder={destination.placeholder}
@@ -313,7 +438,7 @@ export function NotificationChannelsDialog({ open, onOpenChange }: NotificationC
               />
             ) : type === 'SLACK' ? (
               <FormField
-                label={editing ? 'Edit Slack webhook URL' : 'New Slack webhook URL'}
+                label={editing ? 'New Slack webhook URL (leave blank to keep current)' : 'New Slack webhook URL'}
                 icon={DestinationIcon}
                 autoComplete="off"
                 placeholder={destination.placeholder}
@@ -321,9 +446,9 @@ export function NotificationChannelsDialog({ open, onOpenChange }: NotificationC
                 onChange={(event) => setSlackWebhookUrl(event.target.value)}
                 hint={destination.hint}
               />
-            ) : (
+            ) : type === 'EMAIL' ? (
               <FormField
-                label={editing ? 'Edit email address' : 'New email address'}
+                label={editing ? 'Email address' : 'New email address'}
                 icon={DestinationIcon}
                 autoComplete="off"
                 placeholder={destination.placeholder}
@@ -331,7 +456,99 @@ export function NotificationChannelsDialog({ open, onOpenChange }: NotificationC
                 onChange={(event) => setEmailAddress(event.target.value)}
                 hint={destination.hint}
               />
+            ) : type === 'PAGERDUTY' ? (
+              <FormField
+                label={editing ? 'New integration key (leave blank to keep current)' : 'Integration key'}
+                icon={DestinationIcon}
+                autoComplete="off"
+                type="password"
+                placeholder={destination.placeholder}
+                value={routingKey}
+                onChange={(event) => setRoutingKey(event.target.value)}
+                hint={destination.hint}
+              />
+            ) : (
+              <FormField
+                label={editing ? 'New Teams webhook URL (leave blank to keep current)' : 'New Teams webhook URL'}
+                icon={DestinationIcon}
+                autoComplete="off"
+                placeholder={destination.placeholder}
+                value={teamsWebhookUrl}
+                onChange={(event) => setTeamsWebhookUrl(event.target.value)}
+                hint={destination.hint}
+              />
             )}
+
+            {type === 'WEBHOOK' ? (
+              <div className="space-y-3 rounded-md border border-white/5 bg-black/10 p-3">
+                <FormField
+                  label={editing ? 'New signing secret (leave blank to keep current)' : 'Signing secret (optional)'}
+                  icon={Lock}
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Used to compute X-Signature-256"
+                  value={secret}
+                  onChange={(event) => setSecret(event.target.value)}
+                  hint="When set, every request is signed with HMAC-SHA256 over the exact JSON body."
+                />
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-slate-200">Static headers (optional)</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={headerRows.length >= MAX_WEBHOOK_HEADERS}
+                      onClick={() => setHeaderRows((rows) => [...rows, { name: '', value: '' }])}
+                    >
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                      Add header
+                    </Button>
+                  </div>
+                  {existingHeaderNames.length > 0 ? (
+                    <p className="text-xs text-slate-500">
+                      Currently configured: {existingHeaderNames.join(', ')}. Saving new headers replaces the set.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-500">
+                      Up to {MAX_WEBHOOK_HEADERS} headers. Platform-managed headers are not allowed.
+                    </p>
+                  )}
+                  {headerRows.map((row, index) => (
+                    <div key={index} className="flex items-start gap-2">
+                      <FormField
+                        label="Header name"
+                        icon={Webhook}
+                        autoComplete="off"
+                        placeholder="X-Custom-Header"
+                        value={row.name}
+                        onChange={(event) => updateHeaderRow(index, { name: event.target.value })}
+                      />
+                      <FormField
+                        label="Value"
+                        icon={Lock}
+                        autoComplete="off"
+                        type="password"
+                        placeholder="Header value"
+                        value={row.value}
+                        onChange={(event) => updateHeaderRow(index, { value: event.target.value })}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Remove header"
+                        className="mt-6"
+                        onClick={() => setHeaderRows((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div className="flex items-center justify-between">
               <label htmlFor="channel-active" className="text-sm text-slate-200">

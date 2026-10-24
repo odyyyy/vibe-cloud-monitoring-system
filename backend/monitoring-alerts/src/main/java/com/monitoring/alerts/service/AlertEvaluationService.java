@@ -428,6 +428,7 @@ public class AlertEvaluationService {
                 : null;
         return new AlertEvent(
                 incident.getId(),
+                incident.getTriggeredAt(),
                 rule.getId(),
                 rule.getName(),
                 rule.getOrganizationId(),
