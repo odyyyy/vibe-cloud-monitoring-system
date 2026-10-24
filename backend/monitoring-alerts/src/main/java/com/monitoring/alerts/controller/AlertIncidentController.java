@@ -1,15 +1,20 @@
 package com.monitoring.alerts.controller;
 
+import com.monitoring.alerts.dto.request.AddIncidentCommentRequest;
 import com.monitoring.alerts.dto.request.UpdateIncidentNotesRequest;
 import com.monitoring.alerts.dto.response.AlertIncidentResponse;
+import com.monitoring.alerts.dto.response.IncidentCommentResponse;
 import com.monitoring.alerts.entity.IncidentStatus;
 import com.monitoring.alerts.service.AlertService;
+import com.monitoring.alerts.service.IncidentCommentService;
+import com.monitoring.common.dto.response.PageResponse;
 import com.monitoring.organization.entity.MembershipRole;
 import com.monitoring.organization.security.RequireRole;
 import com.monitoring.organization.tenant.CurrentTenantService;
 import com.monitoring.organization.tenant.TenantContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,6 +40,7 @@ import java.util.List;
 public class AlertIncidentController {
 
     private final AlertService alertService;
+    private final IncidentCommentService commentService;
     private final CurrentTenantService currentTenantService;
 
     @GetMapping
@@ -67,5 +73,27 @@ public class AlertIncidentController {
             @PathVariable Long id, @Valid @RequestBody UpdateIncidentNotesRequest request) {
         return ResponseEntity.ok(alertService.updateIncidentNotes(
                 currentTenantService.requireOrganizationId(), id, request));
+    }
+
+    /**
+     * Incident war-room thread. Any organization member may read it; any member may post, while
+     * slash commands inside a comment require ADMIN/OWNER and are enforced by the service.
+     */
+    @GetMapping("/{id}/comments")
+    public ResponseEntity<PageResponse<IncidentCommentResponse>> listComments(
+            @PathVariable Long id,
+            @RequestParam(name = "page", required = false) Integer page,
+            @RequestParam(name = "size", required = false) Integer size) {
+        return ResponseEntity.ok(commentService.listComments(
+                currentTenantService.requireOrganizationId(), id, page, size));
+    }
+
+    @PostMapping("/{id}/comments")
+    public ResponseEntity<IncidentCommentResponse> addComment(
+            @PathVariable Long id, @Valid @RequestBody AddIncidentCommentRequest request) {
+        TenantContext tenant = currentTenantService.requireTenant();
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(commentService.addComment(
+                        tenant.organizationId(), tenant.userId(), tenant.role(), id, request));
     }
 }

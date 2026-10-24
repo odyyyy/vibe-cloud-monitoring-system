@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '../store/authStore'
+import type { MembershipRole } from '../store/authStore'
 import { apiRequest } from './client'
 import type { LogLevel } from './logs'
 
@@ -8,8 +9,14 @@ export type AlertCondition = 'GREATER_THAN' | 'GREATER_OR_EQUAL' | 'LESS_THAN' |
 /** Log alerts compare counts; equality is intentionally not offered. */
 export type LogAlertCondition = Exclude<AlertCondition, 'EQUAL'>
 export type IncidentStatus = 'FIRING' | 'ACKNOWLEDGED' | 'RESOLVED'
-export type NotificationChannelType = 'WEBHOOK' | 'SLACK' | 'EMAIL'
+export type NotificationChannelType = 'WEBHOOK' | 'SLACK' | 'EMAIL' | 'PAGERDUTY' | 'TEAMS'
 export type LogicOperator = 'AND' | 'OR'
+export type NotificationDeliveryStatus = 'PENDING' | 'SUCCESS' | 'FAILED'
+export type NotificationEventType =
+  | 'INCIDENT_OPENED'
+  | 'INCIDENT_ACKNOWLEDGED'
+  | 'INCIDENT_RESOLVED'
+  | 'SCHEDULED_REPORT'
 
 /** A single condition inside a compound alert rule. */
 export interface AlertConditionSpec {
@@ -45,10 +52,57 @@ export interface NotificationChannel {
   id: number
   organizationId: number
   type: NotificationChannelType
+  /** Masked destination (scheme and host only); edit requires re-entering the full URL. */
   url: string | null
   slackWebhookUrl: string | null
   emailAddress: string | null
+  teamsWebhookUrl: string | null
+  /** Masked PagerDuty routing key, when configured. */
+  pagerDutyRoutingKey: string | null
+  hasWebhookSecret: boolean
+  webhookHeaderNames: string[]
   isActive: boolean
+}
+
+export interface NotificationDelivery {
+  id: number
+  channelId: number | null
+  channelType: NotificationChannelType | null
+  channelDestination: string | null
+  incidentId: number | null
+  scheduledReportId: number | null
+  scheduledReportName: string | null
+  eventType: NotificationEventType
+  status: NotificationDeliveryStatus
+  attempts: number
+  lastHttpStatus: number | null
+  lastError: string | null
+  createdAt: string
+  lastAttemptAt: string | null
+  test: boolean
+}
+
+export interface NotificationDeliveriesPage {
+  content: NotificationDelivery[]
+  totalElements: number
+  totalPages: number
+  page: number
+  size: number
+}
+
+export interface NotificationTestResult {
+  status: NotificationDeliveryStatus
+  message: string
+  httpStatus: number | null
+  deliveryId: number
+}
+
+export interface NotificationDeliveriesQuery {
+  channelId?: number
+  incidentId?: number
+  status?: NotificationDeliveryStatus
+  page: number
+  size: number
 }
 
 export interface AlertIncident {
@@ -71,6 +125,27 @@ export interface AlertIncident {
   resolvedByName: string | null
   resolvedAt: string | null
   notes: string | null
+}
+
+export interface IncidentComment {
+  id: number
+  incidentId: number
+  userId: number | null
+  username: string | null
+  role: MembershipRole | null
+  text: string
+  /** Platform-generated lifecycle confirmation, rendered separately from human messages. */
+  system: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface IncidentCommentsPage {
+  content: IncidentComment[]
+  totalElements: number
+  totalPages: number
+  page: number
+  size: number
 }
 
 export interface CreateAlertRuleRequest {
@@ -113,6 +188,12 @@ export interface CreateNotificationChannelRequest {
   url?: string | null
   slackWebhookUrl?: string | null
   emailAddress?: string | null
+  teamsWebhookUrl?: string | null
+  routingKey?: string | null
+  /** HMAC-SHA256 signing secret for generic webhooks; never returned by the API. */
+  secret?: string | null
+  /** Up to five static headers for generic webhooks. */
+  headers?: Record<string, string> | null
   isActive: boolean
 }
 
@@ -120,6 +201,7 @@ export type UpdateNotificationChannelRequest = Partial<CreateNotificationChannel
 
 const RULES_PATH = '/v1/alert-rules'
 const CHANNELS_PATH = '/v1/notification-channels'
+const DELIVERIES_PATH = '/v1/notification-deliveries'
 const INCIDENTS_PATH = '/v1/incidents'
 
 function authToken(): string | null {
@@ -181,11 +263,32 @@ export function deleteNotificationChannel(id: number): Promise<void> {
 }
 
 /**
- * Queues a test notification for the channel. The backend responds 202 Accepted because delivery
- * is asynchronous; a resolved promise means the message was queued, not delivered.
+ * Sends one synchronous test notification. The response reports the actual outcome (including the
+ * destination's HTTP status), so the UI can show success or a concrete failure reason.
  */
-export function testNotificationChannel(id: number): Promise<void> {
-  return apiRequest<void>(`${CHANNELS_PATH}/${id}/test`, { method: 'POST', token: authToken() })
+export function testNotificationChannel(id: number): Promise<NotificationTestResult> {
+  return apiRequest<NotificationTestResult>(`${CHANNELS_PATH}/${id}/test`, {
+    method: 'POST',
+    token: authToken(),
+  })
+}
+
+export function getNotificationDeliveries(
+  params: NotificationDeliveriesQuery,
+): Promise<NotificationDeliveriesPage> {
+  const search = new URLSearchParams({ page: String(params.page), size: String(params.size) })
+  if (params.channelId !== undefined) {
+    search.set('channelId', String(params.channelId))
+  }
+  if (params.incidentId !== undefined) {
+    search.set('incidentId', String(params.incidentId))
+  }
+  if (params.status) {
+    search.set('status', params.status)
+  }
+  return apiRequest<NotificationDeliveriesPage>(`${DELIVERIES_PATH}?${search.toString()}`, {
+    token: authToken(),
+  })
 }
 
 export function getAlertIncidents(limit?: number, status?: IncidentStatus): Promise<AlertIncident[]> {
@@ -218,6 +321,26 @@ export function updateIncidentNotes(id: number, notes: string): Promise<AlertInc
   return apiRequest<AlertIncident>(`${INCIDENTS_PATH}/${id}/notes`, {
     method: 'PUT',
     body: { notes },
+    token: authToken(),
+  })
+}
+
+export function getIncidentComments(
+  incidentId: number,
+  page = 0,
+  size = 50,
+): Promise<IncidentCommentsPage> {
+  const params = new URLSearchParams({ page: String(page), size: String(size) })
+  return apiRequest<IncidentCommentsPage>(
+    `${INCIDENTS_PATH}/${incidentId}/comments?${params.toString()}`,
+    { token: authToken() },
+  )
+}
+
+export function addIncidentComment(incidentId: number, text: string): Promise<IncidentComment> {
+  return apiRequest<IncidentComment>(`${INCIDENTS_PATH}/${incidentId}/comments`, {
+    method: 'POST',
+    body: { text },
     token: authToken(),
   })
 }
@@ -351,8 +474,31 @@ export function useDeleteNotificationChannelMutation() {
 }
 
 export function useTestNotificationChannelMutation() {
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: number) => testNotificationChannel(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['notification-deliveries'] })
+    },
+  })
+}
+
+export const notificationDeliveriesQueryKey = (params: NotificationDeliveriesQuery | null) =>
+  [
+    'notification-deliveries',
+    params?.channelId ?? null,
+    params?.incidentId ?? null,
+    params?.status ?? null,
+    params?.page ?? null,
+    params?.size ?? null,
+  ] as const
+
+export function useNotificationDeliveriesQuery(params: NotificationDeliveriesQuery | null) {
+  return useQuery({
+    queryKey: notificationDeliveriesQueryKey(params),
+    queryFn: () => getNotificationDeliveries(params as NotificationDeliveriesQuery),
+    enabled: params !== null,
+    keepPreviousData: true,
   })
 }
 
@@ -401,6 +547,42 @@ export function useUpdateIncidentNotesMutation() {
     mutationFn: ({ id, notes }: { id: number; notes: string }) => updateIncidentNotes(id, notes),
     onSuccess: (incident) => {
       replaceIncidentInCaches(queryClient, incident)
+      void queryClient.invalidateQueries({ queryKey: ['alert-incidents'] })
+    },
+  })
+}
+
+export const incidentCommentsQueryKey = (incidentId: number, page: number, size: number) =>
+  ['incident-comments', incidentId, page, size] as const
+
+/**
+ * War-room thread. Polling is intentional for the MVP: it keeps the thread fresh without a
+ * WebSocket and automatically pauses while the browser tab is hidden.
+ */
+export function useIncidentCommentsQuery(
+  incidentId: number | null,
+  page = 0,
+  size = 50,
+  refetchInterval: number | false = false,
+) {
+  return useQuery({
+    queryKey: incidentCommentsQueryKey(incidentId ?? 0, page, size),
+    queryFn: () => getIncidentComments(incidentId as number, page, size),
+    enabled: incidentId !== null,
+    refetchInterval,
+    keepPreviousData: true,
+  })
+}
+
+export function useAddIncidentCommentMutation(incidentId: number | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (text: string) => addIncidentComment(incidentId as number, text),
+    onSuccess: () => {
+      if (incidentId !== null) {
+        void queryClient.invalidateQueries({ queryKey: ['incident-comments', incidentId] })
+      }
+      // Slash commands (/acknowledge, /resolve) change the incident itself.
       void queryClient.invalidateQueries({ queryKey: ['alert-incidents'] })
     },
   })

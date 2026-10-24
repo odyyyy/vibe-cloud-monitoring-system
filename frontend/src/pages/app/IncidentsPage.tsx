@@ -1,16 +1,18 @@
 import { useMemo, useState } from 'react'
-import { CheckCheck, ExternalLink, MessageSquare, Siren } from 'lucide-react'
+import { CheckCheck, ExternalLink, History, MessageSquare, Siren } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import type { AlertIncident, IncidentStatus } from '../../api/alerts'
 import {
   useAcknowledgeIncidentMutation,
   useAlertIncidentsQuery,
+  useNotificationDeliveriesQuery,
   useResolveIncidentMutation,
   useUpdateIncidentNotesMutation,
 } from '../../api/alerts'
 import { ApiError } from '../../api/client'
 import { IncidentStatusBadge } from '../../components/alerts/IncidentStatusBadge'
+import { IncidentWarRoomDialog } from '../../components/alerts/IncidentWarRoomDialog'
 import { MaintenanceStatusBanner } from '../../components/alerts/MaintenanceStatusBanner'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
@@ -28,6 +30,11 @@ import { Skeleton } from '../../components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
 import { logExplorerHref } from '../../features/alerts/incidentLinks'
 import { MAX_INCIDENT_NOTE_LENGTH, validateIncidentNote } from '../../features/alerts/incidentNotes'
+import {
+  notificationChannelTypeLabel,
+  notificationDeliveryStatusLabel,
+  notificationEventTypeLabel,
+} from '../../features/alerts/labels'
 import { useCanManage } from '../../features/organizations/useCanManage'
 import { formatDateTime } from '../../lib/datetime'
 import { useDocumentVisible } from '../../lib/useDocumentVisible'
@@ -70,8 +77,16 @@ export default function IncidentsPage() {
   const [notesTarget, setNotesTarget] = useState<AlertIncident | null>(null)
   const [notesDraft, setNotesDraft] = useState('')
   const [notesError, setNotesError] = useState<string | null>(null)
+  const [deliveriesTarget, setDeliveriesTarget] = useState<AlertIncident | null>(null)
+  const [warRoomTarget, setWarRoomTarget] = useState<AlertIncident | null>(null)
+  const deliveriesQuery = useNotificationDeliveriesQuery(
+    deliveriesTarget ? { incidentId: deliveriesTarget.id, page: 0, size: 20 } : null,
+  )
 
   const incidents = data ?? []
+  const warRoomIncident = warRoomTarget
+    ? incidents.find((incident) => incident.id === warRoomTarget.id) ?? warRoomTarget
+    : null
   const counts = useMemo(
     () => ({
       firing: incidents.filter((incident) => incident.status === 'FIRING').length,
@@ -236,6 +251,7 @@ export default function IncidentsPage() {
                 <TableHead>Triggered</TableHead>
                 <TableHead>Acknowledged</TableHead>
                 <TableHead>Resolved</TableHead>
+                <TableHead>Discussion</TableHead>
                 {canManage ? <TableHead className="text-right">Actions</TableHead> : null}
               </TableRow>
             </TableHeader>
@@ -264,6 +280,14 @@ export default function IncidentsPage() {
                           View matching logs
                         </Link>
                       ) : null}
+                      <button
+                        type="button"
+                        className="mt-1 flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200"
+                        onClick={() => setDeliveriesTarget(incident)}
+                      >
+                        <History className="h-3 w-3" aria-hidden="true" />
+                        Notification deliveries
+                      </button>
                       {incident.notes ? (
                         <p className="mt-1 max-w-xs truncate text-xs text-slate-400" title={incident.notes}>
                           {incident.notes}
@@ -298,6 +322,17 @@ export default function IncidentsPage() {
                       ) : (
                         '—'
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setWarRoomTarget(incident)}
+                      >
+                        <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                        War room
+                      </Button>
                     </TableCell>
                     {canManage ? (
                       <TableCell>
@@ -393,6 +428,97 @@ export default function IncidentsPage() {
             </Button>
             <Button type="button" onClick={() => void saveNotes()} disabled={notesMutation.isPending}>
               {notesMutation.isPending ? 'Saving…' : 'Save note'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <IncidentWarRoomDialog
+        incident={warRoomIncident}
+        isVisible={isVisible}
+        onClose={() => setWarRoomTarget(null)}
+      />
+
+      <Dialog
+        open={deliveriesTarget !== null}
+        onOpenChange={(open) => (!open ? setDeliveriesTarget(null) : undefined)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Notification deliveries</DialogTitle>
+            <DialogDescription>
+              Delivery attempts for “{deliveriesTarget?.ruleName ?? ''}”, including each channel, HTTP status
+              and the last error. Retries happen in the background.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-4 space-y-2">
+            {deliveriesQuery.isLoading ? (
+              <div className="space-y-2" aria-busy="true">
+                <Skeleton className="h-10 w-full rounded" />
+                <Skeleton className="h-10 w-full rounded" />
+              </div>
+            ) : deliveriesQuery.isError ? (
+              <p role="alert" className="text-sm text-red-300">
+                {deliveriesQuery.error instanceof ApiError
+                  ? deliveriesQuery.error.message
+                  : 'Could not load notification deliveries.'}
+              </p>
+            ) : (deliveriesQuery.data?.content.length ?? 0) === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-400">
+                No notifications were sent for this incident, or no channels were active.
+              </p>
+            ) : (
+              deliveriesQuery.data?.content.map((delivery) => (
+                <div
+                  key={delivery.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-white/10 bg-white/[0.02] px-3 py-2"
+                >
+                  <div className="space-y-0.5">
+                    <p className="text-sm text-slate-200">{notificationEventTypeLabel(delivery.eventType)}</p>
+                    <p className="text-xs text-slate-500">
+                      {delivery.channelType ? notificationChannelTypeLabel(delivery.channelType) : 'Deleted channel'} ·{' '}
+                      {formatDateTime(delivery.createdAt)}
+                      {delivery.lastHttpStatus !== null ? ` · HTTP ${delivery.lastHttpStatus}` : ''}
+                    </p>
+                    {delivery.lastError ? (
+                      <p className="max-w-md text-xs text-red-300">{delivery.lastError}</p>
+                    ) : null}
+                  </div>
+                  <Badge
+                    variant={
+                      delivery.status === 'SUCCESS'
+                        ? 'success'
+                        : delivery.status === 'FAILED'
+                          ? 'danger'
+                          : 'warning'
+                    }
+                  >
+                    {notificationDeliveryStatusLabel(delivery.status)}
+                  </Badge>
+                </div>
+              ))
+            )}
+          </div>
+
+          <DialogFooter>
+            {deliveriesTarget ? (
+              <Button asChild variant="outline">
+                <Link
+                  to={`/app/notification-deliveries?incidentId=${deliveriesTarget.id}`}
+                  onClick={() => setDeliveriesTarget(null)}
+                >
+                  Open delivery log
+                </Link>
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void deliveriesQuery.refetch()}
+              disabled={deliveriesQuery.isFetching}
+            >
+              {deliveriesQuery.isFetching ? 'Refreshing…' : 'Refresh'}
             </Button>
           </DialogFooter>
         </DialogContent>

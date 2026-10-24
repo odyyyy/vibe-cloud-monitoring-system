@@ -4,6 +4,7 @@ import com.monitoring.organization.entity.Membership;
 import com.monitoring.organization.entity.MembershipRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,6 +16,9 @@ public interface MembershipRepository extends JpaRepository<Membership, Long> {
     List<Membership> findByUserIdOrderByIdAsc(Long userId);
 
     List<Membership> findByOrganizationIdOrderByIdAsc(Long organizationId);
+
+    /** Bulk role lookup for comment authors, avoiding a query per comment. */
+    List<Membership> findByOrganizationIdAndUserIdIn(Long organizationId, Collection<Long> userIds);
 
     boolean existsByOrganizationIdAndUserId(Long organizationId, Long userId);
 

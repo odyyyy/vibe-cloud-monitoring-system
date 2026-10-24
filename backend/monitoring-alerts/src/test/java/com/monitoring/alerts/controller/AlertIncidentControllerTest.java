@@ -1,9 +1,13 @@
 package com.monitoring.alerts.controller;
 
+import com.monitoring.alerts.dto.request.AddIncidentCommentRequest;
 import com.monitoring.alerts.dto.request.UpdateIncidentNotesRequest;
 import com.monitoring.alerts.dto.response.AlertIncidentResponse;
+import com.monitoring.alerts.dto.response.IncidentCommentResponse;
 import com.monitoring.alerts.entity.IncidentStatus;
 import com.monitoring.alerts.service.AlertService;
+import com.monitoring.alerts.service.IncidentCommentService;
+import com.monitoring.common.dto.response.PageResponse;
 import com.monitoring.organization.entity.MembershipRole;
 import com.monitoring.organization.tenant.CurrentTenantService;
 import com.monitoring.organization.tenant.TenantContext;
@@ -33,17 +37,19 @@ class AlertIncidentControllerTest {
     private static final Long USER_ID = 42L;
 
     private AlertService alertService;
+    private IncidentCommentService commentService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         alertService = Mockito.mock(AlertService.class);
+        commentService = Mockito.mock(IncidentCommentService.class);
         CurrentTenantService tenantService = Mockito.mock(CurrentTenantService.class);
         when(tenantService.requireOrganizationId()).thenReturn(ORGANIZATION_ID);
         when(tenantService.requireTenant())
                 .thenReturn(new TenantContext(USER_ID, ORGANIZATION_ID, MembershipRole.ADMIN));
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new AlertIncidentController(alertService, tenantService))
+                .standaloneSetup(new AlertIncidentController(alertService, commentService, tenantService))
                 .build();
     }
 
@@ -116,6 +122,57 @@ class AlertIncidentControllerTest {
 
         verify(alertService).updateIncidentNotes(eq(ORGANIZATION_ID), eq(3L),
                 Mockito.argThat(request -> request instanceof UpdateIncidentNotesRequest));
+    }
+
+    @Test
+    void commentsAreListedWithPagination() throws Exception {
+        IncidentCommentResponse comment = IncidentCommentResponse.builder()
+                .id(11L)
+                .incidentId(3L)
+                .userId(USER_ID)
+                .username("oncall")
+                .role(MembershipRole.ADMIN)
+                .text("Investigating")
+                .createdAt(Instant.parse("2026-10-17T10:02:00Z"))
+                .updatedAt(Instant.parse("2026-10-17T10:02:00Z"))
+                .build();
+        when(commentService.listComments(ORGANIZATION_ID, 3L, 1, 25))
+                .thenReturn(new PageResponse<>(List.of(comment), 1, 1, 1, 25));
+
+        mockMvc.perform(get("/api/v1/incidents/3/comments")
+                        .param("page", "1")
+                        .param("size", "25"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].text").value("Investigating"))
+                .andExpect(jsonPath("$.content[0].role").value("ADMIN"))
+                .andExpect(jsonPath("$.page").value(1));
+    }
+
+    @Test
+    void addCommentUsesActiveTenantUserAndRole() throws Exception {
+        IncidentCommentResponse comment = IncidentCommentResponse.builder()
+                .id(12L)
+                .incidentId(3L)
+                .userId(USER_ID)
+                .username("oncall")
+                .role(MembershipRole.ADMIN)
+                .text("/acknowledge")
+                .createdAt(Instant.parse("2026-10-17T10:03:00Z"))
+                .updatedAt(Instant.parse("2026-10-17T10:03:00Z"))
+                .build();
+        when(commentService.addComment(eq(ORGANIZATION_ID), eq(USER_ID), eq(MembershipRole.ADMIN),
+                eq(3L), Mockito.any()))
+                .thenReturn(comment);
+
+        mockMvc.perform(post("/api/v1/incidents/3/comments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"/acknowledge\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.text").value("/acknowledge"));
+
+        verify(commentService).addComment(eq(ORGANIZATION_ID), eq(USER_ID),
+                eq(MembershipRole.ADMIN), eq(3L),
+                Mockito.argThat(request -> request instanceof AddIncidentCommentRequest));
     }
 
     @Test

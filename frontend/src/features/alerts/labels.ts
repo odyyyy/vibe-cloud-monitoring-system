@@ -5,6 +5,8 @@ import type {
   IncidentStatus,
   LogicOperator,
   NotificationChannelType,
+  NotificationDeliveryStatus,
+  NotificationEventType,
 } from '../../api/alerts'
 
 const RULE_TYPE_LABELS: Record<AlertRuleType, string> = {
@@ -42,6 +44,21 @@ const CHANNEL_TYPE_LABELS: Record<NotificationChannelType, string> = {
   WEBHOOK: 'Webhook',
   SLACK: 'Slack',
   EMAIL: 'Email',
+  PAGERDUTY: 'PagerDuty',
+  TEAMS: 'Microsoft Teams',
+}
+
+const DELIVERY_STATUS_LABELS: Record<NotificationDeliveryStatus, string> = {
+  PENDING: 'Pending',
+  SUCCESS: 'Delivered',
+  FAILED: 'Failed',
+}
+
+const EVENT_TYPE_LABELS: Record<NotificationEventType, string> = {
+  INCIDENT_OPENED: 'Incident opened',
+  INCIDENT_ACKNOWLEDGED: 'Incident acknowledged',
+  INCIDENT_RESOLVED: 'Incident resolved',
+  SCHEDULED_REPORT: 'Scheduled report',
 }
 
 export function alertRuleTypeLabel(type: AlertRuleType): string {
@@ -66,6 +83,14 @@ export function logicOperatorLabel(operator: LogicOperator): string {
 
 export function notificationChannelTypeLabel(type: NotificationChannelType): string {
   return CHANNEL_TYPE_LABELS[type]
+}
+
+export function notificationDeliveryStatusLabel(status: NotificationDeliveryStatus): string {
+  return DELIVERY_STATUS_LABELS[status]
+}
+
+export function notificationEventTypeLabel(type: NotificationEventType): string {
+  return EVENT_TYPE_LABELS[type]
 }
 
 /** Human-readable log-rule summary, for example: `ERROR logs containing "timeout" >= 10 in 5 min`. */
