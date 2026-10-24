@@ -13,7 +13,9 @@ describe('NAV_ITEMS', () => {
       'Status pages',
       'Alerts',
       'Incidents',
+      'Delivery log',
       'Maintenance',
+      'Reports',
       'Dashboards',
       'Audit log',
       'Organization',
@@ -54,3 +56,4 @@ describe('isPathActive', () => {
     expect(isPathActive('/app/metrics-archive', '/app/metrics')).toBe(false)
   })
 })
+

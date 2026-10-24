@@ -30,7 +30,9 @@ import com.monitoring.alerts.exception.AlertIncidentNotFoundException;
 import com.monitoring.alerts.exception.AlertPreviewRateLimitedException;
 import com.monitoring.alerts.exception.AlertRuleAccessDeniedException;
 import com.monitoring.alerts.exception.AlertRuleNotFoundException;
+import com.monitoring.alerts.exception.IncidentCommentRateLimitedException;
 import com.monitoring.alerts.exception.InvalidAlertRuleException;
+import com.monitoring.alerts.exception.InvalidIncidentCommentException;
 import com.monitoring.alerts.exception.InvalidIncidentNoteException;
 import com.monitoring.alerts.exception.InvalidIncidentStateException;
 import com.monitoring.alerts.exception.InvalidMaintenanceWindowException;
@@ -40,7 +42,12 @@ import com.monitoring.alerts.exception.LogAlertRuleLimitExceededException;
 import com.monitoring.alerts.exception.MaintenanceWindowAccessDeniedException;
 import com.monitoring.alerts.exception.MaintenanceWindowNotFoundException;
 import com.monitoring.alerts.exception.NotificationChannelAccessDeniedException;
+import com.monitoring.alerts.exception.NotificationChannelLimitExceededException;
 import com.monitoring.alerts.exception.NotificationChannelNotFoundException;
+import com.monitoring.alerts.exception.InvalidScheduledReportException;
+import com.monitoring.alerts.exception.ScheduledReportAccessDeniedException;
+import com.monitoring.alerts.exception.ScheduledReportLimitExceededException;
+import com.monitoring.alerts.exception.ScheduledReportNotFoundException;
 import com.monitoring.healthcheck.exception.HealthCheckAccessDeniedException;
 import com.monitoring.healthcheck.exception.HealthCheckNotFoundException;
 import com.monitoring.healthcheck.exception.InvalidTargetUrlException;
@@ -192,14 +199,16 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler({AlertRuleNotFoundException.class, NotificationChannelNotFoundException.class,
-            AlertIncidentNotFoundException.class, MaintenanceWindowNotFoundException.class})
+            AlertIncidentNotFoundException.class, MaintenanceWindowNotFoundException.class,
+            ScheduledReportNotFoundException.class})
     public ResponseEntity<ApiError> handleAlertNotFound(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
     }
 
     @ExceptionHandler({AlertRuleAccessDeniedException.class, NotificationChannelAccessDeniedException.class,
-            AlertIncidentAccessDeniedException.class, MaintenanceWindowAccessDeniedException.class})
+            AlertIncidentAccessDeniedException.class, MaintenanceWindowAccessDeniedException.class,
+            ScheduledReportAccessDeniedException.class})
     public ResponseEntity<ApiError> handleAlertAccessDenied(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(new ApiError(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
@@ -208,7 +217,8 @@ public class ApiExceptionHandler {
     /** Inconsistent alert rule payloads and blocked webhook/Slack/email destinations. */
     @ExceptionHandler({InvalidAlertRuleException.class, InvalidWebhookUrlException.class,
             InvalidNotificationChannelException.class, InvalidIncidentNoteException.class,
-            InvalidMaintenanceWindowException.class})
+            InvalidIncidentCommentException.class, InvalidMaintenanceWindowException.class,
+            InvalidScheduledReportException.class})
     public ResponseEntity<ApiError> handleInvalidAlertRequest(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
@@ -228,7 +238,9 @@ public class ApiExceptionHandler {
      */
     @ExceptionHandler({ApplicationNameConflictException.class, WidgetLimitExceededException.class,
             SavedLogViewLimitExceededException.class, LogAlertRuleLimitExceededException.class,
-            StatusPageLimitExceededException.class, StatusPageSlugConflictException.class})
+            NotificationChannelLimitExceededException.class,
+            StatusPageLimitExceededException.class, StatusPageSlugConflictException.class,
+            ScheduledReportLimitExceededException.class})
     public ResponseEntity<ApiError> handleConflict(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ApiError(HttpStatus.CONFLICT.value(), ex.getMessage()));
@@ -263,6 +275,15 @@ public class ApiExceptionHandler {
     /** The per-organization preview budget was exhausted; clients may retry after the delay. */
     @ExceptionHandler(AlertPreviewRateLimitedException.class)
     public ResponseEntity<ApiError> handlePreviewRateLimited(AlertPreviewRateLimitedException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", Long.toString(ex.getRetryAfterSeconds()))
+                .body(new ApiError(HttpStatus.TOO_MANY_REQUESTS.value(), ex.getMessage()));
+    }
+
+    /** A user posted incident comments faster than the configured budget allows. */
+    @ExceptionHandler(IncidentCommentRateLimitedException.class)
+    public ResponseEntity<ApiError> handleIncidentCommentRateLimited(
+            IncidentCommentRateLimitedException ex) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header("Retry-After", Long.toString(ex.getRetryAfterSeconds()))
                 .body(new ApiError(HttpStatus.TOO_MANY_REQUESTS.value(), ex.getMessage()));

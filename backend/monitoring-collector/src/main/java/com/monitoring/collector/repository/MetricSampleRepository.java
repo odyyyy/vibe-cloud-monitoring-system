@@ -1,10 +1,12 @@
 package com.monitoring.collector.repository;
 
 import com.monitoring.collector.entity.MetricSample;
+import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,12 +21,33 @@ public interface MetricSampleRepository extends JpaRepository<MetricSample, Long
      * applications. Scoped by application ids (tenant ownership); an empty id collection must
      * be handled by the caller (an empty {@code IN} clause is not valid SQL).
      */
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "5000"))
     @Query("SELECT COUNT(m) FROM MetricSample m"
             + " WHERE m.application.id IN :applicationIds"
             + " AND m.timestamp >= :from AND m.timestamp < :to")
     long countByApplicationsAndTimeRange(@Param("applicationIds") Collection<Long> applicationIds,
                                          @Param("from") Instant from,
                                          @Param("to") Instant to);
+
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "5000"))
+    @Query("SELECT COUNT(DISTINCT m.name) FROM MetricSample m"
+            + " WHERE m.application.id IN :applicationIds"
+            + " AND m.timestamp >= :from AND m.timestamp < :to")
+    long countDistinctNamesInRange(@Param("applicationIds") Collection<Long> applicationIds,
+                                   @Param("from") Instant from,
+                                   @Param("to") Instant to);
+
+    /** Distinct metric names by sample volume for a tenant's applications in a time range. */
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "5000"))
+    @Query("SELECT m.name, COUNT(m) FROM MetricSample m"
+            + " WHERE m.application.id IN :applicationIds"
+            + " AND m.timestamp >= :from AND m.timestamp < :to"
+            + " GROUP BY m.name"
+            + " ORDER BY COUNT(m) DESC, m.name ASC")
+    List<Object[]> findTopMetricNames(@Param("applicationIds") Collection<Long> applicationIds,
+                                      @Param("from") Instant from,
+                                      @Param("to") Instant to,
+                                      Pageable pageable);
 
     /**
      * Ids of raw samples whose event time is strictly before {@code cutoffEpoch}

@@ -206,6 +206,21 @@ class OrganizationRbacIntegrationTest {
     }
 
     @Test
+    void tenantModulesAreReachableForAuthenticatedMembers() throws Exception {
+        Account owner = createAccount("owner");
+
+        mockMvc.perform(get("/api/v1/status-pages")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(owner.user().getId()))
+                        .header(CurrentTenantService.ORGANIZATION_HEADER, owner.organizationId()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/reports")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(owner.user().getId()))
+                        .header(CurrentTenantService.ORGANIZATION_HEADER, owner.organizationId()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void onlyOwnersCanDeleteAnOrganizationAndTheLastOwnerIsProtected() throws Exception {
         Account owner = createAccount("owner");
         Account admin = createAccount("admin");

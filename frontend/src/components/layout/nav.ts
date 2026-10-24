@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Activity, Bell, Building2, Gauge, Globe, HeartPulse, History, LayoutDashboard, LayoutGrid, Layers, ScrollText, Server, Settings, ShieldCheck, Siren, Wrench } from 'lucide-react'
+import { Activity, Bell, Building2, CalendarClock, Gauge, Globe, HeartPulse, History, LayoutDashboard, LayoutGrid, Layers, ScrollText, Send, Server, Settings, ShieldCheck, Siren, Wrench } from 'lucide-react'
 
 export interface NavItem {
   to: string
@@ -17,7 +17,9 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/app/status-pages', label: 'Status pages', icon: Globe },
   { to: '/app/alerts', label: 'Alerts', icon: Bell },
   { to: '/app/incidents', label: 'Incidents', icon: Siren },
+  { to: '/app/notification-deliveries', label: 'Delivery log', icon: Send },
   { to: '/app/maintenance', label: 'Maintenance', icon: Wrench },
+  { to: '/app/reports', label: 'Reports', icon: CalendarClock },
   { to: '/app/dashboards', label: 'Dashboards', icon: LayoutGrid },
   { to: '/app/audit', label: 'Audit log', icon: History },
   { to: '/app/organization', label: 'Organization', icon: Building2 },
@@ -39,3 +41,4 @@ export const PLATFORM_HEALTH_NAV_ITEM: NavItem = {
 export function isPathActive(pathname: string, to: string): boolean {
   return pathname === to || pathname.startsWith(`${to}/`)
 }
+

@@ -108,10 +108,18 @@ public class SecurityConfig {
                 // Health checks require an authenticated user; ownership is verified
                 // in HealthCheckService.
                 .requestMatchers("/api/v1/health-checks/**").authenticated()
-                // Alert rules, notification channels and incident history require an
-                // authenticated user; ownership is verified in AlertService.
+                // Alert rules, notification channels, delivery history and incident history require
+                // an authenticated user; the tenant scope is verified in AlertService and
+                // NotificationDeliveryService.
                 .requestMatchers("/api/v1/alert-rules/**", "/api/v1/notification-channels/**",
+                        "/api/v1/notification-deliveries/**",
                         "/api/v1/alert-incidents/**", "/api/v1/incidents/**").authenticated()
+                // Status pages are tenant-scoped; the organization is taken from the
+                // authenticated user and write roles are enforced on the controller.
+                .requestMatchers("/api/v1/status-pages/**").authenticated()
+                // Scheduled reports are tenant-scoped; access is verified in
+                // ScheduledReportService.
+                .requestMatchers("/api/v1/reports/**").authenticated()
                 // Maintenance windows mute alerts for a tenant; ownership is verified in
                 // MaintenanceWindowService.
                 .requestMatchers("/api/v1/maintenance-windows/**").authenticated()

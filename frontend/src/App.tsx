@@ -22,9 +22,11 @@ import IncidentsPage from './pages/app/IncidentsPage'
 import LogExplorerPage from './pages/app/LogExplorerPage'
 import MaintenancePage from './pages/app/MaintenancePage'
 import MetricsExplorerPage from './pages/app/MetricsExplorerPage'
+import NotificationDeliveriesPage from './pages/app/NotificationDeliveriesPage'
 import OverviewPage from './pages/app/OverviewPage'
 import OrganizationSettingsPage from './pages/app/OrganizationSettingsPage'
 import PublicDashboardViewPage from './pages/app/PublicDashboardViewPage'
+import ReportsPage from './pages/app/ReportsPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import PlatformHealthPage from './pages/admin/PlatformHealthPage'
 import SettingsPage from './pages/app/SettingsPage'
@@ -103,7 +105,9 @@ const router = createBrowserRouter([
       { path: 'status-pages', element: <StatusPagesPage /> },
       { path: 'alerts', element: <AlertsPage /> },
       { path: 'incidents', element: <IncidentsPage /> },
+      { path: 'notification-deliveries', element: <NotificationDeliveriesPage /> },
       { path: 'maintenance', element: <MaintenancePage /> },
+      { path: 'reports', element: <ReportsPage /> },
       { path: 'dashboards', element: <DashboardsPage /> },
       { path: 'dashboards/:id', element: <DashboardViewPage /> },
       { path: 'audit', element: <AuditLogPage /> },

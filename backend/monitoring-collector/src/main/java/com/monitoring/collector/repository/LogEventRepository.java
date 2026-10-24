@@ -27,12 +27,44 @@ public interface LogEventRepository extends JpaRepository<LogEvent, Long>, JpaSp
      * Scoped by application ids (tenant ownership); an empty id collection must be handled by
      * the caller (an empty {@code IN} clause is not valid SQL).
      */
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "5000"))
     @Query("SELECT COUNT(l) FROM LogEvent l"
             + " WHERE l.application.id IN :applicationIds"
             + " AND l.timestamp >= :from AND l.timestamp < :to")
     long countByApplicationsAndTimeRange(@Param("applicationIds") Collection<Long> applicationIds,
                                          @Param("from") Instant from,
                                          @Param("to") Instant to);
+
+    /**
+     * Error count for a tenant's applications in a half-open time range.
+     *
+     * <p>The query hint caps execution time because scheduled reports aggregate over a potentially
+     * large historical window on behalf of a tenant.
+     */
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "5000"))
+    @Query("SELECT COUNT(l) FROM LogEvent l"
+            + " WHERE l.application.id IN :applicationIds"
+            + " AND l.level = com.monitoring.collector.entity.LogLevel.ERROR"
+            + " AND l.timestamp >= :from AND l.timestamp < :to")
+    long countErrorsByApplicationsAndTimeRange(@Param("applicationIds") Collection<Long> applicationIds,
+                                               @Param("from") Instant from,
+                                               @Param("to") Instant to);
+
+    /**
+     * Most frequent error messages, capped to 200 characters for grouping. The message prefix is
+     * untrusted text and must still be rendered as plain text by consumers.
+     */
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "5000"))
+    @Query("SELECT SUBSTRING(l.message, 1, 200), COUNT(l) FROM LogEvent l"
+            + " WHERE l.application.id IN :applicationIds"
+            + " AND l.level = com.monitoring.collector.entity.LogLevel.ERROR"
+            + " AND l.timestamp >= :from AND l.timestamp < :to"
+            + " GROUP BY SUBSTRING(l.message, 1, 200)"
+            + " ORDER BY COUNT(l) DESC, SUBSTRING(l.message, 1, 200) ASC")
+    List<Object[]> findTopErrorMessages(@Param("applicationIds") Collection<Long> applicationIds,
+                                        @Param("from") Instant from,
+                                        @Param("to") Instant to,
+                                        Pageable pageable);
 
     /**
      * Counts log events for one application inside a half-open time range, optionally filtered
