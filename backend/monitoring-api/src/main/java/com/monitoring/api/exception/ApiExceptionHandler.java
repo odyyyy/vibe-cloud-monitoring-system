@@ -346,6 +346,28 @@ public class ApiExceptionHandler {
                 .body(new ApiError(HttpStatus.SERVICE_UNAVAILABLE.value(), ex.getMessage()));
     }
 
+    /** Invalid global-search query, resource type or limit. */
+    @ExceptionHandler(InvalidSearchRequestException.class)
+    public ResponseEntity<ApiError> handleInvalidSearchRequest(InvalidSearchRequestException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
+    }
+
+    /** The per-user search budget was exhausted; clients may retry after the delay. */
+    @ExceptionHandler(SearchRateLimitedException.class)
+    public ResponseEntity<ApiError> handleSearchRateLimited(SearchRateLimitedException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", Long.toString(ex.getRetryAfterSeconds()))
+                .body(new ApiError(HttpStatus.TOO_MANY_REQUESTS.value(), ex.getMessage()));
+    }
+
+    /** A search query exceeded its statement timeout. */
+    @ExceptionHandler(SearchTimeoutException.class)
+    public ResponseEntity<ApiError> handleSearchTimeout(SearchTimeoutException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ApiError(HttpStatus.SERVICE_UNAVAILABLE.value(), ex.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException ex) {
         Map<String, String> fieldErrors = new LinkedHashMap<>();

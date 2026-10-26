@@ -2,7 +2,12 @@ package com.monitoring.alerts.repository;
 
 import com.monitoring.alerts.entity.AlertRule;
 import com.monitoring.alerts.entity.AlertRuleType;
+import jakarta.persistence.QueryHint;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -26,4 +31,17 @@ public interface AlertRuleRepository extends JpaRepository<AlertRule, Long> {
 
     /** Backs the per-organization cap on active log rules. */
     long countByOrganizationIdAndTypeAndActiveTrue(Long organizationId, AlertRuleType type);
+
+    /** Bounded, tenant-scoped name search used by the global command palette. */
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "2000"))
+    @Query("""
+            SELECT r FROM AlertRule r
+            WHERE r.organizationId = :organizationId
+              AND LOCATE(:needle, LOWER(r.name)) > 0
+            ORDER BY CASE WHEN LOCATE(:needle, LOWER(r.name)) = 1 THEN 0 ELSE 1 END,
+                     LOWER(r.name), r.id
+            """)
+    List<AlertRule> searchByName(@Param("organizationId") Long organizationId,
+                                 @Param("needle") String needle,
+                                 Pageable pageable);
 }

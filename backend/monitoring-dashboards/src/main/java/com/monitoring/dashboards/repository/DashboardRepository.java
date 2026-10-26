@@ -1,8 +1,11 @@
 package com.monitoring.dashboards.repository;
 
 import com.monitoring.dashboards.entity.Dashboard;
+import jakarta.persistence.QueryHint;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
@@ -21,6 +24,25 @@ public interface DashboardRepository extends JpaRepository<Dashboard, Long> {
             ORDER BY d.createdAt DESC
             """)
     List<Dashboard> findAllWithWidgetsByOrganizationId(@Param("organizationId") Long organizationId);
+
+    /**
+     * Bounded, tenant-scoped dashboard name search used by the global command palette.
+     *
+     * <p>System dashboards are excluded: they are reachable only through Platform Health.
+     * {@code LOCATE} keeps user-supplied wildcard characters literal.
+     */
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "2000"))
+    @Query("""
+            SELECT d FROM Dashboard d
+            WHERE d.organizationId = :organizationId
+              AND d.isSystem = false
+              AND LOCATE(:needle, LOWER(d.name)) > 0
+            ORDER BY CASE WHEN LOCATE(:needle, LOWER(d.name)) = 1 THEN 0 ELSE 1 END,
+                     LOWER(d.name), d.id
+            """)
+    List<Dashboard> searchByName(@Param("organizationId") Long organizationId,
+                                 @Param("needle") String needle,
+                                 Pageable pageable);
 
     /**
      * Finds a built-in dashboard by its stable type. A unique index guarantees at most one

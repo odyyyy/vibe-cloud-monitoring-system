@@ -53,4 +53,22 @@ public interface AlertIncidentRepository extends JpaRepository<AlertIncident, Lo
                                                       @Param("from") Instant from,
                                                       @Param("to") Instant to,
                                                       @Param("statuses") Collection<IncidentStatus> statuses);
+
+    /**
+     * Bounded, tenant-scoped incident search by the owning rule name.
+     *
+     * <p>The rule is fetched in the same query so the palette mapping does not trigger N+1
+     * lookups. {@code LOCATE} keeps user-supplied wildcard characters literal.
+     */
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "2000"))
+    @Query("""
+            SELECT i FROM AlertIncident i JOIN FETCH i.rule r
+            WHERE i.organizationId = :organizationId
+              AND LOCATE(:needle, LOWER(r.name)) > 0
+            ORDER BY CASE WHEN LOCATE(:needle, LOWER(r.name)) = 1 THEN 0 ELSE 1 END,
+                     LOWER(r.name), i.id
+            """)
+    List<AlertIncident> searchByRuleName(@Param("organizationId") Long organizationId,
+                                         @Param("needle") String needle,
+                                         Pageable pageable);
 }

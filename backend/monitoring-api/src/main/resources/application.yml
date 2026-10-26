@@ -122,6 +122,12 @@ monitoring:
     enabled: ${MONITORING_QUOTAS_ENABLED:true}
     metrics-per-minute: ${MONITORING_QUOTAS_METRICS_PER_MINUTE:10000}
     logs-per-minute: ${MONITORING_QUOTAS_LOGS_PER_MINUTE:5000}
+  # Global command-palette resource search. Each request runs one bounded query per requested
+  # resource type with a 2-second statement timeout; the budget is enforced per user.
+  search:
+    rate-limit:
+      max-requests: ${MONITORING_SEARCH_RATE_LIMIT_MAX_REQUESTS:30}
+      window-seconds: ${MONITORING_SEARCH_RATE_LIMIT_WINDOW_SECONDS:60}
   # Log facets (Top-N aggregation). The aggregation is more expensive than a normal log query:
   # the JSON context fields are counted over the most recent max-scan-rows matching rows, the
   # statement timeout aborts a run that takes too long, and the requests are rate limited per

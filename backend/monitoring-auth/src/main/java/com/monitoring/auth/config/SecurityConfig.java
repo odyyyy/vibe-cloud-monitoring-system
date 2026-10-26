@@ -132,6 +132,9 @@ public class SecurityConfig {
                 // Usage and quota visualization requires an authenticated user; the scope is
                 // taken from the active organization in UsageController.
                 .requestMatchers("/api/v1/usage", "/api/v1/usage/**").authenticated()
+                // Global resource search requires an authenticated user; the tenant and role
+                // are resolved from the membership, never from the query string.
+                .requestMatchers("/api/v1/search", "/api/v1/search/**").authenticated()
                 // Personal Access Tokens management requires authentication (JWT human users only);
                 // PATs are denied from settings endpoints by the auth filter skipping settings paths.
                 .requestMatchers("/api/v1/settings/pats", "/api/v1/settings/pats/**").authenticated()
