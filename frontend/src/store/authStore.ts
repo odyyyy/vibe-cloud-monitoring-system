@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { clearAllRecentSearches } from '../features/search/recentSearches'
 import { decodeJwt } from '../lib/jwt'
 
 const TOKEN_STORAGE_KEY = 'token'
@@ -170,6 +171,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     persistUser(null)
     persistOrganization(null)
+    clearAllRecentSearches()
     set({ token: null, user: null, currentOrganizationId: null, currentRole: null })
   },
 }))

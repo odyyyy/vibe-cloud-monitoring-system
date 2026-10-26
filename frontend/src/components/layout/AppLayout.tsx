@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Building2, ChevronDown, HelpCircle, LogOut, Menu, Settings as SettingsIcon, X } from 'lucide-react'
+import { Building2, ChevronDown, HelpCircle, LogOut, Menu, Search, Settings as SettingsIcon, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom'
 import { useOrganizationsQuery } from '../../api/organizations'
 import { useProfile } from '../../features/auth/useProfile'
+import { isPaletteShortcut, isSlashShortcut } from '../../features/search/shortcuts'
 import { cn } from '../../lib/utils'
 import { useAuthStore } from '../../store/authStore'
 import { useOnboardingStore } from '../../store/onboardingStore'
 import { OnboardingWizard } from '../onboarding/OnboardingWizard'
+import { CommandPalette } from '../search/CommandPalette'
 import { Logo } from '../shared/icons'
 import { UserAvatar } from '../shared/UserAvatar'
 import { Button } from '../ui/button'
@@ -35,10 +37,15 @@ function Brand() {
 
 export function AppLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const paletteOpenerRef = useRef<HTMLElement | null>(null)
+  const desktopSearchButtonRef = useRef<HTMLButtonElement | null>(null)
+  const mobileSearchButtonRef = useRef<HTMLButtonElement | null>(null)
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
+  const currentRole = useAuthStore((state) => state.currentRole)
   const currentOrganizationId = useAuthStore((state) => state.currentOrganizationId)
   const setActiveOrganization = useAuthStore((state) => state.setActiveOrganization)
   const clearActiveOrganization = useAuthStore((state) => state.clearActiveOrganization)
@@ -56,6 +63,24 @@ export function AppLayout() {
   useEffect(() => {
     setMobileNavOpen(false)
   }, [pathname])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (paletteOpen || event.defaultPrevented || event.repeat) {
+        return
+      }
+      if (!isPaletteShortcut(event) && !isSlashShortcut(event)) {
+        return
+      }
+      event.preventDefault()
+      paletteOpenerRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+      setPaletteOpen(true)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [paletteOpen])
 
   useEffect(() => {
     if (!organizationsFetched) {
@@ -92,6 +117,32 @@ export function AppLayout() {
     logout()
     queryClient.clear()
     navigate('/login', { replace: true })
+  }
+
+  const focusSearchTrigger = () => {
+    const candidates = [mobileSearchButtonRef.current, desktopSearchButtonRef.current]
+    const visible = candidates.find((button) => button !== null && button.offsetParent !== null)
+    ;(visible ?? desktopSearchButtonRef.current ?? mobileSearchButtonRef.current)?.focus()
+  }
+
+  const handlePaletteOpenChange = (nextOpen: boolean) => {
+    setPaletteOpen(nextOpen)
+    if (nextOpen) {
+      return
+    }
+    window.setTimeout(() => {
+      const opener = paletteOpenerRef.current
+      if (opener && opener !== document.body && document.contains(opener)) {
+        opener.focus()
+      } else {
+        focusSearchTrigger()
+      }
+    }, 0)
+  }
+
+  const openPalette = (opener: HTMLElement | null) => {
+    paletteOpenerRef.current = opener
+    setPaletteOpen(true)
   }
 
   const navigation = (
@@ -148,7 +199,22 @@ export function AppLayout() {
     <div className="noise min-h-screen bg-canvas text-slate-100">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/5 bg-canvas-2 px-4 py-5 lg:flex">
         <Brand />
-        <div className="mt-8 flex-1">{navigation}</div>
+        <div className="mt-6">
+          <button
+            ref={desktopSearchButtonRef}
+            type="button"
+            onClick={(event) => openPalette(event.currentTarget)}
+            aria-label="Search pages and resources (Ctrl+K)"
+            className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+          >
+            <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate text-left">Search…</span>
+            <kbd className="shrink-0 rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+              Ctrl K
+            </kbd>
+          </button>
+        </div>
+        <div className="mt-4 flex-1">{navigation}</div>
         {sidebarFooter}
       </aside>
 
@@ -173,7 +239,22 @@ export function AppLayout() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="mt-8 flex-1">{navigation}</div>
+            <div className="mt-6">
+              <button
+                ref={mobileSearchButtonRef}
+                type="button"
+                onClick={(event) => openPalette(event.currentTarget)}
+                aria-label="Search pages and resources (Ctrl+K)"
+                className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-400 transition-colors hover:bg-white/[0.06] hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+              >
+                <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate text-left">Search…</span>
+                <kbd className="shrink-0 rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                  Ctrl K
+                </kbd>
+              </button>
+            </div>
+            <div className="mt-4 flex-1">{navigation}</div>
             {sidebarFooter}
           </aside>
         </div>
@@ -231,37 +312,39 @@ export function AppLayout() {
               ) : null}
             </div>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-auto gap-2.5 rounded-full border border-white/10 bg-white/[0.04] py-1.5 pl-1.5 pr-3 hover:bg-white/[0.08]"
-                >
-                  <UserAvatar username={username} avatarUrl={user?.avatarUrl} />
-                  <span className="hidden max-w-[9rem] truncate text-sm font-medium text-slate-200 sm:block">
-                    {username}
-                  </span>
-                  <ChevronDown className="h-4 w-4 text-slate-500" aria-hidden="true" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60">
-                <DropdownMenuLabel>
-                  <span className="block truncate text-sm font-medium text-slate-200">{username}</span>
-                  {email ? <span className="mt-0.5 block truncate text-xs text-slate-500">{email}</span> : null}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => navigate('/app/settings')}>
-                  <SettingsIcon className="h-4 w-4" aria-hidden="true" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={handleLogout} className="text-red-300 focus:text-red-200">
-                  <LogOut className="h-4 w-4" aria-hidden="true" />
-                  Log out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-auto gap-2.5 rounded-full border border-white/10 bg-white/[0.04] py-1.5 pl-1.5 pr-3 hover:bg-white/[0.08]"
+                  >
+                    <UserAvatar username={username} avatarUrl={user?.avatarUrl} />
+                    <span className="hidden max-w-[9rem] truncate text-sm font-medium text-slate-200 sm:block">
+                      {username}
+                    </span>
+                    <ChevronDown className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  <DropdownMenuLabel>
+                    <span className="block truncate text-sm font-medium text-slate-200">{username}</span>
+                    {email ? <span className="mt-0.5 block truncate text-xs text-slate-500">{email}</span> : null}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => navigate('/app/settings')}>
+                    <SettingsIcon className="h-4 w-4" aria-hidden="true" />
+                    Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={handleLogout} className="text-red-300 focus:text-red-200">
+                    <LogOut className="h-4 w-4" aria-hidden="true" />
+                    Log out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </header>
 
@@ -270,6 +353,14 @@ export function AppLayout() {
         </main>
       </div>
 
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={handlePaletteOpenChange}
+        membershipRole={currentRole}
+        platformRole={profile?.role ?? user?.platformRole ?? null}
+        onLogout={handleLogout}
+        onOpenOnboarding={openOnboarding}
+      />
       <OnboardingWizard />
     </div>
   )

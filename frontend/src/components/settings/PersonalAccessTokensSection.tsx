@@ -35,7 +35,7 @@ export function PersonalAccessTokensSection() {
   const summaries = tokensQuery.data?.summaries ?? []
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-panel/60 p-6">
+    <div id="personal-access-tokens" className="scroll-mt-24 rounded-2xl border border-white/10 bg-panel/60 p-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="font-display text-lg font-semibold text-slate-100">Personal Access Tokens</h2>

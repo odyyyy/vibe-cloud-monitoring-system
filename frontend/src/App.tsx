@@ -34,7 +34,7 @@ import StatusPagesPage from './pages/app/StatusPagesPage'
 import PublicStatusPage from './pages/public/PublicStatusPage'
 import UsagePage from './pages/app/UsagePage'
 
-const router = createBrowserRouter([
+export const router = createBrowserRouter([
   {
     path: '/',
     element: <LandingPage />,

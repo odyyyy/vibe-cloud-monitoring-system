@@ -94,7 +94,7 @@ export function RetentionSettings() {
   }
 
   return (
-    <div className="space-y-6">
+    <div id="retention" className="scroll-mt-24 space-y-6">
       <div className="rounded-2xl border border-white/10 bg-panel/60 p-6">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div>

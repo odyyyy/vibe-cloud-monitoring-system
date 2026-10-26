@@ -44,7 +44,7 @@ export function SavedViewsPanel({ currentParams, onApply }: SavedViewsPanelProps
   }
 
   return (
-    <aside className="rounded-2xl border border-white/10 bg-panel/60 p-4">
+    <aside id="saved-views" className="scroll-mt-24 rounded-2xl border border-white/10 bg-panel/60 p-4">
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-display text-sm font-semibold text-slate-200">Saved views</h2>
         <Button

@@ -204,7 +204,7 @@ export default function OrganizationSettingsPage() {
         </form>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-panel/60 p-6">
+      <div id="members" className="scroll-mt-24 rounded-2xl border border-white/10 bg-panel/60 p-6">
         <header>
           <h2 className="font-display text-lg font-semibold text-slate-100">Members</h2>
           <p className="mt-1 text-sm text-slate-400">
