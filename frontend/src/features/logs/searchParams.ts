@@ -54,6 +54,8 @@ export function parseLogSearchParams(params: URLSearchParams): ParsedLogSearch {
     host: readParam(params, 'host') ?? undefined,
     service: readParam(params, 'service') ?? undefined,
     namespace: readParam(params, 'namespace') ?? undefined,
+    contextKey: readParam(params, 'contextKey') ?? undefined,
+    contextValue: readParam(params, 'contextValue') ?? undefined,
     page: readParam(params, 'page') ?? '0',
     size: readParam(params, 'size') ?? String(DEFAULT_LOG_PAGE_SIZE),
   })
@@ -114,6 +116,10 @@ export function filtersToSearchParams(filters: LogsQueryParams): Record<string, 
   }
   if (filters.namespace) {
     serialized.namespace = filters.namespace
+  }
+  if (filters.contextKey && filters.contextValue) {
+    serialized.contextKey = filters.contextKey
+    serialized.contextValue = filters.contextValue
   }
   if (filters.page > 0) {
     serialized.page = String(filters.page)

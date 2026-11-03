@@ -66,6 +66,11 @@ public class LogEventSpecifications {
             addContextFilter(predicates, cb, root, LogFacetField.HOST, request.getHost());
             addContextFilter(predicates, cb, root, LogFacetField.SERVICE, request.getService());
             addContextFilter(predicates, cb, root, LogFacetField.NAMESPACE, request.getNamespace());
+            if (request.getContextKey() != null && !request.getContextKey().isBlank()
+                    && request.getContextValue() != null && !request.getContextValue().isBlank()) {
+                addContextFilter(predicates, cb, root,
+                        LogFacetField.context(request.getContextKey()), request.getContextValue());
+            }
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };

@@ -8,6 +8,8 @@ export const DEFAULT_LOG_PAGE_SIZE = LOG_PAGE_SIZES[0]
 export const MAX_SEARCH_TEXT_LENGTH = 200
 /** Mirrors the backend limit for exact-match facet filter values. */
 export const MAX_FACET_VALUE_LENGTH = 256
+export const MAX_CONTEXT_KEY_LENGTH = 64
+export const CONTEXT_KEY_PATTERN = /^[A-Za-z0-9_.-]+$/
 export const PAGE_SIZE_MIN = 1
 export const PAGE_SIZE_MAX = 100
 
@@ -38,6 +40,13 @@ export const logsQuerySchema = z
     host: facetValue,
     service: facetValue,
     namespace: facetValue,
+    contextKey: z
+      .string()
+      .trim()
+      .max(MAX_CONTEXT_KEY_LENGTH, `Context keys must be at most ${MAX_CONTEXT_KEY_LENGTH} characters`)
+      .regex(CONTEXT_KEY_PATTERN, 'Context keys may use letters, digits, dots, dashes and underscores')
+      .optional(),
+    contextValue: facetValue,
     page: z.coerce
       .number({ invalid_type_error: 'Invalid page' })
       .int('Invalid page')
@@ -62,5 +71,9 @@ export const logsQuerySchema = z
       path: ['to'],
     },
   )
+  .refine((values) => Boolean(values.contextKey) === Boolean(values.contextValue), {
+    message: 'A context filter needs both a key and a value',
+    path: ['contextValue'],
+  })
 
 export type LogsQueryFormValues = z.infer<typeof logsQuerySchema>

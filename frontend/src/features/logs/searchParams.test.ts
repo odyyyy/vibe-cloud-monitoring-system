@@ -51,6 +51,29 @@ describe('parseLogSearchParams', () => {
     expect(parsed.params?.namespace).toBe('prod')
   })
 
+  it('parses a dynamic context facet filter', () => {
+    const parsed = parseLogSearchParams(
+      buildParams({ contextKey: 'order_id', contextValue: '1001' }),
+    )
+    expect(parsed.error).toBeNull()
+    expect(parsed.params?.contextKey).toBe('order_id')
+    expect(parsed.params?.contextValue).toBe('1001')
+  })
+
+  it('rejects a context key without a value', () => {
+    const parsed = parseLogSearchParams(buildParams({ contextKey: 'order_id' }))
+    expect(parsed.params).toBeNull()
+    expect(parsed.error).toContain('context filter')
+  })
+
+  it('rejects an invalid context key', () => {
+    const parsed = parseLogSearchParams(
+      buildParams({ contextKey: 'bad key', contextValue: '1001' }),
+    )
+    expect(parsed.params).toBeNull()
+    expect(parsed.error).toContain('Context keys')
+  })
+
   it('rejects a facet filter value that is too long', () => {
     const parsed = parseLogSearchParams(buildParams({ host: 'a'.repeat(257) }))
     expect(parsed.params).toBeNull()
@@ -153,6 +176,8 @@ describe('filtersToSearchParams', () => {
       host: 'srv "1" & co',
       service: 'api',
       namespace: 'prod',
+      contextKey: 'order_id',
+      contextValue: '1001',
       page: 0,
       size: 25,
     }
@@ -161,6 +186,8 @@ describe('filtersToSearchParams', () => {
     expect(serialized.host).toBe('srv "1" & co')
     expect(serialized.service).toBe('api')
     expect(serialized.namespace).toBe('prod')
+    expect(serialized.contextKey).toBe('order_id')
+    expect(serialized.contextValue).toBe('1001')
 
     const parsed = parseLogSearchParams(new URLSearchParams(serialized))
     expect(parsed.error).toBeNull()

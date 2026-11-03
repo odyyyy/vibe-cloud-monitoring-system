@@ -187,6 +187,39 @@ class LogFacetControllerTest {
     }
 
     @Test
+    void acceptsADynamicContextFieldAndForwardsTheContextFilter() throws Exception {
+        when(logFacetService.facets(eq(USER_ID), any(LogsQueryRequest.class),
+                eq(List.of(LogFacetField.context("order_id"))), eq(5)))
+                .thenReturn(response());
+
+        mockMvc.perform(get(VALID_QUERY.replace("level,host", "context.order_id")
+                        + "&contextKey=order_id&contextValue=1001"))
+                .andExpect(status().isOk());
+
+        verify(logFacetService).facets(eq(USER_ID),
+                org.mockito.ArgumentMatchers.argThat(request ->
+                        "order_id".equals(request.getContextKey())
+                                && "1001".equals(request.getContextValue())),
+                eq(List.of(LogFacetField.context("order_id"))), eq(5));
+    }
+
+    @Test
+    void rejectsAnInvalidDynamicContextKey() throws Exception {
+        mockMvc.perform(get(VALID_QUERY.replace("level,host", "context.bad key")))
+                .andExpect(status().isBadRequest());
+
+        verify(logFacetService, Mockito.never()).facets(any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void rejectsAContextKeyWithoutAValue() throws Exception {
+        mockMvc.perform(get(VALID_QUERY + "&contextKey=order_id"))
+                .andExpect(status().isBadRequest());
+
+        verify(logFacetService, Mockito.never()).facets(any(), any(), any(), anyInt());
+    }
+
+    @Test
     void foreignApplication_returnsForbidden() throws Exception {
         when(logFacetService.facets(any(), any(), any(), anyInt()))
                 .thenThrow(new ApplicationAccessDeniedException());

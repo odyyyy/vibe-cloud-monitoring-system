@@ -5,8 +5,7 @@ import type { LogFacetField, LogFacetValue, LogsQueryParams } from '../../api/lo
 import { useLogFacetsQuery } from '../../api/logs'
 import {
   ALWAYS_VISIBLE_FACET_FIELDS,
-  FACET_FIELD_LABELS,
-  REQUESTED_FACET_FIELDS,
+  facetLabel,
   hasActiveFacetFilters,
   isFacetValueActive,
 } from '../../features/logs/facets'
@@ -17,6 +16,7 @@ import { Skeleton } from '../ui/skeleton'
 interface LogFacetsPanelProps {
   /** The committed log query; the facets describe exactly this row set. */
   params: LogsQueryParams
+  fields: readonly LogFacetField[]
   collapsed: boolean
   onCollapsedChange: (collapsed: boolean) => void
   onToggleValue: (field: LogFacetField, value: string) => void
@@ -31,25 +31,26 @@ interface LogFacetsPanelProps {
  */
 export function LogFacetsPanel({
   params,
+  fields,
   collapsed,
   onCollapsedChange,
   onToggleValue,
   onClearFilters,
 }: LogFacetsPanelProps) {
-  const facetsQuery = useLogFacetsQuery(params, REQUESTED_FACET_FIELDS, !collapsed)
+  const facetsQuery = useLogFacetsQuery(params, fields, !collapsed)
   const facets = facetsQuery.data?.facets
   const hasFilters = hasActiveFacetFilters(params)
 
   const visibleFields = useMemo(
     () =>
-      REQUESTED_FACET_FIELDS.filter((field) => {
+      fields.filter((field) => {
         if (ALWAYS_VISIBLE_FACET_FIELDS.includes(field)) {
           return true
         }
         // Optional facets are only shown when the current row set actually has values for them.
         return (facets?.[field] ?? []).length > 0
       }),
-    [facets],
+    [facets, fields],
   )
 
   if (collapsed) {
@@ -139,7 +140,7 @@ function FacetGroup({ field, values, params, onToggleValue }: FacetGroupProps) {
   return (
     <section aria-labelledby={`facet-${field}`}>
       <h3 id={`facet-${field}`} className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-        {FACET_FIELD_LABELS[field]}
+        {facetLabel(field)}
       </h3>
 
       {values.length === 0 ? (
@@ -155,7 +156,7 @@ function FacetGroup({ field, values, params, onToggleValue }: FacetGroupProps) {
                   type="button"
                   onClick={() => onToggleValue(field, value.value)}
                   aria-pressed={active}
-                  title={active ? `Remove the ${FACET_FIELD_LABELS[field]} filter` : `Filter by ${value.value}`}
+                  title={active ? `Remove the ${facetLabel(field)} filter` : `Filter by ${value.value}`}
                   className={cn(
                     'group relative w-full overflow-hidden rounded-md px-2 py-1 text-left transition-colors hover:bg-white/5',
                     active ? 'bg-cyan-400/10 ring-1 ring-inset ring-cyan-400/30' : undefined,

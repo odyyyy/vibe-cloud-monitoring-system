@@ -6,6 +6,7 @@ import { ApiError, type ExportFormat } from '../../api/client'
 import type { LogEvent, LogFacetField, LogsQueryParams } from '../../api/logs'
 import { exportLogs, useLogsQuery } from '../../api/logs'
 import type { SavedLogView } from '../../api/savedLogViews'
+import { useLogPipelineRulesQuery } from '../../api/logPipelines'
 import { LogDetailModal } from '../../components/logs/LogDetailModal'
 import { LogFacetsPanel } from '../../components/logs/LogFacetsPanel'
 import { LogTable } from '../../components/logs/LogTable'
@@ -15,6 +16,7 @@ import { Button } from '../../components/ui/button'
 import { Label } from '../../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import {
+  buildRequestedFacetFields,
   carryOverFacetFilters,
   clearFacetFilters,
   toggleFacetFilter,
@@ -71,6 +73,12 @@ export default function LogExplorerPage() {
 
   const query = useLogsQuery(params, params !== null)
   const logs = query.data?.content ?? []
+  const pipelineRulesQuery = useLogPipelineRulesQuery()
+
+  const facetFields = useMemo(
+    () => buildRequestedFacetFields(pipelineRulesQuery.data, params?.applicationId ?? null),
+    [pipelineRulesQuery.data, params?.applicationId],
+  )
 
   useEffect(() => {
     if (query.error instanceof ApiError && (query.error.status === 400 || query.error.status === 403)) {
@@ -188,6 +196,7 @@ export default function LogExplorerPage() {
           {params ? (
             <LogFacetsPanel
               params={params}
+              fields={facetFields}
               collapsed={facetsCollapsed}
               onCollapsedChange={handleFacetsCollapsedChange}
               onToggleValue={toggleFacetValue}

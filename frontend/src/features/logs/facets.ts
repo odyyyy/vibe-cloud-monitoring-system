@@ -1,31 +1,69 @@
+import type { LogPipelineRule } from '../../api/logPipelines'
 import type { LogFacetField, LogLevel, LogsQueryParams } from '../../api/logs'
 import { LOG_FACET_FIELDS } from '../../api/logs'
 
-export const FACET_FIELD_LABELS: Record<LogFacetField, string> = {
+/** The backend accepts at most eight facet fields per request. */
+export const MAX_FACET_FIELDS = 8
+
+export const FACET_FIELD_LABELS: Partial<Record<LogFacetField, string>> = {
   level: 'Level',
   host: 'Host',
   service: 'Service',
   'k8s.namespace': 'Namespace',
 }
 
-/**
- * The fields requested from the facet endpoint. The backend accepts at most four, and asking for
- * {@code k8s.namespace} as well is how the sidebar learns whether that facet has any values.
- */
+/** The built-in fields the sidebar always requests. */
 export const REQUESTED_FACET_FIELDS: readonly LogFacetField[] = LOG_FACET_FIELDS
 
-/** The facets the sidebar always renders; {@code k8s.namespace} is only shown when it has data. */
+/** The facets the sidebar always renders; others are only shown when they have values. */
 export const ALWAYS_VISIBLE_FACET_FIELDS: readonly LogFacetField[] = ['level', 'host', 'service']
 
-/** Facets whose filter lives in the URL rather than in the filter form. */
-const CONTEXT_FACET_FIELDS: readonly LogFacetField[] = ['host', 'service', 'k8s.namespace']
+export function facetLabel(field: LogFacetField): string {
+  const builtIn = FACET_FIELD_LABELS[field]
+  if (builtIn) {
+    return builtIn
+  }
+  if (field.startsWith('context.')) {
+    return field.slice('context.'.length)
+  }
+  return field
+}
+
+export function isDynamicFacetField(field: LogFacetField): boolean {
+  return field.startsWith('context.')
+}
+
+/**
+ * Facet fields captured by PARSE_REGEX rules that apply to the selected application. The list is
+ * bounded so the built-in fields plus captured fields never exceed the backend limit.
+ */
+export function buildRequestedFacetFields(
+  rules: readonly LogPipelineRule[] | undefined,
+  applicationId: number | null,
+): LogFacetField[] {
+  const fields: LogFacetField[] = [...REQUESTED_FACET_FIELDS]
+  if (rules) {
+    for (const rule of rules) {
+      if (rule.action !== 'PARSE_REGEX') {
+        continue
+      }
+      if (rule.applicationId !== null && rule.applicationId !== applicationId) {
+        continue
+      }
+      for (const extracted of rule.extractedFields) {
+        const field = `context.${extracted}` as LogFacetField
+        if (!fields.includes(field) && fields.length < MAX_FACET_FIELDS) {
+          fields.push(field)
+        }
+      }
+    }
+  }
+  return fields
+}
 
 /**
  * The filter the explorer applies for a facet value, or {@code null} when the field has no
  * exact-match filter of its own.
- *
- * <p>{@code level} is a first-class query parameter; the other facet fields are exact matches on
- * the JSON context document.
  */
 export function facetFilterFor(params: LogsQueryParams, field: LogFacetField): string | undefined {
   switch (field) {
@@ -37,6 +75,11 @@ export function facetFilterFor(params: LogsQueryParams, field: LogFacetField): s
       return params.service
     case 'k8s.namespace':
       return params.namespace
+    default:
+      if (isDynamicFacetField(field) && params.contextKey === field.slice('context.'.length)) {
+        return params.contextValue
+      }
+      return undefined
   }
 }
 
@@ -48,20 +91,14 @@ export function isFacetValueActive(
   return facetFilterFor(params, field) === value
 }
 
-/** True when a context facet filter is active; drives the "Clear" action of the sidebar. */
+/** True when any context facet filter is active; drives the "Clear" action of the sidebar. */
 export function hasActiveFacetFilters(params: LogsQueryParams): boolean {
-  return CONTEXT_FACET_FIELDS.some((field) => {
-    const value = facetFilterFor(params, field)
-    return value !== undefined && value !== null && value !== ''
-  })
+  return Boolean(params.host || params.service || params.namespace || params.contextKey)
 }
 
 /**
  * Adds the exact-match filter for a facet value, or removes it when the value is already active.
- *
- * <p>The page is reset because the result set changes. The field name never reaches the query
- * string as free text: it selects one of the fixed parameters of the log query contract, and the
- * value is URL-encoded by {@link URLSearchParams}.
+ * The page is reset because the result set changes.
  */
 export function toggleFacetFilter(
   params: LogsQueryParams,
@@ -85,6 +122,18 @@ export function toggleFacetFilter(
       return toggleContextFilter(next, 'service', active, value)
     case 'k8s.namespace':
       return toggleContextFilter(next, 'namespace', active, value)
+    default:
+      if (!isDynamicFacetField(field)) {
+        return next
+      }
+      if (active) {
+        delete next.contextKey
+        delete next.contextValue
+      } else {
+        next.contextKey = field.slice('context.'.length)
+        next.contextValue = value
+      }
+      return next
   }
 }
 
@@ -108,6 +157,8 @@ export function clearFacetFilters(params: LogsQueryParams): LogsQueryParams {
   delete next.host
   delete next.service
   delete next.namespace
+  delete next.contextKey
+  delete next.contextValue
   return next
 }
 
@@ -128,6 +179,10 @@ export function carryOverFacetFilters(
   }
   if (source.namespace) {
     next.namespace = source.namespace
+  }
+  if (source.contextKey && source.contextValue) {
+    next.contextKey = source.contextKey
+    next.contextValue = source.contextValue
   }
   return next
 }

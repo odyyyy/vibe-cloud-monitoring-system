@@ -1,6 +1,7 @@
 package com.monitoring.collector.dto.request;
 
 import com.monitoring.collector.entity.LogLevel;
+import com.monitoring.collector.facet.LogFacetField;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -82,6 +83,16 @@ public class LogsQueryRequest {
             + MAX_FACET_VALUE_LENGTH + " characters")
     private String namespace;
 
+    /** Optional arbitrary context key for a dynamic facet filter. */
+    @Size(max = LogFacetField.MAX_CONTEXT_KEY_LENGTH, message = "contextKey must be at most "
+            + LogFacetField.MAX_CONTEXT_KEY_LENGTH + " characters")
+    private String contextKey;
+
+    /** Optional exact match for {@link #contextKey}. */
+    @Size(max = MAX_FACET_VALUE_LENGTH, message = "contextValue must be at most "
+            + MAX_FACET_VALUE_LENGTH + " characters")
+    private String contextValue;
+
     @Min(value = 0, message = "page must be greater than or equal to 0")
     @Builder.Default
     private int page = 0;
@@ -101,5 +112,15 @@ public class LogsQueryRequest {
             return false;
         }
         return Duration.between(from, to).compareTo(Duration.ofDays(MAX_RANGE_DAYS)) <= 0;
+    }
+
+    @AssertTrue(message = "contextKey and contextValue must be provided together, and contextKey must be valid")
+    public boolean isContextFilterValid() {
+        boolean hasKey = contextKey != null && !contextKey.isBlank();
+        boolean hasValue = contextValue != null && !contextValue.isBlank();
+        if (!hasKey && !hasValue) {
+            return true;
+        }
+        return hasKey && hasValue && LogFacetField.isValidContextKey(contextKey);
     }
 }

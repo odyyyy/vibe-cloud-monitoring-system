@@ -128,6 +128,53 @@ class LogFacetsIntegrationTest {
     }
 
     @Test
+    void aggregatesDynamicContextFieldsCapturedByPipelineRules() {
+        saveLog(LogLevel.ERROR, "first", "{\"order_id\":\"1001\",\"host\":\"server-1\"}",
+                Instant.parse("2026-10-09T10:00:00Z"));
+        saveLog(LogLevel.ERROR, "second", "{\"order_id\":\"1002\",\"host\":\"server-1\"}",
+                Instant.parse("2026-10-09T10:01:00Z"));
+        saveLog(LogLevel.ERROR, "third", "{\"order_id\":\"1002\",\"host\":\"server-2\"}",
+                Instant.parse("2026-10-09T10:02:00Z"));
+
+        LogFacetsResponse response = facets(
+                List.of(LogFacetField.fromName("context.order_id").orElseThrow()), request());
+
+        assertEquals(List.of("1002", "1001"),
+                response.facets().get("context.order_id").stream()
+                        .map(LogFacetValueResponse::value).toList());
+        assertEquals(2, response.facets().get("context.order_id").get(0).count());
+    }
+
+    @Test
+    void dynamicContextFilterNarrowsTheResultList() {
+        seedTypicalData();
+        saveLog(LogLevel.ERROR, "order 1", "{\"order_id\":\"1001\"}",
+                Instant.parse("2026-10-09T10:05:00Z"));
+        saveLog(LogLevel.ERROR, "order 2", "{\"order_id\":\"1002\"}",
+                Instant.parse("2026-10-09T10:06:00Z"));
+
+        LogsQueryRequest withContext = request();
+        withContext.setContextKey("order_id");
+        withContext.setContextValue("1001");
+
+        assertEquals(1, logQueryService.query(OWNER_ID, withContext).totalElements());
+        assertEquals(1, logFacetService.facets(OWNER_ID, withContext,
+                        List.of(LogFacetField.fromName("context.order_id").orElseThrow()), 5)
+                .facets().get("context.order_id").get(0).count());
+    }
+
+    @Test
+    void acceptsEightFieldsButRejectsNine() {
+        InvalidLogFacetRequestException error = assertThrows(InvalidLogFacetRequestException.class,
+                () -> LogFacetFields.parse(
+                        "level,host,service,k8s.namespace,context.order_id,context.user_id,"
+                                + "context.tenant,context.region,context.extra",
+                        LogFacetService.MAX_FIELDS));
+
+        assertTrue(error.getMessage().contains("8"));
+    }
+
+    @Test
     void aggregatesLevelCountsFromTheIndexedColumn() {
         seedTypicalData();
 

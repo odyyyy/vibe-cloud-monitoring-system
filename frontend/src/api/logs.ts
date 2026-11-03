@@ -4,10 +4,13 @@ import { apiDownload, apiRequest, type DownloadResponse, type ExportFormat } fro
 
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
 
-/** Fields the backend may aggregate for the facet sidebar. */
+/** Built-in fields the backend may aggregate for the facet sidebar. */
 export const LOG_FACET_FIELDS = ['level', 'host', 'service', 'k8s.namespace'] as const
 
-export type LogFacetField = (typeof LOG_FACET_FIELDS)[number]
+export type BuiltInLogFacetField = (typeof LOG_FACET_FIELDS)[number]
+
+/** Built-in fields plus dynamic `context.<key>` fields captured by pipeline rules. */
+export type LogFacetField = BuiltInLogFacetField | `context.${string}`
 
 export interface LogsQueryParams {
   applicationId: number
@@ -21,6 +24,10 @@ export interface LogsQueryParams {
   service?: string
   /** Exact-match filter on the {@code k8s.namespace} member of the log context document. */
   namespace?: string
+  /** Arbitrary context key for a dynamic facet filter. */
+  contextKey?: string
+  /** Exact-match value for {@link contextKey}. */
+  contextValue?: string
   page: number
   size: number
 }
@@ -93,6 +100,10 @@ function buildLogsSearch(params: LogsQueryParams): URLSearchParams {
   if (params.namespace) {
     search.set('namespace', params.namespace)
   }
+  if (params.contextKey && params.contextValue) {
+    search.set('contextKey', params.contextKey)
+    search.set('contextValue', params.contextValue)
+  }
   return search
 }
 
@@ -124,6 +135,8 @@ export const logFacetsQueryKey = (params: LogsQueryParams | null, fields: readon
     params?.host ?? null,
     params?.service ?? null,
     params?.namespace ?? null,
+    params?.contextKey ?? null,
+    params?.contextValue ?? null,
     fields.join(','),
   ] as const
 
@@ -157,6 +170,8 @@ export const logsQueryKey = (params: LogsQueryParams | null) =>
     params?.host ?? null,
     params?.service ?? null,
     params?.namespace ?? null,
+    params?.contextKey ?? null,
+    params?.contextValue ?? null,
     params?.page ?? null,
     params?.size ?? null,
   ] as const

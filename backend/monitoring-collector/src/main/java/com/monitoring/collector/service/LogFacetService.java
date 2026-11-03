@@ -67,7 +67,7 @@ public class LogFacetService {
     public static final int MAX_LIMIT = 10;
 
     /** Maximum number of fields that may be requested in one call. */
-    public static final int MAX_FIELDS = 4;
+    public static final int MAX_FIELDS = 8;
 
     private static final String TIMEOUT_HINT = "jakarta.persistence.query.timeout";
 
