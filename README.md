@@ -554,6 +554,43 @@ log_throttling:
 - Агент отправляет накопленное значение `agent.logs.dropped_total` в облако вместе
   с host-метриками (теги `host` и `version`), поэтому throttling виден на графиках.
 
+#### Обработка логов правилами (log pipelines)
+
+Правила создаются на странице **Log pipelines** (`/app/log-pipelines`) и применяются к каждому
+событию в порядке `orderIndex`. Правило может относиться к одному Application или ко всем
+приложениям организации (`applicationId = null`). Агент скачивает правила по своему
+`X-API-Key` при старте и затем каждые 5 минут; при ошибке загрузки остаётся последний
+успешный набор. Backend применяет те же правила повторно при ingestion, поэтому правила
+работают и для отправителей, которые не используют Go-агент.
+
+Фильтр — это набор условий через пробел или `&&`, все условия объединяются по AND:
+`level:ERROR`, `message:"disk full"`, `host:server-1`, `service:checkout`,
+`context.order_id:12345`. Пустой фильтр или `*` совпадает со всеми событиями; `message`
+ищется без учёта регистра, `level` сравнивается без учёта регистра, остальные значения —
+точное совпадение.
+
+| Действие | `actionConfig` | Поведение |
+| --- | --- | --- |
+| `DROP` | `{}` | Отбрасывает событие; агент увеличивает `agent.logs.dropped_by_pipeline_total` |
+| `PARSE_REGEX` | `{"pattern":"order (?P<order_id>\\d+)"}` | Извлекает именованные группы в `context` |
+| `ADD_ATTRIBUTE` | `{"key":"environment","value":"prod"}` | Добавляет или заменяет поле контекста |
+| `MASK` | `{"pattern":"[0-9]{4}-[0-9]{4}","target":"message"}` | Маскирует совпадения в сообщении на `[REDACTED]` |
+| `MASK` | `{"pattern":"...","target":"context","field":"card_number"}` | Маскирует значение поля контекста |
+
+Ограничения: не более 50 правил на организацию, имя до 100 символов, фильтр до 1024
+символов, regex до 512 символов, значение `ADD_ATTRIBUTE` до 256 символов. Извлечённое
+значение обрезается до 256 символов, контекст после преобразований — до 8 KiB. Нельзя
+перезаписывать зарезервированные агентом ключи `service`, `source`, `host`,
+`k8s.pod.name`, `k8s.namespace`, `k8s.container.name`. Некорректный JSON-контекст не
+изменяется: контекстные действия для такого события пропускаются.
+
+Regex компилируется один раз и проверяется на совместимость с RE2, чтобы поведение агента
+и backend совпадало. Запрещены lookbehind, atomic groups, conditionals, backreferences,
+possessive quantifiers, `\Q`, `\E`, `\G`, `\Z`, `\R`, `\k<`; вычисление в backend ограничено
+10 ms, поэтому заведомо катастрофические шаблоны отклоняются или не блокируют ingestion.
+Правила можно проверить без сохранения события кнопкой **Test** (симуляция выполняется на
+backend для выбранного Application).
+
 ### Надёжная доставка: retry и дисковый буфер
 
 Если backend недоступен, сеть пропала или контейнер перезапустили, агент не теряет
@@ -575,8 +612,9 @@ log_throttling:
 - Если каталог недоступен для записи, агент пишет понятную ошибку и продолжает
   работу в memory-only режиме, не падая.
 
-Собственные метрики агента: `agent.buffer.size_bytes`, `agent.buffer.queued_batches`,
-`agent.buffer.dropped_total`, `agent.send.retries_total`, `agent.send.failures_total`.
+Собственные метрики агента: `agent.logs.dropped_total`, `agent.logs.dropped_by_pipeline_total`,
+`agent.buffer.size_bytes`, `agent.buffer.queued_batches`, `agent.buffer.dropped_total`,
+`agent.send.retries_total`, `agent.send.failures_total`.
 
 ```yaml
 buffer:
@@ -953,7 +991,9 @@ Content-Type: application/json
 (`DEBUG|INFO|WARN|ERROR`), `from`, `to` (ISO-8601 UTC, обязательны), `searchText`
 (до 200 символов), `page` (>= 0), `size` (1..100). Точные фильтры `host`, `service` и
 `namespace` (до 256 символов) сужают выборку до одного значения соответствующего поля в
-JSON-документе `context` — их выставляет клик по фасету. Диапазон не более 30 дней.
+JSON-документе `context`; для произвольного поля используются `contextKey` (до 64 символов)
+и `contextValue` (до 256 символов), которые передаются только вместе. Диапазон не более
+30 дней.
 
 Ответ имеет форму `{ content, totalElements, totalPages, page, size }` (собственный
 `PageResponse`, не Spring Data `Page`); `content[]` содержит
@@ -980,17 +1020,19 @@ JSON-документе `context` — их выставляет клик по ф
 
 Правила:
 
-- `fields` — белый список `level`, `host`, `service`, `k8s.namespace`; не более 4 полей за
+- `fields` — `level`, `host`, `service`, `k8s.namespace` и динамические поля
+  `context.<key>`, где `<key>` соответствует `[A-Za-z0-9_.-]{1,64}`; не более 8 полей за
   запрос, неизвестное имя → HTTP 400. Имя поля используется только как ключ поиска по
-  белому списку и никогда не попадает в SQL.
+  белому списку или как ключ JSON-документа и никогда не попадает в SQL.
 - `limit` — 1..10, по умолчанию 5. Значения отсортированы по убыванию `count`, при равных
   счётчиках — по значению. Пустые и отсутствующие значения не попадают в ответ.
 - `level` — реальная индексированная колонка, поэтому считается через `GROUP BY` по всей
   выборке и всегда точен.
-- `host`, `service`, `k8s.namespace` лежат в JSON-документе `context`. Индекса для них нет,
-  поэтому агрегация идёт по последним `monitoring.logs.facets.max-scan-rows` (по умолчанию
-  50 000) подходящим строкам в порядке `event_time DESC`; при достижении лимита ответ
-  помечается `"approximate": true`, а `scanLimit` сообщает использованный предел.
+- `host`, `service`, `k8s.namespace` и динамические `context.*` лежат в JSON-документе
+  `context`. Индекса для них нет, поэтому агрегация идёт по последним
+  `monitoring.logs.facets.max-scan-rows` (по умолчанию 50 000) подходящим строкам в порядке
+  `event_time DESC`; при достижении лимита ответ помечается `"approximate": true`, а
+  `scanLimit` сообщает использованный предел.
 - Ошибки: истёк `monitoring.logs.facets.timeout-ms` (по умолчанию 2000) → HTTP 503; больше
   `monitoring.logs.facets.max-requests` (по умолчанию 30) запросов за
   `monitoring.logs.facets.window-seconds` (60) на организацию → HTTP 429 с `Retry-After`.
@@ -999,11 +1041,39 @@ JSON-документе `context` — их выставляет клик по ф
   принадлежность организации вызывающего.
 
 В Log Explorer (`/app/logs`) фасеты показывает сворачиваемая панель слева (состояние
-запоминается на сессию). Клик по значению добавляет точный фильтр (`host`, `service`,
-`namespace` или `level`) и перезапускает поиск, повторный клик снимает фильтр, кнопка
+запоминается на сессию). Кроме встроенных полей frontend запрашивает поля, извлечённые
+`PARSE_REGEX`-правилами выбранного Application, поэтому новые `context.*`-фасеты появляются
+без изменения кода; если правила загрузить не удалось, используются только встроенные поля.
+Клик по значению добавляет точный фильтр (`host`, `service`, `namespace`, `level` или пару
+`contextKey`/`contextValue`) и перезапускает поиск, повторный клик снимает фильтр, кнопка
 **Clear** снимает все контекстные фильтры. Запрос фасетов идёт параллельно со списком
 логов, отменяется при смене запроса и при ошибке показывает «Facets unavailable», не скрывая
 результаты поиска.
+
+### Log pipelines — `/api/v1/log-pipelines`
+
+| Метод | Путь | Описание | Доступ |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/log-pipelines` | Список правил организации в порядке применения | JWT |
+| `POST` | `/api/v1/log-pipelines` | Создать правило (не более 50 на организацию) | JWT (`ADMIN`/`OWNER`) |
+| `PUT` | `/api/v1/log-pipelines/{id}` | Изменить правило | JWT (`ADMIN`/`OWNER`) |
+| `DELETE` | `/api/v1/log-pipelines/{id}` | Удалить правило | JWT (`ADMIN`/`OWNER`) |
+| `POST` | `/api/v1/log-pipelines/reorder` | Переупорядочить все правила: `{ "ids": [...] }` | JWT (`ADMIN`/`OWNER`) |
+| `POST` | `/api/v1/log-pipelines/test` | Симулировать сохранённые правила на sample-событии | JWT |
+| `GET` | `/api/v1/ingest/log-pipelines` | Набор правил для агента; tenant и Application берутся из `X-API-Key` | `X-API-Key` |
+
+Агент получает `{ "rules": [...] }` в порядке применения; правила для его Application и
+глобальные правила организации объединяются, поля ответа совпадают с JWT-списком.
+
+Тело create/update: `name` (1..100), `applicationId` (nullable — правило для всей
+организации), `filter` (до 1024 символов), `action` (`DROP|PARSE_REGEX|ADD_ATTRIBUTE|MASK`)
+и `actionConfig` (объект; схема зависит от действия, см. раздел про установку агента).
+Список возвращает также `extractedFields` — имена групп `PARSE_REGEX`, которые frontend
+использует для динамических фасетов. `POST /test` принимает `applicationId`, `level`,
+`message` и необязательный `context` (JSON-строка) и возвращает `dropped`, список
+`matchedRules` и итоговые `message`/`context`; данные не сохраняются. Ошибки валидации и
+несовместимого regex → HTTP 400, неизвестное правило → 404, чужое правило → 403,
+превышение лимита правил → 409.
 
 ### Глобальный поиск — `/api/v1/search`
 
@@ -1033,7 +1103,21 @@ JSON-документе `context` — их выставляет клик по ф
 и очищаются при выходе) и после 250 мс debounce — ресурсы организации. Для запроса короче
 двух символов backend не вызывается; ошибки и загрузка ресурсов не скрывают локальные
 страницы. Встроенные разделы открываются по hash-якорям: `#saved-views`,
-`#personal-access-tokens`, `#retention`, `#members`.
+`#personal-access-tokens`, `#retention`, `#members`, `#appearance`, `#profile`,
+`#change-password`, `#create-organization`.
+
+Палитра автоматически индексирует все пункты меню из
+`frontend/src/components/layout/nav.ts`. Чтобы новая страница стала доступна в `Ctrl+K`,
+добавьте её в нужную группу `NAV_GROUPS` (или в `FOOTER_NAV_ITEMS` для нижнего блока):
+заголовок, описание и ключевые слова будут построены автоматически, а маршрут проверит
+тест `routeDrift.test.ts`. Боковое меню сгруппировано по разделам Workspace, Observability,
+Alerting и Administration; Settings и Setup guide вынесены вниз. Каждую группу можно
+свернуть и развернуть кнопкой с шевроном; состояние сохраняется в `localStorage`, а группа
+с текущей открытой страницей автоматически раскрывается при переходе. Для более точного
+поиска добавьте запись в `NAV_PAGE_METADATA` в `frontend/src/features/search/registry.ts`.
+Разделы и опции внутри страницы (anchor-ссылки), а также быстрые действия регистрируются
+в `EXTRA_FEATURE_ENTRIES` / `QUICK_ACTIONS` там же; их `route` должен указывать на
+существующий маршрут или реальный `id` элемента страницы.
 
 ### Экспорт логов и метрик
 
@@ -1217,24 +1301,42 @@ Explorer выбирается из списка: сначала идут вст�
 | `DELETE` | `/api/v1/health-checks/{id}` | Удалить проверку и её историю | JWT (владелец) |
 | `GET` | `/api/v1/health-checks/{id}/results` | Последние результаты (`limit`, по умолчанию 50, максимум 500) | JWT (владелец) |
 
-Конфигурация проверки: `name` (1–100), `targetUrl` (абсолютный http/https),
-`method` (`GET|POST`), `expectedStatusCode` (100–599), `intervalSeconds` (≥10) и
-`isActive`. Результат: `status` (`UP|DOWN|TIMEOUT|UNKNOWN`), `responseTimeMs`,
-`errorMessage`, `checkedAt` (UTC). Проверка без результатов всегда `UNKNOWN`, никогда
-не `UP`.
+Конфигурация проверки: `name` (1–100), `type` (`SINGLE_HTTP|MULTI_STEP_API`,
+по умолчанию `SINGLE_HTTP`), `intervalSeconds` (≥10) и `isActive`. Для `SINGLE_HTTP`:
+`targetUrl` (абсолютный http/https), `method` (`GET|POST`), `expectedStatusCode`
+(100–599). Для `MULTI_STEP_API` вместо `targetUrl` передаётся `steps` — упорядоченный
+массив до 5 шагов; каждый шаг содержит `name`, `method`
+(`GET|POST|PUT|PATCH|DELETE|HEAD`), `url`, `headers` (объект, до 20), `body` (до 16 КБ,
+запрещён для `GET`/`HEAD`), `extractVariables` (до 10, выражения `jsonpath:$.field` или
+`regex:<pattern>`) и `assertions` (до 10; `STATUS_CODE`, `BODY_CONTAINS`, `JSON_PATH` с
+операторами `==`, `!=`, `contains`, `not_contains`). Результат: `status`
+(`UP|DOWN|TIMEOUT|UNKNOWN`), `responseTimeMs`, `errorMessage`, `checkedAt` (UTC) и
+`stepResults` (для многошаговых проверок: имя шага, `PASSED|FAILED|SKIPPED`, HTTP-код,
+время и диагностика). Извлечённые значения переменных и тела ответов не сохраняются.
+Проверка без результатов всегда `UNKNOWN`, никогда не `UP`.
 
 Backend выполняет проверки по расписанию (по умолчанию каждые 10 секунд, отдельный
 однопоточный планировщик) и сохраняет результат; сетевой вызов выполняется вне
-транзакции. Редиректы отключены. `targetUrl` проверяется на SSRF перед сохранением и
-повторно перед каждым запуском: разрешены только http/https, без credentials в URL, и
-хост должен разрешаться исключительно в публичные адреса (loopback, private,
-link-local, CGNAT, multicast, `169.254.169.254` и т.п. отклоняются). Планировщик можно
+транзакции. Редиректы отключены. `targetUrl` и каждый `url` шага проверяются на SSRF
+перед сохранением и повторно перед каждым запуском: разрешены только http/https, без
+credentials в URL, и хост должен разрешаться исключительно в публичные адреса
+(loopback, private, link-local, CGNAT, multicast, `169.254.169.254` и т.п.
+отклоняются). Переменные в URL разрешены только в path/query, но не в scheme/host;
+заголовки `Host`, `Content-Length`, `Connection` и `Transfer-Encoding` запрещены.
+Шаги выполняются последовательно: извлечённые переменные подставляются в последующие
+шаги как `{{name}}`; первая ошибка ассерта, таймаут или неудачное извлечение
+останавливают workflow, проверка получает `DOWN`, а оставшиеся шаги фиксируются как
+`SKIPPED`. Общий бюджет workflow — 30 секунд
+(`monitoring.healthcheck.workflow-total-timeout-ms`), размер тела ответа ограничен
+(`monitoring.healthcheck.max-response-bytes`, по умолчанию 256 КБ). Планировщик можно
 отключить через `monitoring.healthcheck.scheduler.enabled=false`.
 
 Страница **Health** (`/app/health`) показывает сводку (up/down/timeout/unknown), таблицу
 проверок с последним результатом и автообновлением раз в 30 секунд (пауза при скрытой
-вкладке), форму создания/редактирования и модальное окно истории (последние 50
-результатов и uptime за 24 часа, вычисленный только по реальным результатам).
+вкладке), форму создания/редактирования с выбором типа и builder'ом шагов (URL,
+заголовки, тело, извлечения, ассерты) и модальное окно истории (последние 50
+результатов и uptime за 24 часа, вычисленный только по реальным результатам). В истории
+многошаговой проверки шаг-результаты раскрываются построчно.
 
 ### Alerting — `/api/v1/alert-rules`, `/api/v1/notification-channels`, `/api/v1/alert-incidents`
 
