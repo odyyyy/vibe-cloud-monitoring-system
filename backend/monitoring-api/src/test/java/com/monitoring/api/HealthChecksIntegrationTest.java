@@ -4,8 +4,13 @@ import com.monitoring.healthcheck.dto.request.CreateHealthCheckRequest;
 import com.monitoring.healthcheck.dto.response.HealthCheckResponse;
 import com.monitoring.healthcheck.dto.response.HealthCheckResultResponse;
 import com.monitoring.healthcheck.dto.request.UpdateHealthCheckRequest;
+import com.monitoring.healthcheck.dto.StepExecutionResult;
+import com.monitoring.healthcheck.dto.StepExecutionStatus;
+import com.monitoring.healthcheck.dto.SyntheticApiStep;
 import com.monitoring.healthcheck.entity.HealthCheckMethod;
+import com.monitoring.healthcheck.entity.HealthCheckType;
 import com.monitoring.healthcheck.entity.HealthStatus;
+import com.monitoring.healthcheck.entity.SyntheticHttpMethod;
 import com.monitoring.healthcheck.exception.HealthCheckAccessDeniedException;
 import com.monitoring.healthcheck.exception.HealthCheckNotFoundException;
 import com.monitoring.healthcheck.exception.InvalidTargetUrlException;
@@ -169,6 +174,70 @@ class HealthChecksIntegrationTest {
                         .name("metadata")
                         .targetUrl("http://169.254.169.254/latest/meta-data/")
                         .method(HealthCheckMethod.GET)
+                        .build()));
+        assertEquals(0, configRepository.count());
+    }
+
+    @Test
+    void multiStepCheckPersistsWorkflowAndStepResults() {
+        HealthCheckResponse created = healthCheckService.create(OWNER_ID, CreateHealthCheckRequest.builder()
+                .name("Login flow")
+                .type(HealthCheckType.MULTI_STEP_API)
+                .intervalSeconds(30)
+                .steps(List.of(SyntheticApiStep.builder()
+                        .name("Login")
+                        .method(SyntheticHttpMethod.POST)
+                        .url("http://8.8.8.8/login")
+                        .body("{}")
+                        .extractVariables(java.util.Map.of("token", "jsonpath:$.access_token"))
+                        .build()))
+                .build());
+
+        assertEquals(HealthCheckType.MULTI_STEP_API, created.getType());
+        assertEquals(1, created.getSteps().size());
+        assertEquals("jsonpath:$.access_token",
+                created.getSteps().get(0).getExtractVariables().get("token"));
+
+        HealthCheckResponse loaded = healthCheckService.list(OWNER_ID).get(0);
+        assertEquals(HealthCheckType.MULTI_STEP_API, loaded.getType());
+        assertEquals(1, loaded.getSteps().size());
+        assertEquals(null, loaded.getTargetUrl());
+
+        healthCheckService.recordResult(created.getId(), new HealthCheckOutcome(
+                        HealthStatus.DOWN, 120, "Workflow failed at Step 1 (Login)",
+                        List.of(StepExecutionResult.builder()
+                                .name("Login")
+                                .status(StepExecutionStatus.FAILED)
+                                .responseTimeMs(120)
+                                .errorMessage("could not extract variable 'token'")
+                                .build(),
+                                StepExecutionResult.builder()
+                                        .name("Fetch data")
+                                        .status(StepExecutionStatus.SKIPPED)
+                                        .responseTimeMs(0)
+                                        .errorMessage("Skipped because Step 1 (Login) failed")
+                                        .build())),
+                Instant.parse("2026-10-16T10:00:00Z"));
+
+        HealthCheckResultResponse result = healthCheckService
+                .listResults(OWNER_ID, created.getId(), null).get(0);
+        assertEquals(HealthStatus.DOWN, result.getStatus());
+        assertEquals(2, result.getStepResults().size());
+        assertEquals(StepExecutionStatus.SKIPPED, result.getStepResults().get(1).getStatus());
+    }
+
+    @Test
+    void multiStepCheckRejectsMetadataUrlAtSaveTime() {
+        assertThrows(InvalidTargetUrlException.class,
+                () -> healthCheckService.create(OWNER_ID, CreateHealthCheckRequest.builder()
+                        .name("metadata workflow")
+                        .type(HealthCheckType.MULTI_STEP_API)
+                        .intervalSeconds(30)
+                        .steps(List.of(SyntheticApiStep.builder()
+                                .name("Steal")
+                                .method(SyntheticHttpMethod.GET)
+                                .url("http://169.254.169.254/latest/meta-data/")
+                                .build()))
                         .build()));
         assertEquals(0, configRepository.count());
     }

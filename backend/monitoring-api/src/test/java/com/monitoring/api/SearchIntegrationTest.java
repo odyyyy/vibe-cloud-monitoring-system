@@ -22,6 +22,7 @@ import com.monitoring.dashboards.entity.Dashboard;
 import com.monitoring.dashboards.repository.DashboardRepository;
 import com.monitoring.healthcheck.entity.HealthCheckConfig;
 import com.monitoring.healthcheck.entity.HealthCheckMethod;
+import com.monitoring.healthcheck.entity.HealthCheckType;
 import com.monitoring.healthcheck.repository.HealthCheckConfigRepository;
 import com.monitoring.organization.dto.response.OrganizationResponse;
 import com.monitoring.organization.entity.Membership;
@@ -305,6 +306,7 @@ class SearchIntegrationTest {
         healthCheckConfigRepository.save(HealthCheckConfig.builder()
                 .organizationId(organizationId)
                 .name(name)
+                .type(HealthCheckType.SINGLE_HTTP)
                 .targetUrl("https://example.com/health")
                 .method(HealthCheckMethod.GET)
                 .expectedStatusCode(200)

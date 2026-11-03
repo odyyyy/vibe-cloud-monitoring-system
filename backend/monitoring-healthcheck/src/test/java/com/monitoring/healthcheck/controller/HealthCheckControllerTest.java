@@ -4,8 +4,11 @@ import com.monitoring.organization.tenant.CurrentTenantService;
 import com.monitoring.healthcheck.dto.request.CreateHealthCheckRequest;
 import com.monitoring.healthcheck.dto.response.HealthCheckResponse;
 import com.monitoring.healthcheck.dto.response.HealthCheckResultResponse;
+import com.monitoring.healthcheck.dto.SyntheticApiStep;
 import com.monitoring.healthcheck.entity.HealthCheckMethod;
+import com.monitoring.healthcheck.entity.HealthCheckType;
 import com.monitoring.healthcheck.entity.HealthStatus;
+import com.monitoring.healthcheck.entity.SyntheticHttpMethod;
 import com.monitoring.healthcheck.exception.HealthCheckAccessDeniedException;
 import com.monitoring.healthcheck.exception.HealthCheckNotFoundException;
 import com.monitoring.healthcheck.exception.InvalidTargetUrlException;
@@ -111,6 +114,43 @@ class HealthCheckControllerTest {
         verify(healthCheckService).create(eq(USER_ID), captor.capture());
         assertThat(captor.getValue().getActive()).isTrue();
         assertThat(captor.getValue().getMethod()).isEqualTo(HealthCheckMethod.GET);
+    }
+
+    @Test
+    void create_multiStepWorkflow_bindsStepsAndType() throws Exception {
+        SyntheticApiStep step = SyntheticApiStep.builder()
+                .name("Login")
+                .method(SyntheticHttpMethod.POST)
+                .url("https://example.com/login")
+                .body("{}")
+                .build();
+        when(healthCheckService.create(eq(USER_ID), any(CreateHealthCheckRequest.class)))
+                .thenReturn(HealthCheckResponse.builder()
+                        .id(6L)
+                        .organizationId(USER_ID)
+                        .name("Login flow")
+                        .type(HealthCheckType.MULTI_STEP_API)
+                        .method(HealthCheckMethod.GET)
+                        .expectedStatusCode(200)
+                        .intervalSeconds(60)
+                        .steps(java.util.List.of(step))
+                        .active(true)
+                        .build());
+
+        mockMvc.perform(post("/api/v1/health-checks")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Login flow\",\"type\":\"MULTI_STEP_API\","
+                                + "\"intervalSeconds\":60,\"steps\":[{\"name\":\"Login\","
+                                + "\"method\":\"POST\",\"url\":\"https://example.com/login\","
+                                + "\"body\":\"{}\"}]}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.type").value("MULTI_STEP_API"))
+                .andExpect(jsonPath("$.steps[0].url").value("https://example.com/login"));
+
+        ArgumentCaptor<CreateHealthCheckRequest> captor = ArgumentCaptor.forClass(CreateHealthCheckRequest.class);
+        verify(healthCheckService).create(eq(USER_ID), captor.capture());
+        assertThat(captor.getValue().getType()).isEqualTo(HealthCheckType.MULTI_STEP_API);
+        assertThat(captor.getValue().getSteps()).hasSize(1);
     }
 
     @Test

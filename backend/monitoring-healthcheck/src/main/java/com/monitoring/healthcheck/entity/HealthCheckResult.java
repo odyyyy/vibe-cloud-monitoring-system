@@ -68,4 +68,11 @@ public class HealthCheckResult {
 
     @Column(name = "checked_at", nullable = false)
     private Instant checkedAt;
+
+    /**
+     * Serialized {@link com.monitoring.healthcheck.dto.StepExecutionResult} array for multi-step
+     * workflows. Remains {@code null} for single HTTP checks.
+     */
+    @Column(name = "step_results", columnDefinition = "TEXT")
+    private String stepResults;
 }

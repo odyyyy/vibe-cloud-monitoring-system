@@ -1,9 +1,11 @@
-import { useMemo } from 'react'
+import { Fragment, useMemo, useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import type { HealthCheckConfig } from '../../api/healthchecks'
+import type { HealthCheckConfig, StepExecutionStatus } from '../../api/healthchecks'
 import { useHealthCheckResultsQuery } from '../../api/healthchecks'
 import { computeUptimePercent } from '../../features/health/status'
 import { formatDateTime } from '../../lib/datetime'
+import { Badge } from '../ui/badge'
 import { Button } from '../ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog'
 import { Skeleton } from '../ui/skeleton'
@@ -11,6 +13,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { HealthStatusBadge } from './HealthStatusBadge'
 
 const HISTORY_LIMIT = 50
+
+const STEP_STATUS_VARIANT: Record<StepExecutionStatus, 'success' | 'danger' | 'muted'> = {
+  PASSED: 'success',
+  FAILED: 'danger',
+  SKIPPED: 'muted',
+}
+
+const STEP_STATUS_LABEL: Record<StepExecutionStatus, string> = {
+  PASSED: 'Passed',
+  FAILED: 'Failed',
+  SKIPPED: 'Skipped',
+}
 
 interface HealthCheckHistoryDialogProps {
   open: boolean
@@ -24,13 +38,19 @@ export function HealthCheckHistoryDialog({ open, onOpenChange, healthCheck }: He
     configId,
     HISTORY_LIMIT,
   )
+  const [expandedId, setExpandedId] = useState<number | null>(null)
 
   const results = useMemo(() => data ?? [], [data])
   const uptimePercent = useMemo(() => computeUptimePercent(results, new Date()), [results])
+  const isMultiStep = healthCheck?.type === 'MULTI_STEP_API'
+
+  const toggleExpanded = (id: number) => {
+    setExpandedId((current) => (current === id ? null : id))
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>{healthCheck?.name ?? 'Health check'} — history</DialogTitle>
           <DialogDescription>
@@ -38,7 +58,14 @@ export function HealthCheckHistoryDialog({ open, onOpenChange, healthCheck }: He
             {healthCheck ? (
               <>
                 {' · '}
-                <span className="break-all text-slate-500">{healthCheck.targetUrl}</span>
+                {isMultiStep ? (
+                  <span className="text-slate-500">
+                    {healthCheck.steps?.length ?? 0}-step workflow:{' '}
+                    {healthCheck.steps?.map((step) => step.name).join(' → ')}
+                  </span>
+                ) : (
+                  <span className="break-all text-slate-500">{healthCheck.targetUrl}</span>
+                )}
               </>
             ) : null}
           </DialogDescription>
@@ -88,21 +115,87 @@ export function HealthCheckHistoryDialog({ open, onOpenChange, healthCheck }: He
                   <TableHead>Status</TableHead>
                   <TableHead>Response time</TableHead>
                   <TableHead>Error message</TableHead>
+                  <TableHead className="text-right">Steps</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {results.map((result) => (
-                  <TableRow key={result.id}>
-                    <TableCell className="whitespace-nowrap">{formatDateTime(result.checkedAt)}</TableCell>
-                    <TableCell>
-                      <HealthStatusBadge status={result.status} />
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">{result.responseTimeMs} ms</TableCell>
-                    <TableCell className="max-w-xs break-words text-slate-400">
-                      {result.errorMessage ? result.errorMessage : '—'}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {results.map((result) => {
+                  const stepResults = result.stepResults ?? []
+                  const hasSteps = stepResults.length > 0
+                  const expanded = expandedId === result.id
+                  return (
+                    <Fragment key={result.id}>
+                      <TableRow>
+                        <TableCell className="whitespace-nowrap">{formatDateTime(result.checkedAt)}</TableCell>
+                        <TableCell>
+                          <HealthStatusBadge status={result.status} />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">{result.responseTimeMs} ms</TableCell>
+                        <TableCell className="max-w-xs break-words text-slate-400">
+                          {result.errorMessage ? result.errorMessage : '—'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {hasSteps ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              aria-expanded={expanded}
+                              aria-label={`${expanded ? 'Hide' : 'Show'} step details for result ${result.id}`}
+                              onClick={() => toggleExpanded(result.id)}
+                            >
+                              {expanded ? (
+                                <ChevronUp className="mr-1 h-4 w-4" aria-hidden="true" />
+                              ) : (
+                                <ChevronDown className="mr-1 h-4 w-4" aria-hidden="true" />
+                              )}
+                              {stepResults.length}
+                            </Button>
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                      </TableRow>
+                      {expanded && hasSteps ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="bg-white/[0.02]">
+                            <div className="space-y-2 py-1">
+                              <p className="text-xs font-medium text-slate-300">Step results</p>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Step</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>HTTP</TableHead>
+                                    <TableHead>Time</TableHead>
+                                    <TableHead>Detail</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {stepResults.map((step, index) => (
+                                    <TableRow key={`${result.id}-${index}`}>
+                                      <TableCell className="text-slate-200">{step.name}</TableCell>
+                                      <TableCell>
+                                        <Badge variant={STEP_STATUS_VARIANT[step.status]}>
+                                          {STEP_STATUS_LABEL[step.status]}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell>{step.statusCode ?? '—'}</TableCell>
+                                      <TableCell>{step.responseTimeMs} ms</TableCell>
+                                      <TableCell className="max-w-xs break-words text-slate-400">
+                                        {step.errorMessage ?? '—'}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </Fragment>
+                  )
+                })}
               </TableBody>
             </Table>
           )}

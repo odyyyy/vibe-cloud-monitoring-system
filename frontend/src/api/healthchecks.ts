@@ -5,16 +5,47 @@ import { apiRequest } from './client'
 
 export type HealthStatus = 'UP' | 'DOWN' | 'TIMEOUT' | 'UNKNOWN'
 export type HealthCheckMethod = 'GET' | 'POST'
+export type HealthCheckType = 'SINGLE_HTTP' | 'MULTI_STEP_API'
+export type SyntheticHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD'
+export type SyntheticAssertionType = 'STATUS_CODE' | 'BODY_CONTAINS' | 'JSON_PATH'
+export type StepExecutionStatus = 'PASSED' | 'FAILED' | 'SKIPPED'
+
+export interface SyntheticAssertion {
+  type: SyntheticAssertionType
+  operator: string
+  value: string | number
+  path?: string | null
+}
+
+export interface SyntheticApiStep {
+  name: string
+  method: SyntheticHttpMethod
+  url: string
+  headers?: Record<string, string>
+  body?: string | null
+  extractVariables?: Record<string, string>
+  assertions?: SyntheticAssertion[]
+}
+
+export interface StepExecutionResult {
+  name: string
+  status: StepExecutionStatus
+  statusCode?: number | null
+  responseTimeMs: number
+  errorMessage?: string | null
+}
 
 export interface HealthCheckConfig {
   id: number
   organizationId: number
   name: string
-  targetUrl: string
+  type: HealthCheckType
+  targetUrl: string | null
   method: HealthCheckMethod
   expectedStatusCode: number
   intervalSeconds: number
   isActive: boolean
+  steps?: SyntheticApiStep[] | null
 }
 
 export interface HealthCheckResult {
@@ -24,10 +55,20 @@ export interface HealthCheckResult {
   responseTimeMs: number
   errorMessage?: string | null
   checkedAt: string
+  stepResults?: StepExecutionResult[] | null
 }
 
-export type CreateHealthCheckRequest = Omit<HealthCheckConfig, 'id' | 'organizationId'>
-export type UpdateHealthCheckRequest = Partial<Omit<HealthCheckConfig, 'id' | 'organizationId'>>
+export interface CreateHealthCheckRequest {
+  name: string
+  type: HealthCheckType
+  targetUrl?: string | null
+  method?: HealthCheckMethod
+  expectedStatusCode?: number
+  intervalSeconds: number
+  isActive: boolean
+  steps?: SyntheticApiStep[]
+}
+export type UpdateHealthCheckRequest = Partial<CreateHealthCheckRequest>
 
 /** A check together with its most recent result (null when it has never run). */
 export interface HealthCheckOverview {

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { healthCheckFormSchema, isHttpUrl } from './schemas'
+import {
+  healthCheckFormSchema,
+  isHttpUrl,
+  isSimpleJsonPath,
+  multiStepHealthCheckFormSchema,
+} from './schemas'
 
 function validValues(overrides: Record<string, unknown> = {}) {
   return {
@@ -9,6 +14,30 @@ function validValues(overrides: Record<string, unknown> = {}) {
     expectedStatusCode: '200',
     intervalSeconds: '60',
     isActive: true,
+    ...overrides,
+  }
+}
+
+function validStep(overrides: Record<string, unknown> = {}) {
+  return {
+    name: 'Login',
+    method: 'POST',
+    url: 'https://api.example.com/login',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{"user":"demo"}',
+    extractVariables: { token: 'jsonpath:$.access_token' },
+    assertions: [{ type: 'STATUS_CODE', operator: '==', value: 200 }],
+    ...overrides,
+  }
+}
+
+function validWorkflow(overrides: Record<string, unknown> = {}) {
+  return {
+    name: 'Login flow',
+    type: 'MULTI_STEP_API',
+    intervalSeconds: '60',
+    isActive: true,
+    steps: [validStep()],
     ...overrides,
   }
 }
@@ -78,5 +107,103 @@ describe('healthCheckFormSchema', () => {
 
   it('rejects names longer than 100 characters', () => {
     expect(healthCheckFormSchema.safeParse(validValues({ name: 'a'.repeat(101) })).success).toBe(false)
+  })
+})
+
+describe('isSimpleJsonPath', () => {
+  it('accepts dot members and array indexes', () => {
+    expect(isSimpleJsonPath('$.access_token')).toBe(true)
+    expect(isSimpleJsonPath('$.data.items[0].id')).toBe(true)
+    expect(isSimpleJsonPath("$['access-token']")).toBe(true)
+  })
+
+  it('rejects recursive descent, wildcards and filters', () => {
+    expect(isSimpleJsonPath('$..token')).toBe(false)
+    expect(isSimpleJsonPath('$.*')).toBe(false)
+    expect(isSimpleJsonPath('$.items[?(@.id==1)]')).toBe(false)
+    expect(isSimpleJsonPath('access_token')).toBe(false)
+  })
+})
+
+describe('multiStepHealthCheckFormSchema', () => {
+  it('accepts a two-step workflow with extraction and assertions', () => {
+    const result = multiStepHealthCheckFormSchema.safeParse(
+      validWorkflow({
+        steps: [
+          validStep(),
+          {
+            name: 'Fetch data',
+            method: 'GET',
+            url: 'https://api.example.com/data',
+            headers: { Authorization: 'Bearer {{token}}' },
+            assertions: [
+              { type: 'STATUS_CODE', operator: '==', value: '200' },
+              { type: 'JSON_PATH', operator: '==', path: '$.status', value: 'ok' },
+            ],
+          },
+        ],
+      }),
+    )
+
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.intervalSeconds).toBe(60)
+      expect(result.data.steps).toHaveLength(2)
+    }
+  })
+
+  it('rejects a workflow without steps', () => {
+    expect(multiStepHealthCheckFormSchema.safeParse(validWorkflow({ steps: [] })).success).toBe(false)
+  })
+
+  it('rejects more than five steps', () => {
+    const steps = Array.from({ length: 6 }, () => validStep({ name: 'Step' }))
+    expect(multiStepHealthCheckFormSchema.safeParse(validWorkflow({ steps })).success).toBe(false)
+  })
+
+  it('rejects a GET step with a body', () => {
+    expect(
+      multiStepHealthCheckFormSchema.safeParse(
+        validWorkflow({ steps: [validStep({ method: 'GET', body: '{}' })] }),
+      ).success,
+    ).toBe(false)
+  })
+
+  it('rejects unsupported extraction expressions', () => {
+    expect(
+      multiStepHealthCheckFormSchema.safeParse(
+        validWorkflow({
+          steps: [validStep({ extractVariables: { token: 'header:x-token' } })],
+        }),
+      ).success,
+    ).toBe(false)
+  })
+
+  it('rejects invalid JSON path assertions', () => {
+    expect(
+      multiStepHealthCheckFormSchema.safeParse(
+        validWorkflow({
+          steps: [
+            validStep({
+              assertions: [{ type: 'JSON_PATH', operator: '==', path: '$..status', value: 'ok' }],
+            }),
+          ],
+        }),
+      ).success,
+    ).toBe(false)
+  })
+
+  it('rejects status code assertions outside 100-599', () => {
+    expect(
+      multiStepHealthCheckFormSchema.safeParse(
+        validWorkflow({
+          steps: [
+            validStep({
+              assertions: [{ type: 'STATUS_CODE', operator: '==', value: 600 }],
+            }),
+          ],
+        }),
+      ).success,
+    ).toBe(false)
   })
 })

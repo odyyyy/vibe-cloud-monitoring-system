@@ -3,13 +3,17 @@ package com.monitoring.healthcheck.service;
 import com.monitoring.healthcheck.dto.request.CreateHealthCheckRequest;
 import com.monitoring.healthcheck.dto.response.HealthCheckResponse;
 import com.monitoring.healthcheck.dto.request.UpdateHealthCheckRequest;
+import com.monitoring.healthcheck.dto.SyntheticApiStep;
 import com.monitoring.healthcheck.entity.HealthCheckConfig;
 import com.monitoring.healthcheck.entity.HealthCheckMethod;
+import com.monitoring.healthcheck.entity.HealthCheckType;
+import com.monitoring.healthcheck.entity.SyntheticHttpMethod;
 import com.monitoring.healthcheck.exception.HealthCheckAccessDeniedException;
 import com.monitoring.healthcheck.exception.HealthCheckNotFoundException;
 import com.monitoring.healthcheck.exception.InvalidTargetUrlException;
 import com.monitoring.healthcheck.repository.HealthCheckConfigRepository;
 import com.monitoring.healthcheck.repository.HealthCheckResultRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -17,6 +21,8 @@ import org.mockito.Mockito;
 import org.springframework.data.domain.Pageable;
 
 import java.util.Optional;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -39,7 +45,13 @@ class HealthCheckServiceTest {
     void setUp() {
         configRepository = Mockito.mock(HealthCheckConfigRepository.class);
         resultRepository = Mockito.mock(HealthCheckResultRepository.class);
-        service = new HealthCheckService(configRepository, resultRepository, new SsrfGuard());
+        SsrfGuard ssrfGuard = new SsrfGuard();
+        service = new HealthCheckService(
+                configRepository,
+                resultRepository,
+                ssrfGuard,
+                new SyntheticCheckDefinitionValidator(ssrfGuard),
+                new SyntheticCheckCodec(new ObjectMapper()));
         when(configRepository.save(any(HealthCheckConfig.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -184,5 +196,83 @@ class HealthCheckServiceTest {
         assertEquals(HealthCheckService.MAX_RESULTS_LIMIT, captor.getAllValues().get(0).getPageSize());
         assertEquals(1, captor.getAllValues().get(1).getPageSize());
         assertEquals(HealthCheckService.DEFAULT_RESULTS_LIMIT, captor.getAllValues().get(2).getPageSize());
+    }
+
+    private SyntheticApiStep loginStep(String url) {
+        return SyntheticApiStep.builder()
+                .name("Login")
+                .method(SyntheticHttpMethod.POST)
+                .url(url)
+                .body("{\"user\":\"demo\"}")
+                .extractVariables(Map.of("token", "jsonpath:$.access_token"))
+                .build();
+    }
+
+    @Test
+    void createMultiStepStoresWorkflowAndClearsTargetUrl() {
+        CreateHealthCheckRequest request = CreateHealthCheckRequest.builder()
+                .name("Login flow")
+                .type(HealthCheckType.MULTI_STEP_API)
+                .intervalSeconds(60)
+                .steps(List.of(loginStep(PUBLIC_URL)))
+                .build();
+
+        HealthCheckResponse response = service.create(1L, request);
+
+        assertEquals(HealthCheckType.MULTI_STEP_API, response.getType());
+        assertEquals(1, response.getSteps().size());
+        assertEquals("Login", response.getSteps().get(0).getName());
+        assertEquals(null, response.getTargetUrl());
+
+        ArgumentCaptor<HealthCheckConfig> captor = ArgumentCaptor.forClass(HealthCheckConfig.class);
+        verify(configRepository).save(captor.capture());
+        assertTrue(captor.getValue().getStepsJson().contains("jsonpath:$.access_token"));
+    }
+
+    @Test
+    void createMultiStepRejectsMetadataStepUrl() {
+        CreateHealthCheckRequest request = CreateHealthCheckRequest.builder()
+                .name("Metadata")
+                .type(HealthCheckType.MULTI_STEP_API)
+                .intervalSeconds(60)
+                .steps(List.of(loginStep("http://169.254.169.254/latest/meta-data/")))
+                .build();
+
+        assertThrows(InvalidTargetUrlException.class, () -> service.create(1L, request));
+        verify(configRepository, never()).save(any());
+    }
+
+    @Test
+    void createSingleCheckRejectsSteps() {
+        CreateHealthCheckRequest request = CreateHealthCheckRequest.builder()
+                .name("API")
+                .targetUrl(PUBLIC_URL)
+                .method(HealthCheckMethod.GET)
+                .intervalSeconds(60)
+                .steps(List.of(loginStep(PUBLIC_URL)))
+                .build();
+
+        assertThrows(InvalidTargetUrlException.class, () -> service.create(1L, request));
+        verify(configRepository, never()).save(any());
+    }
+
+    @Test
+    void switchingMultiStepBackToSingleRequiresTargetUrl() {
+        HealthCheckConfig config = HealthCheckConfig.builder()
+                .id(7L)
+                .organizationId(1L)
+                .name("Flow")
+                .type(HealthCheckType.MULTI_STEP_API)
+                .targetUrl(null)
+                .stepsJson("[]")
+                .method(HealthCheckMethod.GET)
+                .expectedStatusCode(200)
+                .intervalSeconds(60)
+                .active(true)
+                .build();
+        when(configRepository.findById(7L)).thenReturn(Optional.of(config));
+
+        assertThrows(InvalidTargetUrlException.class, () -> service.update(1L, 7L,
+                UpdateHealthCheckRequest.builder().type(HealthCheckType.SINGLE_HTTP).build()));
     }
 }

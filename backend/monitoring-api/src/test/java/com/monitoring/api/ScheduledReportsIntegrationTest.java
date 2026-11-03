@@ -22,6 +22,7 @@ import com.monitoring.collector.repository.MetricSampleRepository;
 import com.monitoring.healthcheck.entity.HealthCheckConfig;
 import com.monitoring.healthcheck.entity.HealthCheckMethod;
 import com.monitoring.healthcheck.entity.HealthCheckResult;
+import com.monitoring.healthcheck.entity.HealthCheckType;
 import com.monitoring.healthcheck.entity.HealthStatus;
 import com.monitoring.healthcheck.repository.HealthCheckConfigRepository;
 import com.monitoring.healthcheck.repository.HealthCheckResultRepository;
@@ -113,6 +114,7 @@ class ScheduledReportsIntegrationTest {
         HealthCheckConfig healthCheck = healthCheckConfigRepository.save(HealthCheckConfig.builder()
                 .organizationId(ORGANIZATION_ID)
                 .name("API")
+                .type(HealthCheckType.SINGLE_HTTP)
                 .targetUrl("https://example.com/health")
                 .method(HealthCheckMethod.GET)
                 .expectedStatusCode(200)

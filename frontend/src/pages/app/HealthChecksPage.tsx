@@ -156,9 +156,22 @@ export default function HealthChecksPage() {
                     className="cursor-pointer"
                     onClick={() => setHistoryTarget(check)}
                   >
-                    <TableCell className="font-medium text-slate-100">{check.name}</TableCell>
-                    <TableCell className="max-w-xs truncate text-slate-400" title={check.targetUrl}>
-                      {check.targetUrl}
+                    <TableCell className="font-medium text-slate-100">
+                      <div className="flex items-center gap-2">
+                        <span>{check.name}</span>
+                        <Badge variant="muted">
+                          {check.type === 'MULTI_STEP_API' ? 'Multi-step' : 'HTTP'}
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-xs truncate text-slate-400">
+                      {check.type === 'MULTI_STEP_API' ? (
+                        <span title={check.steps?.map((step) => step.name).join(' → ')}>
+                          {check.steps?.length ?? 0}-step workflow
+                        </span>
+                      ) : (
+                        <span title={check.targetUrl ?? undefined}>{check.targetUrl}</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <HealthStatusBadge status={latest?.status ?? null} />
