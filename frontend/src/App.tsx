@@ -20,6 +20,7 @@ import DashboardViewPage from './pages/app/DashboardViewPage'
 import HealthChecksPage from './pages/app/HealthChecksPage'
 import IncidentsPage from './pages/app/IncidentsPage'
 import LogExplorerPage from './pages/app/LogExplorerPage'
+import LogPipelinesPage from './pages/app/LogPipelinesPage'
 import MaintenancePage from './pages/app/MaintenancePage'
 import MetricsExplorerPage from './pages/app/MetricsExplorerPage'
 import NotificationDeliveriesPage from './pages/app/NotificationDeliveriesPage'
@@ -101,6 +102,7 @@ export const router = createBrowserRouter([
       { path: 'agents', element: <AgentFleetPage /> },
       { path: 'metrics', element: <MetricsExplorerPage /> },
       { path: 'logs', element: <LogExplorerPage /> },
+      { path: 'log-pipelines', element: <LogPipelinesPage /> },
       { path: 'health', element: <HealthChecksPage /> },
       { path: 'status-pages', element: <StatusPagesPage /> },
       { path: 'alerts', element: <AlertsPage /> },

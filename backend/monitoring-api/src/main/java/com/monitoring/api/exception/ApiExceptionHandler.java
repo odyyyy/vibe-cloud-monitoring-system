@@ -12,8 +12,16 @@ import com.monitoring.collector.exception.SavedLogViewLimitExceededException;
 import com.monitoring.collector.exception.SavedLogViewNotFoundException;
 import com.monitoring.collector.exception.InvalidExportFormatException;
 import com.monitoring.collector.exception.InvalidLogFacetRequestException;
+import com.monitoring.collector.exception.AgentConfigTemplateInUseException;
+import com.monitoring.collector.exception.AgentConfigTemplateLimitExceededException;
+import com.monitoring.collector.exception.AgentConfigTemplateNameConflictException;
+import com.monitoring.collector.exception.AgentConfigTemplateNotFoundException;
+import com.monitoring.collector.exception.InvalidLogPipelineRuleException;
 import com.monitoring.collector.exception.LogFacetRateLimitedException;
 import com.monitoring.collector.exception.LogFacetTimeoutException;
+import com.monitoring.collector.exception.LogPipelineRuleAccessDeniedException;
+import com.monitoring.collector.exception.LogPipelineRuleLimitExceededException;
+import com.monitoring.collector.exception.LogPipelineRuleNotFoundException;
 import com.monitoring.retention.exception.InvalidRetentionPolicyException;
 import com.monitoring.collector.exception.InvalidTraceException;
 import com.monitoring.collector.exception.TraceNotFoundException;
@@ -328,7 +336,63 @@ public class ApiExceptionHandler {
                 .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
     }
 
+    /** Invalid log pipeline filter/action configuration or reorder payload. */
+    @ExceptionHandler(InvalidLogPipelineRuleException.class)
+    public ResponseEntity<ApiError> handleInvalidLogPipelineRule(InvalidLogPipelineRuleException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(LogPipelineRuleNotFoundException.class)
+    public ResponseEntity<ApiError> handleLogPipelineRuleNotFound(LogPipelineRuleNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(LogPipelineRuleAccessDeniedException.class)
+    public ResponseEntity<ApiError> handleLogPipelineRuleAccessDenied(
+            LogPipelineRuleAccessDeniedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiError(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(LogPipelineRuleLimitExceededException.class)
+    public ResponseEntity<ApiError> handleLogPipelineRuleLimit(
+            LogPipelineRuleLimitExceededException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(HttpStatus.CONFLICT.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(AgentConfigTemplateNotFoundException.class)
+    public ResponseEntity<ApiError> handleAgentConfigTemplateNotFound(
+            AgentConfigTemplateNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiError(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(AgentConfigTemplateNameConflictException.class)
+    public ResponseEntity<ApiError> handleAgentConfigTemplateNameConflict(
+            AgentConfigTemplateNameConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(HttpStatus.CONFLICT.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(AgentConfigTemplateLimitExceededException.class)
+    public ResponseEntity<ApiError> handleAgentConfigTemplateLimit(
+            AgentConfigTemplateLimitExceededException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(HttpStatus.CONFLICT.value(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(AgentConfigTemplateInUseException.class)
+    public ResponseEntity<ApiError> handleAgentConfigTemplateInUse(
+            AgentConfigTemplateInUseException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(HttpStatus.CONFLICT.value(), ex.getMessage()));
+    }
+
     /** The per-organization facet budget was exhausted; clients may retry after the delay. */
+
     @ExceptionHandler(LogFacetRateLimitedException.class)
     public ResponseEntity<ApiError> handleLogFacetRateLimited(LogFacetRateLimitedException ex) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)

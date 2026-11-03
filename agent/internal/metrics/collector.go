@@ -43,6 +43,10 @@ const (
 	// dropped because a source exceeded its configured rate limit.
 	MetricLogsDroppedTotal = "agent.logs.dropped_total"
 
+	// MetricLogsDroppedByPipelineTotal is the cumulative number of log events
+	// intentionally dropped by a processing pipeline rule.
+	MetricLogsDroppedByPipelineTotal = "agent.logs.dropped_by_pipeline_total"
+
 	MetricBufferSizeBytes     = "agent.buffer.size_bytes"
 	MetricBufferQueuedBatches = "agent.buffer.queued_batches"
 	MetricBufferDroppedTotal  = "agent.buffer.dropped_total"

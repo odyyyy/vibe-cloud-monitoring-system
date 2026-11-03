@@ -182,7 +182,12 @@ func (p *Pipeline) emitLine(s *source, raw string) {
 	}
 
 	if event, ok := p.buildEvent(s, raw, parsed, isJSON); ok {
-		p.emit(event)
+		if filtered, dropped := applyPipelineRules(event, p.currentRules()); dropped {
+			p.pipelineDroppedTotal.Add(1)
+			return
+		} else {
+			p.emit(filtered)
+		}
 	}
 }
 

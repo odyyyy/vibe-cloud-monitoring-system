@@ -20,6 +20,7 @@ import (
 const (
 	requestTimeout = 10 * time.Second
 	maxErrorBody   = 2 << 10
+	maxSuccessBody = 1 << 20
 )
 
 // APIError describes a non-2xx response from the backend. It is returned by
@@ -73,6 +74,47 @@ func (c *Client) PostJSON(ctx context.Context, path string, payload any) error {
 		return fmt.Errorf("encode payload: %w", err)
 	}
 	return c.PostRaw(ctx, path, body)
+}
+
+// GetJSON GETs path with the X-API-Key header and decodes a bounded JSON
+// response into target. Non-2xx responses are returned as *APIError.
+func (c *Client) GetJSON(ctx context.Context, path string, target any) error {
+	url := c.baseURL + path
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-API-Key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("get %s: %w", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Body:       string(respBody),
+			RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
+		}
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSuccessBody+1))
+	if err != nil {
+		return fmt.Errorf("read response: %w", err)
+	}
+	if len(body) > maxSuccessBody {
+		return fmt.Errorf("response from %s is too large", url)
+	}
+	if err := json.Unmarshal(body, target); err != nil {
+		return fmt.Errorf("decode response: %w", err)
+	}
+	return nil
 }
 
 // PostRaw POSTs an already encoded JSON body to path with the X-API-Key header.

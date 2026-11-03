@@ -62,6 +62,15 @@ type Pipeline struct {
 	// by the metric collection goroutine, so it is atomic.
 	droppedTotal atomic.Int64
 
+	// pipelineDroppedTotal counts events intentionally dropped by a configured
+	// processing pipeline rule.
+	pipelineDroppedTotal atomic.Int64
+
+	// rules is the last successfully downloaded, compiled rule set. A failed
+	// refresh leaves the previous set in place.
+	rules       atomic.Pointer[[]compiledRule]
+	ruleFetcher RuleFetcher
+
 	// warned is only touched by the single poll goroutine inside Run.
 	warned map[string]bool
 }
@@ -272,6 +281,59 @@ func (p *Pipeline) flush(ctx context.Context) {
 // throttling since startup. It is safe to call from another goroutine.
 func (p *Pipeline) DroppedTotal() int64 {
 	return p.droppedTotal.Load()
+}
+
+// DroppedByPipelineTotal returns the cumulative number of events intentionally
+// dropped by a processing pipeline rule.
+func (p *Pipeline) DroppedByPipelineTotal() int64 {
+	return p.pipelineDroppedTotal.Load()
+}
+
+// SetRuleFetcher enables processing rules. It must be called before RunRuleSync.
+func (p *Pipeline) SetRuleFetcher(fetcher RuleFetcher) {
+	p.ruleFetcher = fetcher
+}
+
+// RunRuleSync downloads the rules immediately and then every five minutes. Fetch
+// failures are logged and the last-known-good rule set stays active.
+func (p *Pipeline) RunRuleSync(ctx context.Context) {
+	if p.ruleFetcher == nil {
+		return
+	}
+	p.refreshRules(ctx)
+
+	ticker := time.NewTicker(ruleRefreshInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			p.refreshRules(ctx)
+		}
+	}
+}
+
+func (p *Pipeline) refreshRules(ctx context.Context) {
+	rules, err := p.ruleFetcher.FetchRules(ctx)
+	if err != nil {
+		p.logger.Printf("warning: log pipeline rules refresh failed: %v (keeping previous rules)", err)
+		return
+	}
+	compiled, ruleErrors := compileRules(rules)
+	for _, ruleErr := range ruleErrors {
+		p.logger.Printf("warning: skipping invalid log pipeline rule: %v", ruleErr)
+	}
+	p.rules.Store(&compiled)
+	p.logger.Printf("log pipeline rules loaded: %d active", len(compiled))
+}
+
+func (p *Pipeline) currentRules() []compiledRule {
+	rules := p.rules.Load()
+	if rules == nil {
+		return nil
+	}
+	return *rules
 }
 
 func (p *Pipeline) finalFlush() {

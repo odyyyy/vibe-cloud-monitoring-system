@@ -46,6 +46,7 @@ func main() {
 	defer stop()
 
 	httpClient := transport.NewClient(cfg.BackendURL, cfg.APIKey)
+	logRulesClient := logs.NewClient(httpClient)
 	collector := metrics.NewCollector(cfg.Metrics.Network)
 	queue := buffer.Open(cfg.Buffer, logger)
 	sender := forward.New(httpClient, queue, cfg.Retry, logger)
@@ -94,6 +95,7 @@ func main() {
 		if err != nil {
 			logger.Fatalf("log pipeline error: %v", err)
 		}
+		logPipeline.SetRuleFetcher(logRulesClient)
 
 		var discoverer *k8s.Discoverer
 		if cfg.Kubernetes.Enabled {
@@ -102,6 +104,12 @@ func main() {
 				logger.Fatalf("kubernetes discovery error: %v", err)
 			}
 		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			logPipeline.RunRuleSync(ctx)
+		}()
 
 		wg.Add(1)
 		go func() {
@@ -168,7 +176,11 @@ func collectAndSend(ctx context.Context, logger *log.Logger, collector *metrics.
 	// Report the throttling counter next to the host metrics. It is cumulative,
 	// like the network counters, so the backend can derive rates from it.
 	if logPipeline != nil {
-		points = append(points, collector.LogsDroppedPoint(logPipeline.DroppedTotal(), now))
+		points = append(points,
+			collector.LogsDroppedPoint(logPipeline.DroppedTotal(), now),
+			collector.Point(metrics.MetricLogsDroppedByPipelineTotal,
+				float64(logPipeline.DroppedByPipelineTotal()), now),
+		)
 	}
 
 	bufferStats := sender.BufferStats()
