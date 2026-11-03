@@ -135,6 +135,15 @@ public class SecurityConfig {
                 // Global resource search requires an authenticated user; the tenant and role
                 // are resolved from the membership, never from the query string.
                 .requestMatchers("/api/v1/search", "/api/v1/search/**").authenticated()
+                // Agent configuration templates are tenant-scoped; write roles are enforced
+                // on the controller. The /active and /status agent endpoints are intercepted
+                // earlier by the X-API-Key security chain.
+                .requestMatchers("/api/v1/agent-configs", "/api/v1/agent-configs/**").authenticated()
+                // Log pipeline rules are tenant-scoped. Read access is verified in
+                // LogPipelineService; writes additionally require ADMIN/OWNER on the controller.
+                // The agent-facing rule download lives under /api/v1/ingest and is handled by
+                // the X-API-Key security chain above.
+                .requestMatchers("/api/v1/log-pipelines", "/api/v1/log-pipelines/**").authenticated()
                 // Personal Access Tokens management requires authentication (JWT human users only);
                 // PATs are denied from settings endpoints by the auth filter skipping settings paths.
                 .requestMatchers("/api/v1/settings/pats", "/api/v1/settings/pats/**").authenticated()

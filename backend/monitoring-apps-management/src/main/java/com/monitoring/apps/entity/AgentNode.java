@@ -64,6 +64,22 @@ public class AgentNode {
     @Column(name = "last_seen_at", nullable = false)
     private Instant lastSeenAt;
 
+    /** Latest config sync state reported by this agent: UNKNOWN, PENDING, SYNCED or ERROR. */
+    @Builder.Default
+    @Column(name = "config_status", nullable = false, length = 16)
+    private String configStatus = "UNKNOWN";
+
+    /** Config version hash the agent last applied or rejected. */
+    @Column(name = "config_version", length = 64)
+    private String configVersion;
+
+    /** Validation/runtime error reported by the agent; bounded to the storage column. */
+    @Column(name = "config_error", length = 1024)
+    private String configError;
+
+    @Column(name = "config_reported_at")
+    private Instant configReportedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

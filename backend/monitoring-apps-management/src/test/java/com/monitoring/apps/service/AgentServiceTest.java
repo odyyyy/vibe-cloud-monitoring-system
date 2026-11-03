@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -106,6 +107,43 @@ class AgentServiceTest {
         agentService.recordHeartbeat(application(), "  ", "0.1.0", SEEN_AT);
 
         verify(agentNodeRepository, never()).save(any());
+    }
+
+    @Test
+    void reportConfigStatus_existingNode_storesStatusAndClearsOldErrorOnSuccess() {
+        AgentNode existing = AgentNode.builder()
+                .id(5L)
+                .application(application())
+                .hostname("server-1")
+                .lastSeenAt(Instant.parse("2026-10-18T10:00:00Z"))
+                .configStatus("ERROR")
+                .configError("old error")
+                .build();
+        when(agentNodeRepository.findByApplicationIdAndHostname(10L, "server-1")).thenReturn(Optional.of(existing));
+        when(agentNodeRepository.save(any(AgentNode.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        agentService.reportConfigStatus(application(), "server-1", "v2", "SYNCED", null, SEEN_AT);
+
+        assertEquals("SYNCED", existing.getConfigStatus());
+        assertEquals("v2", existing.getConfigVersion());
+        assertNull(existing.getConfigError());
+        assertEquals(SEEN_AT, existing.getConfigReportedAt());
+        assertEquals(Instant.parse("2026-10-18T10:00:00Z"), existing.getLastSeenAt());
+    }
+
+    @Test
+    void reportConfigStatus_newNode_createsAgentWithoutChangingHeartbeatSemantics() {
+        when(agentNodeRepository.findByApplicationIdAndHostname(10L, "server-1")).thenReturn(Optional.empty());
+        when(agentNodeRepository.save(any(AgentNode.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        agentService.reportConfigStatus(application(), "server-1", "v2", "ERROR", "bad yaml", SEEN_AT);
+
+        ArgumentCaptor<AgentNode> captor = ArgumentCaptor.forClass(AgentNode.class);
+        verify(agentNodeRepository).save(captor.capture());
+        AgentNode saved = captor.getValue();
+        assertEquals("ERROR", saved.getConfigStatus());
+        assertEquals("bad yaml", saved.getConfigError());
+        assertEquals(SEEN_AT, saved.getLastSeenAt());
     }
 
     @Test

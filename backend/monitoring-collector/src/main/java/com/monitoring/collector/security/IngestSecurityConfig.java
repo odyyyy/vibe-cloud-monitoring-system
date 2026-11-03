@@ -42,7 +42,11 @@ public class IngestSecurityConfig {
         RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimiter, quotaProperties);
 
         http
-            .securityMatcher("/api/v1/ingest/**", "/api/ingest/**")
+            .securityMatcher(
+                    "/api/v1/ingest/**",
+                    "/api/ingest/**",
+                    "/api/v1/agent-configs/active",
+                    "/api/v1/agent-configs/status")
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())

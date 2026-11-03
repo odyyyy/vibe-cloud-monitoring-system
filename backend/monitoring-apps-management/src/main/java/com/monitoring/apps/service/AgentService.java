@@ -25,6 +25,8 @@ public class AgentService {
     // Bounded to the storage columns so an oversized tag can never fail an ingestion batch.
     private static final int MAX_HOSTNAME_LENGTH = 255;
     private static final int MAX_VERSION_LENGTH = 64;
+    private static final int MAX_CONFIG_VERSION_LENGTH = 64;
+    private static final int MAX_CONFIG_ERROR_LENGTH = 1024;
 
     private final AgentNodeRepository agentNodeRepository;
     private final ApplicationService applicationService;
@@ -56,6 +58,42 @@ public class AgentService {
             node.setAgentVersion(version);
         }
 
+        agentNodeRepository.save(node);
+    }
+
+    /**
+     * Records the config sync result reported by an agent.
+     *
+     * <p>The agent may report before its first metric heartbeat (for example right after
+     * startup), so a node is created when necessary. Config reporting deliberately does not
+     * refresh {@code lastSeenAt}: the fleet's online state remains tied to telemetry, not to
+     * the ability to poll configuration.
+     */
+    @Transactional
+    public void reportConfigStatus(Application application,
+                                   String hostname,
+                                   String configVersion,
+                                   String status,
+                                   String errorMessage,
+                                   Instant reportedAt) {
+        String host = truncate(hostname, MAX_HOSTNAME_LENGTH);
+        if (host == null) {
+            return;
+        }
+
+        AgentNode node = agentNodeRepository.findByApplicationIdAndHostname(application.getId(), host)
+                .orElseGet(() -> AgentNode.builder()
+                        .application(application)
+                        .hostname(host)
+                        .lastSeenAt(reportedAt)
+                        .build());
+
+        node.setConfigVersion(truncate(configVersion, MAX_CONFIG_VERSION_LENGTH));
+        node.setConfigStatus(status);
+        node.setConfigError("ERROR".equals(status)
+                ? truncate(errorMessage, MAX_CONFIG_ERROR_LENGTH)
+                : null);
+        node.setConfigReportedAt(reportedAt);
         agentNodeRepository.save(node);
     }
 

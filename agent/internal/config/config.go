@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"regexp"
@@ -232,6 +234,101 @@ type Config struct {
 	Receiver        ReceiverConfig      `yaml:"receiver"`
 	Buffer          BufferConfig        `yaml:"buffer"`
 	Retry           RetryConfig         `yaml:"retry"`
+}
+
+// RemoteConfig is the subset of configuration the cloud is allowed to change at
+// runtime. Connection, buffer, retry, receiver and Kubernetes settings are
+// deliberately absent: a template must never redirect telemetry, relax local
+// resource bounds or grant the agent new infrastructure access.
+type RemoteConfig struct {
+	IntervalSeconds *int                    `yaml:"interval_seconds"`
+	Logs            *[]LogSource            `yaml:"logs"`
+	LogBatchSize    *int                    `yaml:"log_batch_size"`
+	LogFlushSeconds *int                    `yaml:"log_flush_seconds"`
+	LogThrottling   *RemoteLogThrottling    `yaml:"log_throttling"`
+	Metrics         *RemoteMetricsConfig    `yaml:"metrics"`
+}
+
+// RemoteLogThrottling uses pointers so an omitted field keeps the local value.
+type RemoteLogThrottling struct {
+	MaxLogsPerSecond    *int      `yaml:"max_logs_per_second"`
+	SampleRate          *float64  `yaml:"sample_rate"`
+	AlwaysForwardLevels *[]string `yaml:"always_forward_levels"`
+}
+
+// RemoteMetricsConfig currently only allows changing network interface labels.
+type RemoteMetricsConfig struct {
+	Network *RemoteNetworkConfig `yaml:"network"`
+}
+
+type RemoteNetworkConfig struct {
+	Interfaces *[]string `yaml:"interfaces"`
+}
+
+// ApplyRemote decodes a cloud-provided YAML overlay and validates the resulting
+// configuration before it is handed to running collectors. Unknown fields are
+// rejected, which also blocks attempts to override protected settings such as
+// backend_url, api_key or buffer limits. On error the caller must keep using its
+// previous configuration.
+func ApplyRemote(base *Config, data []byte) (*Config, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+
+	var remote RemoteConfig
+	if err := decoder.Decode(&remote); err != nil {
+		return nil, fmt.Errorf("parse remote config: %w", err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return nil, errors.New("parse remote config: multiple YAML documents are not supported")
+		}
+		return nil, fmt.Errorf("parse remote config: %w", err)
+	}
+
+	next := *base
+	next.Logs = append([]LogSource(nil), base.Logs...)
+	next.LogThrottling = base.LogThrottling
+	next.LogThrottling.AlwaysForwardLevels =
+		append([]string(nil), base.LogThrottling.AlwaysForwardLevels...)
+	next.Metrics = base.Metrics
+	next.Metrics.Network = base.Metrics.Network
+	next.Metrics.Network.Interfaces =
+		append([]string(nil), base.Metrics.Network.Interfaces...)
+
+	if remote.IntervalSeconds != nil {
+		next.IntervalSeconds = *remote.IntervalSeconds
+	}
+	if remote.Logs != nil {
+		next.Logs = append([]LogSource(nil), (*remote.Logs)...)
+	}
+	if remote.LogBatchSize != nil {
+		next.LogBatchSize = *remote.LogBatchSize
+	}
+	if remote.LogFlushSeconds != nil {
+		next.LogFlushSeconds = *remote.LogFlushSeconds
+	}
+	if remote.LogThrottling != nil {
+		if remote.LogThrottling.MaxLogsPerSecond != nil {
+			next.LogThrottling.MaxLogsPerSecond = *remote.LogThrottling.MaxLogsPerSecond
+		}
+		if remote.LogThrottling.SampleRate != nil {
+			next.LogThrottling.SampleRate = *remote.LogThrottling.SampleRate
+		}
+		if remote.LogThrottling.AlwaysForwardLevels != nil {
+			next.LogThrottling.AlwaysForwardLevels =
+				append([]string(nil), (*remote.LogThrottling.AlwaysForwardLevels)...)
+		}
+	}
+	if remote.Metrics != nil && remote.Metrics.Network != nil && remote.Metrics.Network.Interfaces != nil {
+		next.Metrics.Network.Interfaces =
+			append([]string(nil), (*remote.Metrics.Network.Interfaces)...)
+	}
+
+	if err := next.validate(); err != nil {
+		return nil, err
+	}
+	return &next, nil
 }
 
 // LoadConfig reads, parses, applies environment overrides and validates the
