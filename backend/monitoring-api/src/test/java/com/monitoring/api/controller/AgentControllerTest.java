@@ -59,13 +59,17 @@ class AgentControllerTest {
     @Test
     void listAgents_returnsFleetForOwnedApplication() throws Exception {
         when(agentService.listForApplication(10L, USER_ID)).thenReturn(List.of(
-                new AgentNodeResponse(1L, "server-1", "0.1.0", Instant.parse("2026-10-18T12:00:00Z"))));
+                new AgentNodeResponse(1L, "server-1", "0.1.0",
+                        Instant.parse("2026-10-18T12:00:00Z"),
+                        "SYNCED", "abc123", null, Instant.parse("2026-10-18T12:01:00Z"))));
 
         mockMvc.perform(get("/api/applications/10/agents"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].hostname").value("server-1"))
                 .andExpect(jsonPath("$[0].agentVersion").value("0.1.0"))
-                .andExpect(jsonPath("$[0].lastSeenAt").value("2026-10-18T12:00:00Z"));
+                .andExpect(jsonPath("$[0].lastSeenAt").value("2026-10-18T12:00:00Z"))
+                .andExpect(jsonPath("$[0].configStatus").value("SYNCED"))
+                .andExpect(jsonPath("$[0].configVersion").value("abc123"));
     }
 
     @Test
