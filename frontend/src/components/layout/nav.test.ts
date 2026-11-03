@@ -1,25 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { NAV_ITEMS, PLATFORM_HEALTH_NAV_ITEM, isPathActive } from './nav'
+import {
+  FOOTER_NAV_ITEMS,
+  NAV_GROUPS,
+  NAV_ITEMS,
+  PLATFORM_HEALTH_NAV_ITEM,
+  isPathActive,
+} from './nav'
 
 describe('NAV_ITEMS', () => {
-  it('exposes the expected sections in order', () => {
+  it('exposes every grouped item and the settings footer', () => {
     expect(NAV_ITEMS.map((item) => item.label)).toEqual([
       'Overview',
-      'Applications',
-      'Agents',
+      'Dashboards',
       'Metrics',
       'Logs',
+      'Log pipelines',
       'Health',
       'Status pages',
       'Alerts',
       'Incidents',
-      'Delivery log',
       'Maintenance',
+      'Delivery log',
       'Reports',
-      'Dashboards',
-      'Audit log',
+      'Applications',
+      'Agents',
       'Organization',
       'Usage',
+      'Audit log',
       'Settings',
     ])
   })
@@ -28,6 +35,21 @@ describe('NAV_ITEMS', () => {
     for (const item of NAV_ITEMS) {
       expect(item.to.startsWith('/app/')).toBe(true)
     }
+  })
+
+  it('keeps navigation grouped so the sidebar stays scannable', () => {
+    expect(NAV_GROUPS.map((group) => group.label)).toEqual([
+      'Workspace',
+      'Observability',
+      'Alerting',
+      'Administration',
+    ])
+    expect(NAV_GROUPS.flatMap((group) => group.items).every((item) => NAV_ITEMS.includes(item))).toBe(true)
+  })
+
+  it('renders Settings and the setup guide in the footer instead of the main groups', () => {
+    expect(FOOTER_NAV_ITEMS.map((item) => item.label)).toEqual(['Settings'])
+    expect(NAV_GROUPS.some((group) => group.items.some((item) => item.to === '/app/settings'))).toBe(false)
   })
 })
 
@@ -56,4 +78,3 @@ describe('isPathActive', () => {
     expect(isPathActive('/app/metrics-archive', '/app/metrics')).toBe(false)
   })
 })
-

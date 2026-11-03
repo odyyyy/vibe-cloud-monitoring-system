@@ -1,31 +1,20 @@
 import type { LucideIcon } from 'lucide-react'
 import {
-  Activity,
-  BarChart3,
-  Bell,
   Bookmark,
-  Bot,
-  Boxes,
   Building2,
   Database,
-  FileText,
-  Gauge,
-  Globe2,
-  HeartPulse,
+  Download,
   KeyRound,
-  LayoutDashboard,
   LifeBuoy,
+  Lock,
   LogOut,
-  ScrollText,
-  Send,
-  Settings,
-  ShieldCheck,
-  Siren,
+  Palette,
   Sun,
+  User,
   Users,
   Webhook,
-  Wrench,
 } from 'lucide-react'
+import { NAV_ITEMS, PLATFORM_HEALTH_NAV_ITEM, type NavItem } from '../../components/layout/nav'
 import type { MembershipRole, PlatformRole } from '../../store/authStore'
 
 export type FeatureAccessRole = MembershipRole | 'PLATFORM_ADMIN'
@@ -55,58 +44,162 @@ export interface QuickActionEntry extends PaletteEntryBase {
 export type PaletteEntry = FeatureEntry | QuickActionEntry
 
 /**
- * Client-side feature registry for the command palette.
- *
- * <p>Routes must point at routes that actually exist in `App.tsx`; the route-drift test keeps
- * this list honest. Features that live inside another page use a hash anchor rather than a new
- * route. There is deliberately no entry for SSO settings or Traces because no such page exists.
+ * Optional search metadata for a sidebar page. A missing entry is not an error: the page is
+ * still indexed automatically from {@link NAV_ITEMS}, using its label as the title, a generic
+ * description and keywords derived from the label and route.
  */
-export const FEATURE_ENTRIES: FeatureEntry[] = [
-  {
-    id: 'page-overview',
-    title: 'Overview',
+interface NavPageMetadata {
+  id?: string
+  title?: string
+  description: string
+  keywords: string[]
+  requiredRole?: FeatureAccessRole
+}
+
+/**
+ * Extra search metadata keyed by the route used in the sidebar. Keep it in sync with
+ * {@link NAV_ITEMS}; this map only improves ranking and wording, it does not decide which
+ * pages are searchable.
+ */
+const NAV_PAGE_METADATA: Record<string, NavPageMetadata> = {
+  '/app/overview': {
     description: 'Workspace summary, recent activity and quick links.',
-    route: '/app/overview',
-    group: 'Pages & Features',
-    keywords: ['overview', 'home', 'summary', 'workspace'],
-    icon: LayoutDashboard,
+    keywords: ['home', 'summary', 'workspace', 'activity'],
   },
-  {
-    id: 'page-applications',
-    title: 'Applications',
+  '/app/applications': {
     description: 'Manage applications, ingest keys and agent credentials.',
-    route: '/app/applications',
-    group: 'Pages & Features',
-    keywords: ['applications', 'apps', 'services', 'api key', 'ingest key', 'credentials'],
-    icon: Boxes,
+    keywords: ['apps', 'services', 'api key', 'ingest key', 'credentials'],
   },
-  {
-    id: 'page-agents',
-    title: 'Agents',
+  '/app/agents': {
     description: 'Monitor collector enrollment, connection state and heartbeats.',
-    route: '/app/agents',
-    group: 'Pages & Features',
-    keywords: ['agents', 'collector', 'fleet', 'enrollment', 'docker', 'heartbeat'],
-    icon: Bot,
+    keywords: ['collector', 'fleet', 'enrollment', 'docker', 'heartbeat', 'install agent'],
   },
-  {
-    id: 'page-metrics',
-    title: 'Metrics',
+  '/app/metrics': {
     description: 'Explore time-series metrics and chart aggregation.',
-    route: '/app/metrics',
-    group: 'Pages & Features',
-    keywords: ['metrics', 'time series', 'charts', 'aggregation', 'cpu', 'memory'],
-    icon: BarChart3,
+    keywords: ['time series', 'charts', 'aggregation', 'cpu', 'memory'],
   },
-  {
-    id: 'page-logs',
-    title: 'Logs',
+  '/app/logs': {
     description: 'Search and filter log events across applications.',
-    route: '/app/logs',
-    group: 'Pages & Features',
-    keywords: ['logs', 'log explorer', 'search', 'events', 'severity'],
-    icon: ScrollText,
+    keywords: ['log explorer', 'search', 'events', 'severity'],
   },
+  '/app/log-pipelines': {
+    id: 'page-log-pipelines',
+    title: 'Log pipelines',
+    description: 'Process, parse and redact log events before storage.',
+    keywords: ['pipelines', 'pipeline rules', 'rules', 'parsing', 'redact', 'log processing', 'pii'],
+  },
+  '/app/health': {
+    id: 'page-health-checks',
+    title: 'Health checks',
+    description: 'Synthetic HTTP checks, multi-step API checks and uptime status.',
+    keywords: ['synthetic', 'uptime', 'http check', 'ping', 'multi-step api'],
+  },
+  '/app/status-pages': {
+    description: 'Publish public status pages for your services.',
+    keywords: ['public status', 'uptime page', 'incident page'],
+  },
+  '/app/alerts': {
+    description: 'Alert rules, thresholds and incident triggers.',
+    keywords: ['alert rules', 'rules', 'thresholds', 'triggers'],
+  },
+  '/app/incidents': {
+    description: 'Review firing, acknowledged and resolved incidents.',
+    keywords: ['war room', 'firing', 'acknowledged', 'resolved', 'ack', 'on call'],
+  },
+  '/app/notification-deliveries': {
+    title: 'Notification deliveries',
+    description: 'Inspect notification delivery history and failures.',
+    keywords: ['delivery log', 'deliveries', 'history', 'failed notifications', 'retries'],
+  },
+  '/app/maintenance': {
+    title: 'Maintenance windows',
+    description: 'Mute alerts during planned maintenance.',
+    keywords: ['mute', 'silence', 'planned downtime', 'maintenance'],
+  },
+  '/app/reports': {
+    description: 'Scheduled reports and delivery configuration.',
+    keywords: ['scheduled reports', 'email report', 'summary'],
+  },
+  '/app/dashboards': {
+    description: 'Build dashboards from metric, log and status widgets.',
+    keywords: ['widgets', 'charts', 'boards', 'visualization'],
+  },
+  '/app/audit': {
+    description: 'Review configuration and access changes.',
+    keywords: ['trail', 'events', 'history'],
+  },
+  '/app/organization': {
+    description: 'Switch organizations and review workspace access.',
+    keywords: ['tenant', 'workspace', 'team', 'access'],
+  },
+  '/app/usage': {
+    title: 'Usage & quotas',
+    description: 'Review telemetry volume and monthly quota usage.',
+    keywords: ['quota', 'billing', 'volume', 'limits'],
+  },
+  '/app/settings': {
+    description: 'Manage your profile, appearance and account.',
+    keywords: ['profile', 'account', 'appearance', 'theme', 'password', 'email', 'username'],
+  },
+  '/admin/platform-health': {
+    description: 'Internal platform self-monitoring dashboard.',
+    keywords: ['platform', 'self monitoring', 'admin', 'internal'],
+    requiredRole: 'PLATFORM_ADMIN',
+  },
+}
+
+function routeSlug(route: string): string {
+  return route
+    .replace(/^\/(app|admin)\//, '')
+    .replace(/^\/+/, '')
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/(^-|-$)/g, '')
+    .toLowerCase()
+}
+
+function labelKeywords(label: string, route: string): string[] {
+  const normalizedLabel = label.trim().toLowerCase()
+  const words = normalizedLabel.split(/[^a-z0-9]+/).filter((word) => word.length > 0)
+  const routeSegments = route
+    .split(/[/#?]+/)
+    .filter((segment) => segment.length > 0 && segment !== 'app' && segment !== 'admin')
+    .map((segment) => segment.replace(/-/g, ' ').toLowerCase())
+  return [normalizedLabel, ...words, ...routeSegments]
+}
+
+function uniqueKeywords(values: string[]): string[] {
+  return Array.from(new Set(values.filter((value) => value.length > 0)))
+}
+
+/**
+ * Converts a sidebar item into a palette entry.
+ *
+ * <p>This is exported so tests can prove that a newly added {@link NAV_ITEMS} entry is
+ * searchable even before anyone writes dedicated metadata for it.
+ */
+export function featureEntryForNavItem(item: NavItem): FeatureEntry {
+  const metadata = NAV_PAGE_METADATA[item.to]
+  return {
+    id: metadata?.id ?? `page-${routeSlug(item.to)}`,
+    title: metadata?.title ?? item.label,
+    description: metadata?.description ?? `Open ${item.label} in the workspace.`,
+    route: item.to,
+    group: 'Pages & Features',
+    keywords: uniqueKeywords([
+      ...(metadata?.keywords ?? []),
+      ...labelKeywords(item.label, item.to),
+    ]),
+    requiredRole: metadata?.requiredRole,
+    icon: item.icon,
+  }
+}
+
+/**
+ * Sections and options that live inside a page rather than in the sidebar. They use hash
+ * anchors that the pages render themselves. Sidebar pages are indexed automatically from
+ * {@link NAV_ITEMS}; only these extra entries need to be maintained by hand.
+ */
+const EXTRA_FEATURE_ENTRIES: FeatureEntry[] = [
   {
     id: 'feature-saved-views',
     title: 'Saved log views',
@@ -117,31 +210,22 @@ export const FEATURE_ENTRIES: FeatureEntry[] = [
     icon: Bookmark,
   },
   {
-    id: 'page-health-checks',
-    title: 'Health checks',
-    description: 'Synthetic HTTP checks and uptime status.',
-    route: '/app/health',
+    id: 'feature-log-export',
+    title: 'Export logs',
+    description: 'Download the current log query as CSV or JSON.',
+    route: '/app/logs',
     group: 'Pages & Features',
-    keywords: ['health', 'health checks', 'synthetic', 'uptime', 'http check', 'ping'],
-    icon: HeartPulse,
+    keywords: ['export', 'csv', 'json', 'download logs', 'logs export'],
+    icon: Download,
   },
   {
-    id: 'page-status-pages',
-    title: 'Status pages',
-    description: 'Publish public status pages for your services.',
-    route: '/app/status-pages',
+    id: 'feature-metrics-export',
+    title: 'Export metrics',
+    description: 'Download the current metric query as CSV or JSON.',
+    route: '/app/metrics',
     group: 'Pages & Features',
-    keywords: ['status', 'status pages', 'public status', 'uptime page', 'incident page'],
-    icon: Globe2,
-  },
-  {
-    id: 'page-alerts',
-    title: 'Alerts',
-    description: 'Alert rules, thresholds and incident triggers.',
-    route: '/app/alerts',
-    group: 'Pages & Features',
-    keywords: ['alerts', 'alert rules', 'rules', 'thresholds', 'triggers'],
-    icon: Bell,
+    keywords: ['export', 'csv', 'json', 'download metrics', 'metrics export'],
+    icon: Download,
   },
   {
     id: 'feature-notification-channels',
@@ -154,66 +238,12 @@ export const FEATURE_ENTRIES: FeatureEntry[] = [
     icon: Webhook,
   },
   {
-    id: 'page-incidents',
-    title: 'Incidents',
-    description: 'Review firing, acknowledged and resolved incidents.',
-    route: '/app/incidents',
+    id: 'feature-create-organization',
+    title: 'Create organization',
+    description: 'Start a new organization and invite its members.',
+    route: '/app/organization#create-organization',
     group: 'Pages & Features',
-    keywords: ['incidents', 'war room', 'firing', 'acknowledged', 'resolved'],
-    icon: Siren,
-  },
-  {
-    id: 'page-notification-deliveries',
-    title: 'Notification deliveries',
-    description: 'Inspect notification delivery history and failures.',
-    route: '/app/notification-deliveries',
-    group: 'Pages & Features',
-    keywords: ['notification deliveries', 'deliveries', 'history', 'failed notifications', 'retries'],
-    icon: Send,
-  },
-  {
-    id: 'page-maintenance',
-    title: 'Maintenance windows',
-    description: 'Mute alerts during planned maintenance.',
-    route: '/app/maintenance',
-    group: 'Pages & Features',
-    keywords: ['maintenance', 'maintenance windows', 'mute', 'silence', 'planned downtime'],
-    icon: Wrench,
-  },
-  {
-    id: 'page-reports',
-    title: 'Reports',
-    description: 'Scheduled reports and delivery configuration.',
-    route: '/app/reports',
-    group: 'Pages & Features',
-    keywords: ['reports', 'scheduled reports', 'email report', 'summary'],
-    icon: FileText,
-  },
-  {
-    id: 'page-dashboards',
-    title: 'Dashboards',
-    description: 'Build dashboards from metric, log and status widgets.',
-    route: '/app/dashboards',
-    group: 'Pages & Features',
-    keywords: ['dashboards', 'widgets', 'charts', 'boards', 'visualization'],
-    icon: Gauge,
-  },
-  {
-    id: 'page-audit',
-    title: 'Audit log',
-    description: 'Review configuration and access changes.',
-    route: '/app/audit',
-    group: 'Pages & Features',
-    keywords: ['audit', 'audit log', 'trail', 'events', 'history'],
-    icon: ShieldCheck,
-  },
-  {
-    id: 'page-organization',
-    title: 'Organization',
-    description: 'Switch organizations and review workspace access.',
-    route: '/app/organization',
-    group: 'Pages & Features',
-    keywords: ['organization', 'tenant', 'workspace', 'team', 'access'],
+    keywords: ['new organization', 'create organization', 'new workspace', 'tenant'],
     icon: Building2,
   },
   {
@@ -232,26 +262,35 @@ export const FEATURE_ENTRIES: FeatureEntry[] = [
     description: 'Control how long logs, metrics and traces are kept.',
     route: '/app/organization#retention',
     group: 'Pages & Features',
-    keywords: ['retention', 'data retention', 'storage', 'purge', 'delete old data', 'logs metrics traces'],
+    keywords: ['retention', 'data retention', 'storage', 'purge', 'delete old data', 'logs metrics traces', 'ttl'],
     icon: Database,
   },
   {
-    id: 'page-usage',
-    title: 'Usage & quotas',
-    description: 'Review telemetry volume and monthly quota usage.',
-    route: '/app/usage',
+    id: 'feature-appearance',
+    title: 'Appearance & themes',
+    description: 'Choose the console color theme.',
+    route: '/app/settings#appearance',
     group: 'Pages & Features',
-    keywords: ['usage', 'quota', 'billing', 'volume', 'limits'],
-    icon: Activity,
+    keywords: ['appearance', 'theme', 'dark', 'light', 'color', 'colors'],
+    icon: Palette,
   },
   {
-    id: 'page-settings',
-    title: 'Settings',
-    description: 'Manage your profile, appearance and account.',
-    route: '/app/settings',
+    id: 'feature-profile',
+    title: 'Profile settings',
+    description: 'Change your username or email address.',
+    route: '/app/settings#profile',
     group: 'Pages & Features',
-    keywords: ['settings', 'profile', 'account', 'appearance', 'theme', 'password'],
-    icon: Settings,
+    keywords: ['profile', 'username', 'email', 'change email', 'account'],
+    icon: User,
+  },
+  {
+    id: 'feature-change-password',
+    title: 'Change password',
+    description: 'Update the password used to sign in.',
+    route: '/app/settings#change-password',
+    group: 'Pages & Features',
+    keywords: ['password', 'change password', 'security', 'credentials'],
+    icon: Lock,
   },
   {
     id: 'feature-personal-access-tokens',
@@ -262,16 +301,20 @@ export const FEATURE_ENTRIES: FeatureEntry[] = [
     keywords: ['personal access tokens', 'token', 'pat', 'api token', 'automation', 'credentials'],
     icon: KeyRound,
   },
-  {
-    id: 'page-platform-health',
-    title: 'Platform Health',
-    description: 'Internal platform self-monitoring dashboard.',
-    route: '/admin/platform-health',
-    group: 'Pages & Features',
-    keywords: ['platform health', 'platform', 'self monitoring', 'admin', 'internal'],
-    requiredRole: 'PLATFORM_ADMIN',
-    icon: LifeBuoy,
-  },
+]
+
+/**
+ * Client-side feature registry for the command palette.
+ *
+ * <p>Every sidebar item is indexed automatically, including platform-only entries, so adding a
+ * new item to {@link NAV_ITEMS} makes it searchable without touching this module. The route-drift
+ * test keeps every route honest. Features that live inside another page use a hash anchor rather
+ * than a new route.
+ */
+export const FEATURE_ENTRIES: FeatureEntry[] = [
+  ...NAV_ITEMS.map(featureEntryForNavItem),
+  featureEntryForNavItem(PLATFORM_HEALTH_NAV_ITEM),
+  ...EXTRA_FEATURE_ENTRIES,
 ]
 
 export const QUICK_ACTIONS: QuickActionEntry[] = [

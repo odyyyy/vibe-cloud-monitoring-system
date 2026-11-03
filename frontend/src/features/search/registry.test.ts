@@ -1,8 +1,12 @@
+import { Search } from 'lucide-react'
 import { describe, expect, it } from 'vitest'
+import { NAV_ITEMS } from '../../components/layout/nav'
+import { scoreEntry, rankEntries } from './matching'
 import {
   accessibleEntries,
   canAccessEntry,
   FEATURE_ENTRIES,
+  featureEntryForNavItem,
   PALETTE_ENTRIES,
 } from './registry'
 
@@ -45,5 +49,48 @@ describe('palette access rules', () => {
   it('has unique ids and only internal routes', () => {
     expect(new Set(PALETTE_ENTRIES.map((candidate) => candidate.id)).size).toBe(PALETTE_ENTRIES.length)
     expect(FEATURE_ENTRIES.every((candidate) => /^\/(app|admin)\//.test(candidate.route))).toBe(true)
+  })
+})
+
+describe('automatic sidebar indexing', () => {
+  it('indexes every sidebar item without a hand-written palette entry', () => {
+    const indexedRoutes = new Set(FEATURE_ENTRIES.map((candidate) => candidate.route.split('#')[0]))
+    for (const item of NAV_ITEMS) {
+      expect(indexedRoutes.has(item.to), `${item.label} (${item.to}) is missing from search`).toBe(true)
+    }
+  })
+
+  it('indexes newly added menu items with sensible fallback metadata', () => {
+    const entry = featureEntryForNavItem({
+      to: '/app/release-calendar',
+      label: 'Release calendar',
+      icon: Search,
+    })
+
+    expect(entry.id).toBe('page-release-calendar')
+    expect(entry.title).toBe('Release calendar')
+    expect(entry.route).toBe('/app/release-calendar')
+    expect(entry.description).toContain('Release calendar')
+    expect(scoreEntry(entry, 'release')).not.toBeNull()
+    expect(scoreEntry(entry, 'calendar')).not.toBeNull()
+  })
+
+  it('indexes the current menu with role and searchable labels', () => {
+    expect(entry('page-log-pipelines').title).toBe('Log pipelines')
+    expect(entry('page-health-checks').title).toBe('Health checks')
+    expect(entry('page-maintenance').title).toBe('Maintenance windows')
+    expect(entry('page-notification-deliveries').title).toBe('Notification deliveries')
+    expect(entry('page-usage').title).toBe('Usage & quotas')
+    expect(scoreEntry(entry('page-log-pipelines'), 'pipeline')).not.toBeNull()
+  })
+
+  it('finds Log pipelines by its title and common query variants', () => {
+    const entries = accessibleEntries('VIEWER', 'USER')
+    for (const query of ['log pipelines', 'pipelines', 'pipeline rules', 'log pipe']) {
+      expect(
+        rankEntries(entries, query).some((candidate) => candidate.id === 'page-log-pipelines'),
+        `query "${query}" did not return Log pipelines`,
+      ).toBe(true)
+    }
   })
 })

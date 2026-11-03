@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Building2, ChevronDown, HelpCircle, LogOut, Menu, Search, Settings as SettingsIcon, X } from 'lucide-react'
 import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom'
@@ -22,7 +22,14 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '../ui/select'
-import { NAV_ITEMS, PLATFORM_HEALTH_NAV_ITEM, isPathActive } from './nav'
+import { NAV_GROUPS, FOOTER_NAV_ITEMS, PLATFORM_HEALTH_NAV_ITEM, isPathActive, type NavItem } from './nav'
+import {
+  SETTINGS_GROUP_ID,
+  readCollapsedGroups,
+  removeCollapsedGroup,
+  toggleCollapsedGroup,
+  writeCollapsedGroups,
+} from './sidebarSections'
 
 function Brand() {
   return (
@@ -38,6 +45,7 @@ function Brand() {
 export function AppLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => readCollapsedGroups())
   const paletteOpenerRef = useRef<HTMLElement | null>(null)
   const desktopSearchButtonRef = useRef<HTMLButtonElement | null>(null)
   const mobileSearchButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -58,7 +66,30 @@ export function AppLayout() {
   const username = profile?.username ?? user?.username ?? 'Account'
   const email = profile?.email ?? user?.email ?? null
   const isPlatformAdmin = (profile?.role ?? user?.platformRole ?? null) === 'PLATFORM_ADMIN'
-  const navigationItems = isPlatformAdmin ? [...NAV_ITEMS, PLATFORM_HEALTH_NAV_ITEM] : NAV_ITEMS
+  const navigationGroups = useMemo(
+    () => isPlatformAdmin
+      ? NAV_GROUPS.map((group) => (
+          group.id === 'administration'
+            ? { ...group, items: [...group.items, PLATFORM_HEALTH_NAV_ITEM] }
+            : group
+        ))
+      : NAV_GROUPS,
+    [isPlatformAdmin],
+  )
+
+  useEffect(() => {
+    writeCollapsedGroups(collapsedGroups)
+  }, [collapsedGroups])
+
+  useEffect(() => {
+    const activeGroup = navigationGroups.find((group) =>
+      group.items.some((item) => isPathActive(pathname, item.to)),
+    )
+    if (!activeGroup) {
+      return
+    }
+    setCollapsedGroups((previous) => removeCollapsedGroup(previous, activeGroup.id))
+  }, [pathname, navigationGroups])
 
   useEffect(() => {
     setMobileNavOpen(false)
@@ -145,53 +176,86 @@ export function AppLayout() {
     setPaletteOpen(true)
   }
 
+  const renderNavItem = (item: NavItem) => {
+    const Icon = item.icon
+    const active = isPathActive(pathname, item.to)
+    return (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        aria-current={active ? 'page' : undefined}
+        className={cn(
+          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+          active ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-slate-100',
+        )}
+      >
+        <Icon className={cn('h-4 w-4', active ? 'text-cyan-300' : 'text-slate-500')} aria-hidden="true" />
+        {item.label}
+      </NavLink>
+    )
+  }
+
+  const renderGroupToggle = (groupId: string, label: string) => {
+    const collapsed = collapsedGroups.has(groupId)
+    return (
+      <button
+        type="button"
+        onClick={() => setCollapsedGroups((previous) => toggleCollapsedGroup(previous, groupId))}
+        aria-expanded={!collapsed}
+        aria-controls={`sidebar-group-${groupId}`}
+        className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600 transition-colors hover:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+      >
+        <span>{label}</span>
+        <ChevronDown
+          className={cn('h-3.5 w-3.5 shrink-0 transition-transform', collapsed && '-rotate-90')}
+          aria-hidden="true"
+        />
+      </button>
+    )
+  }
+
   const navigation = (
-    <nav className="flex flex-col gap-1" aria-label="Primary">
-      {navigationItems.map((item) => {
-        const Icon = item.icon
-        const active = isPathActive(pathname, item.to)
+    <nav className="flex flex-col gap-4" aria-label="Primary">
+      {navigationGroups.map((group) => {
+        const collapsed = collapsedGroups.has(group.id)
         return (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            aria-current={active ? 'page' : undefined}
-            className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-              active ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-slate-100',
-            )}
-          >
-            <Icon className={cn('h-4 w-4', active ? 'text-cyan-300' : 'text-slate-500')} aria-hidden="true" />
-            {item.label}
-          </NavLink>
+          <div key={group.id}>
+            {renderGroupToggle(group.id, group.label)}
+            <div
+              id={`sidebar-group-${group.id}`}
+              className={collapsed ? 'hidden' : 'mt-1 flex flex-col gap-1'}
+            >
+              {group.items.map(renderNavItem)}
+            </div>
+          </div>
         )
       })}
     </nav>
   )
 
-  const accountFooter = (
-    <div className="flex items-center gap-2.5 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
-      <UserAvatar username={username} avatarUrl={user?.avatarUrl} className="h-7 w-7 text-xs" />
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-slate-200">{username}</p>
-        {email ? <p className="truncate text-xs text-slate-500">{email}</p> : null}
-      </div>
-    </div>
-  )
+  const settingsCollapsed = collapsedGroups.has(SETTINGS_GROUP_ID)
 
   const sidebarFooter = (
-    <div className="space-y-2">
-      <button
-        type="button"
-        onClick={() => {
-          setMobileNavOpen(false)
-          openOnboarding()
-        }}
-        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+    <div className="mt-4 border-t border-white/5 pt-3">
+      {renderGroupToggle(SETTINGS_GROUP_ID, 'Settings')}
+      <nav
+        id={`sidebar-group-${SETTINGS_GROUP_ID}`}
+        className={settingsCollapsed ? 'hidden' : 'mt-1 flex flex-col gap-1'}
+        aria-label="Settings"
       >
-        <HelpCircle className="h-4 w-4 text-slate-500" aria-hidden="true" />
-        Setup guide
-      </button>
-      {accountFooter}
+        {FOOTER_NAV_ITEMS.map(renderNavItem)}
+        <button
+          type="button"
+          onClick={() => {
+            setMobileNavOpen(false)
+            openOnboarding()
+          }}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+        >
+          <HelpCircle className="h-4 w-4 text-slate-500" aria-hidden="true" />
+          Setup guide
+        </button>
+      </nav>
     </div>
   )
 
@@ -214,7 +278,7 @@ export function AppLayout() {
             </kbd>
           </button>
         </div>
-        <div className="mt-4 flex-1">{navigation}</div>
+        <div className="mt-4 min-h-0 flex-1 overflow-y-auto">{navigation}</div>
         {sidebarFooter}
       </aside>
 
